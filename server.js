@@ -27,6 +27,11 @@ app.get('/', (req, res) => {
     });
 });
 
+app.get('/signup', (req, res) => {
+    res.render('pages/login', { 
+    });
+});
+
 // 4. เริ่มต้นเซิร์ฟเวอร์
 app.listen(PORT, () => {
     console.log(`EASYDRIVE Server is running at http://localhost:${PORT}`);
