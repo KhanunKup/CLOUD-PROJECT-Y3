@@ -1,0 +1,140 @@
+@font-face {
+    font-family: 'EnglishFont'; /* ตั้งชื่อฟอนต์ตามต้องการ */
+    src: url('/fonts/Kanit-Bold.ttf') format('truetype'); 
+    /* หมายเหตุ: ไม่ต้องใส่ /public นำหน้า เพราะใน server.js เราตั้ง static folder ไว้แล้ว */
+}
+
+@font-face {
+    font-family: 'ThaiFont'; /* ตั้งชื่อฟอนต์ตามต้องการ */
+    src: url('/fonts/Outfit-VariableFont_wght.ttf') format('truetype'); 
+    /* หมายเหตุ: ไม่ต้องใส่ /public นำหน้า เพราะใน server.js เราตั้ง static folder ไว้แล้ว */
+}
+body {
+    margin:0%;
+    font-family: 'EnglishFont', 'ThaiFont', sans-serif;
+}
+.main-content {
+    background-color: #d6bead; /* สีพื้นหลังหลัก */
+    padding: 40px;
+    min-height: 100vh;
+    box-sizing: border-box;
+    width: calc(100% - 160px);
+    margin-left: 160px;
+}
+
+/* ส่วน Search Bar */
+.search-container {
+    background-color: #e8dbce;
+    border-radius: 25px;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    width: 60%;
+    margin-bottom: 40px;
+}
+.search-container i {
+    color: #4a4a4a;
+    margin-right: 15px;
+    font-size: 1.2rem;
+}
+.search-container input {
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 1rem;
+    width: 100%;
+    color: #4a4a4a;
+    font-weight: bold;
+}
+
+/* ส่วน Header (Title + Button) */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.page-header h1 {
+    color: #4a4a4a;
+    font-size: 2.5rem;
+    font-weight: 900;
+    margin: 0;
+}
+.btn-new {
+    background-color: #556b4d;
+    color: white;
+    border: none;
+    padding: 10px 25px;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.btn-new:hover {
+    background-color: #485a41;
+}
+
+/* ส่วนตารางแสดงไฟล์ */
+.file-container {
+    background-color: #634f41; /* สีพื้นหลังกรอบตาราง */
+    border-radius: 15px;
+    padding: 25px 30px;
+    color: white;
+}
+.file-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    font-weight: bold;
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+    padding: 0 15px;
+}
+.file-header-divider {
+    border: 0;
+    height: 1px;
+    background-color: rgba(255,255,255,0.3);
+    margin-bottom: 20px;
+}
+
+/* ส่วนแถวของแต่ละไฟล์ */
+.file-row {
+    background-color: #c89f78; /* สีพื้นหลังแต่ละแถว */
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr auto;
+    align-items: center;
+    padding: 15px;
+    margin-bottom: 12px;
+    font-weight: bold;
+}
+.file-row:last-child {
+    margin-bottom: 0;
+}
+.col-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.col-owner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: normal;
+}
+.col-date {
+    font-weight: normal;
+}
+.col-action {
+    text-align: right;
+    cursor: pointer;
+}
+
+.options-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: white; 
+    padding: 0 10px;
+}

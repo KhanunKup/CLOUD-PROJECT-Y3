@@ -18,6 +18,10 @@ app.use(express.urlencoded({ extended: true }));
 // 3. สร้าง Route สำหรับหน้าเว็บหลัก
 app.get('/', (req, res) => {
     // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
+    res.redirect('/signup');
+});
+
+app.get('/home', (req, res) => {
     res.render('pages/homepage', { 
         files: [
             { name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008' },
