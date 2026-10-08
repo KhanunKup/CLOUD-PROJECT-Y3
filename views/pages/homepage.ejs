@@ -1,90 +1,83 @@
-<!-- แนะนำให้เรียกใช้ FontAwesome ใน <head> ของหน้าหลัก เพื่อให้แสดงไอคอนได้ -->
-<!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"> -->
-<link rel="stylesheet" href="/css/homepage.css">
-
-<div class="nav">
-    <%- include('../partials/nav/sidebar.ejs') %>
-</div>
-
-<div class="main-content">
-  
-  <!-- Search Bar -->
-  <div class="search-container">
-    <i class="fas fa-search"></i>
-    <input type="text" placeholder="Search in Drive">
-  </div>
-
-  <!-- Header -->
-  <div class="page-header">
-    <h1>MY DRIVE ขนุนลูกโตๆ</h1>
-    <button class="btn-new">+ New</button>
-  </div>
-
-  <!-- File List Container -->
-  <div class="file-container">
-    <div class="file-header">
-      <span>Name</span>
-      <span>Owner</span>
-      <span>Date Uploaded</span>
-      <span></span>
-    </div>
-    <hr class="file-header-divider">
-
-    <!-- เริ่มการวนลูป EJS สำหรับแสดงรายการไฟล์ -->
-    <% if (typeof files !== 'undefined' && files.length > 0) { %>
-      <% files.forEach(file => { %>
-        <div class="file-row">
-          <span class="col-name">
-            <!-- เช็คประเภทไฟล์เพื่อแสดงไอคอนที่ต่างกัน (ปรับแก้ตามข้อมูลจริงได้) -->
-            <i class="<%= file.type === 'folder' ? 'fas fa-folder' : 'fas fa-file' %>"></i> 
-            <%= file.name %>
-          </span>
-          <span class="col-owner">
-            <i class="far fa-user-circle"></i> <%= file.owner || 'me' %>
-          </span>
-          <span class="col-date"><%= file.uploadDate %></span>
-          <span class="col-action"><i class="fas fa-ellipsis-h"></i></span>
-        </div>
-      <% }) %>
-    <% } else { %>
-      <!-- โค้ดส่วนนี้คือข้อมูลจำลอง (Mockup) ตามภาพ ในกรณีที่ยังไม่ได้ต่อ Backend -->
-      <div class="file-row">
-        <span class="col-name">Folder 1</span>
-        <span class="col-owner"><i class="far fa-user-circle"></i> me</span>
-        <span class="col-date">08 Aug. 2008</span>
-        <span class="col-action"><i class="fas fa-ellipsis-h"></i></span>
-      </div>
-      <div class="file-row">
-        <span class="col-name">File1.txt</span>
-        <span class="col-owner"><i class="far fa-user-circle"></i> me</span>
-        <span class="col-date">08 Aug. 2008</span>
-        <span class="col-action"><i class="fas fa-ellipsis-h"></i></span>
-      </div>
-      <div class="file-row">
-        <span class="col-name">Image1.png</span>
-        <span class="col-owner"><i class="far fa-user-circle"></i> me</span>
-        <span class="col-date">08 Aug. 2008</span>
-        <span class="col-action"><i class="fas fa-ellipsis-h"></i></span>
-      </div>
-      <div class="file-row">
-        <span class="col-name">Folder 2</span>
-        <span class="col-owner"><i class="far fa-user-circle"></i> me</span>
-        <span class="col-date">08 Aug. 2008</span>
-        <span class="col-action"><i class="fas fa-ellipsis-h"></i></span>
-      </div>
-      <div class="file-row">
-        <span class="col-name">Image2.jpg</span>
-        <span class="col-owner"><i class="far fa-user-circle"></i> me</span>
-        <span class="col-date">08 Aug. 2008</span>
-        <span class="col-action"><i class="fas fa-ellipsis-h"></i></span>
-      </div>
-      <div class="file-row">
-        <span class="col-name">File3.sh</span>
-        <span class="col-owner"><i class="far fa-user-circle"></i> me</span>
-        <span class="col-date">08 Aug. 2008</span>
-        <span class="col-action"><i class="fas fa-ellipsis-h"></i></span>
-      </div>
-    <% } %>
+<!-- views/pages/homepage.ejs -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MY DRIVE - EASYDRIVE</title>
     
-  </div>
-</div>
+    <!-- FontAwesome สำหรับไอคอน -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- CSS สำหรับ Modal ที่เราแยกไว้ -->
+    <link rel="stylesheet" href="/css/share-modal.css">
+    <!-- CSS สำหรับ Menu Dropdown -->
+    <link rel="stylesheet" href="/css/menu.css">
+    <!-- CSS โครงสร้างหลัก -->
+    <link rel="stylesheet" href="/css/homepage.css">
+</head>
+<body>
+
+    <!-- ดึง Sidebar ของเพื่อนมาใช้เลย -->
+    <%- include('../partials/nav/sidebar.ejs') %>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        
+        <!-- Search Bar -->
+        <div class="search-container">
+            <i class="fas fa-search"></i>
+            <input type="text" placeholder="Search in Drive">
+        </div>
+
+        <!-- Header -->
+        <div class="page-header">
+            <h1>MY DRIVE ขนุนลูกโตๆ</h1>
+            <button class="btn-new">+ New</button>
+        </div>
+
+        <!-- File List -->
+        <div class="file-container">
+            <!-- หัวตาราง -->
+            <div class="file-header">
+                <span>Name</span>
+                <span>Owner</span>
+                <span>Date Uploaded</span>
+                <span></span>
+            </div>
+            <hr class="file-header-divider">
+
+            <!-- รายการไฟล์จาก Backend -->
+            <% if (typeof files !== 'undefined' && files.length > 0) { %>
+                <% files.forEach(file => { %>
+                    <div class="file-row">
+                        <span class="col-name">
+                            <i class="<%= file.type === 'folder' ? 'fas fa-folder' : (file.name.endsWith('.png') || file.name.endsWith('.jpg') ? 'fas fa-image' : 'fas fa-file-alt') %>"></i> 
+                            <%= file.name %>
+                        </span>
+                        <span class="col-owner"><i class="far fa-user-circle"></i> <%= file.owner || 'me' %></span>
+                        <span class="col-date"><%= file.uploadDate %></span>
+                        
+                        <div class="options-wrapper">
+                            <button class="options-btn toggle-options"><i class="fas fa-ellipsis-h"></i></button>
+                            <%- include(file.type === 'folder' ? '../menus/folder-option-menu' : '../menus/file-option-menu') %>
+                        </div>
+                    </div>
+                <% }) %>
+            <% } else { %>
+                <p style="text-align: center; margin-top: 20px;">No files found.</p>
+            <% } %>
+            
+        </div>
+    </div>
+
+    <!-- ดึง Share Modal มาใช้ตรงนี้ -->
+    <%- include('../modals/share-modal') %>
+
+    <!-- เรียกใช้ JS ของ Modal -->
+    <script src="/js/share-modal.js"></script>
+    
+    <!-- เรียกใช้ JS ของ Menu Dropdown -->
+    <script src="/js/menu.js"></script>
+</body>
+</html>
