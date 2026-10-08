@@ -1,0 +1,63 @@
+<!-- views/modals/share-modal.ejs -->
+<!-- Share Modal Overlay (ซ่อนไว้ก่อนด้วย style="display: none;" ถ้าจะให้แสดงเลยก็ลบออกครับ) -->
+<div class="share-modal-overlay" id="shareModal" style="display: none;">
+    <div class="share-modal">
+        
+        <!-- Header -->
+        <div class="share-modal-header">
+            <h2>Share this</h2>
+            <div class="header-actions">
+                <button class="copy-link-btn" id="copyLinkBtn">
+                    <!-- SVG Link Icon -->
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                    copy link
+                </button>
+                <button class="close-modal-btn" id="closeShareModalBtn">
+                    ✖
+                </button>
+            </div>
+        </div>
+
+        <!-- Invite -->
+        <div class="invite-section">
+            <input type="text" class="invite-input" placeholder="Add people...">
+            <button class="invite-btn">Invite</button>
+        </div>
+
+        <!-- Access List -->
+        <div class="access-section">
+            <h3>Who has access</h3>
+            
+            <div class="access-item">
+                <div class="user-info">
+                    <!-- SVG Globe Icon -->
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    <span>Anyone</span>
+                </div>
+                <div class="access-details">
+                    <span class="time-remaining">Time remaining: 67 days</span>
+                    <button class="permission-dropdown">can view</button>
+                </div>
+            </div>
+
+            <div class="access-item">
+                <div class="user-info">
+                    <!-- SVG Users Icon -->
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <span>anan and 4 others</span>
+                </div>
+                <div class="access-details">
+                    <span class="time-remaining">Time remaining: --</span>
+                    <button class="permission-dropdown">can edit</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="modal-footer">
+            <button class="cancel-btn" id="cancelShareBtn">Cancel</button>
+            <button class="save-btn">Save</button>
+        </div>
+
+    </div>
+</div>

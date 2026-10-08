@@ -32,6 +32,16 @@ app.get('/signup', (req, res) => {
     });
 });
 
+app.get('/shared', (req, res) => {
+    res.render('pages/shared', { 
+        files: [
+            { name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008' },
+            { name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' },
+            { name: 'Image1.png', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' }
+        ]
+    });
+});
+
 // 4. เริ่มต้นเซิร์ฟเวอร์
 app.listen(PORT, () => {
     console.log(`EASYDRIVE Server is running at http://localhost:${PORT}`);
