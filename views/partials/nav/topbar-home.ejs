@@ -1,0 +1,162 @@
+<!-- ============================================================
+     PARTIAL: views/partials/nav/topbar-home.ejs
+     Used by: File Preview Page (views/pages/file-preview.ejs)
+     Usage:   <%- include('../partials/nav/topbar-home') %>
+     ============================================================ -->
+
+<style>
+  /* ─── Top Bar (File Preview) ──────────────────────────────── */
+  .topbar-home {
+    width: 100%;
+    height: 56px;
+    background-color: #7d5534;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  }
+
+  /* Left: file name with close button */
+  .topbar-home__left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topbar-home__close-btn {
+    width: 28px;
+    height: 28px;
+    background-color: #e05252;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+
+  .topbar-home__close-btn:hover {
+    background-color: #c43a3a;
+  }
+
+  .topbar-home__close-btn svg {
+    color: #fff;
+  }
+
+  .topbar-home__filename {
+    font-family: 'Outfit', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: #f5e6d3;
+  }
+
+  /* Right: action buttons */
+  .topbar-home__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .topbar-home__action-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border-radius: 8px;
+    border: 1.5px solid #c49a6c;
+    background-color: transparent;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: #f5e6d3;
+    transition: background 0.2s, border-color 0.2s;
+    text-decoration: none;
+  }
+
+  .topbar-home__action-btn:hover {
+    background-color: rgba(255,255,255,0.1);
+    border-color: #f5e6d3;
+  }
+
+  .topbar-home__action-btn svg {
+    width: 15px;
+    height: 15px;
+    stroke: #f5e6d3;
+  }
+
+  /* Delete button accent */
+  .topbar-home__action-btn--delete {
+    border-color: #e05252;
+    color: #f5e6d3;
+  }
+
+  .topbar-home__action-btn--delete svg {
+    stroke: #f5e6d3;
+  }
+
+  .topbar-home__action-btn--delete:hover {
+    background-color: rgba(224, 82, 82, 0.15);
+    border-color: #c43a3a;
+  }
+</style>
+
+<header class="topbar-home">
+  <!-- Left: close + filename -->
+  <div class="topbar-home__left">
+    <button class="topbar-home__close-btn" aria-label="Close preview">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+    <span class="topbar-home__filename">File1.txt</span>
+  </div>
+
+  <!-- Right: action buttons -->
+  <div class="topbar-home__actions">
+    <!-- Delete -->
+    <button class="topbar-home__action-btn topbar-home__action-btn--delete">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+           fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+      </svg>
+      Delete
+    </button>
+
+    <!-- Download -->
+    <button class="topbar-home__action-btn">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+           fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Download
+    </button>
+
+    <!-- Share -->
+    <button class="topbar-home__action-btn">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+           fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="5" r="3"/>
+        <circle cx="6" cy="12" r="3"/>
+        <circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </svg>
+      Share
+    </button>
+  </div>
+</header>
+
