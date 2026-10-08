@@ -1,0 +1,250 @@
+<!-- ============================================================
+     PARTIAL: views/partials/nav/sidebar.ejs
+     Used by: Home Page (views/pages/home.ejs)
+     Usage:   <%- include('../partials/nav/sidebar') %>
+     ============================================================ -->
+
+<style>
+  /* ─── Sidebar Nav ─────────────────────────────────────────── */
+  .sidebar {
+    width: 160px;
+    min-height: 100vh;
+    background-color: #6b4226;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 0 0 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+  }
+
+  /* Logo area */
+  .sidebar-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 28px;
+    gap: 6px;
+  }
+
+  .sidebar-logo img {
+    width: 52px;
+    height: 52px;
+    object-fit: contain;
+  }
+
+  .sidebar-logo span {
+    font-family: 'Outfit', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: #e8c9a0;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Nav items */
+  .sidebar-nav {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 12px;
+  }
+
+  .sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.2s;
+  }
+
+  .sidebar-nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .sidebar-nav-item.active {
+    background-color: #4a2c14;
+  }
+
+  .sidebar-nav-item span {
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #f5e6d3;
+    letter-spacing: 0.5px;
+  }
+
+  .sidebar-nav-item svg,
+  .sidebar-nav-item i {
+    color: #f5e6d3;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Chevron (MY DRIVE arrow) */
+  .sidebar-nav-item .chevron {
+    margin-left: auto;
+    color: #f5e6d3;
+    font-size: 12px;
+  }
+
+  /* Storage section */
+  .sidebar-storage {
+    width: 100%;
+    padding: 0 16px;
+    margin-top: 24px;
+  }
+
+  .sidebar-storage-label {
+    font-family: 'Outfit', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: #f5e6d3;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .sidebar-storage-bar {
+    width: 100%;
+    height: 6px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .sidebar-storage-bar-fill {
+    height: 100%;
+    width: 40%;                    /* placeholder — adjust per actual usage */
+    background-color: #e8c9a0;
+    border-radius: 999px;
+  }
+
+  /* User profile at bottom */
+  .sidebar-user {
+    margin-top: auto;
+    width: 100%;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .sidebar-user-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    background-color: #c49a6c;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-user-name {
+    font-family: 'Outfit', sans-serif;
+    font-size: 12px;
+    color: #f5e6d3;
+    font-weight: 500;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-user-menu-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    color: #f5e6d3;
+  }
+</style>
+
+<aside class="sidebar">
+  <!-- Logo -->
+  <div class="sidebar-logo">
+    <img src="/images/logo.png" alt="EasyDrive Logo" />
+    <span>EasyDrive</span>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="sidebar-nav">
+    <!-- MY DRIVE -->
+    <a href="/drive" class="sidebar-nav-item active">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      </svg>
+      <span>MY DRIVE</span>
+      <svg class="chevron" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </a>
+
+    <!-- SHARED -->
+    <a href="/shared" class="sidebar-nav-item">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+      <span>SHARED</span>
+    </a>
+
+    <!-- TRASH -->
+    <a href="/trash" class="sidebar-nav-item">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6"/>
+        <path d="M14 11v6"/>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+      </svg>
+      <span>TRASH</span>
+    </a>
+  </nav>
+
+  <!-- Storage -->
+  <div class="sidebar-storage">
+    <div class="sidebar-storage-label">STORAGE</div>
+    <div class="sidebar-storage-bar">
+      <div class="sidebar-storage-bar-fill"></div>
+    </div>
+  </div>
+
+  <!-- User profile -->
+  <div class="sidebar-user">
+    <div class="sidebar-user-avatar">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    </div>
+    <span class="sidebar-user-name">Rick and Morty</span>
+    <button class="sidebar-user-menu-btn" aria-label="User menu">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/>
+        <line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6" x2="3.01" y2="6"/>
+        <line x1="3" y1="12" x2="3.01" y2="12"/>
+        <line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+    </button>
+  </div>
+</aside>
+
