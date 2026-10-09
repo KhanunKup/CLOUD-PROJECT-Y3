@@ -1,0 +1,219 @@
+/* public/css/share-modal.css */
+@font-face {
+    font-family: 'Kanit';
+    src: url('/fonts/Kanit-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'Kanit';
+    src: url('/fonts/Kanit-SemiBold.ttf') format('truetype');
+    font-weight: 600;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'Outfit';
+    src: url('/fonts/Outfit-VariableFont_wght.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+/* Modal Overlay */
+.share-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    font-family: 'Outfit', sans-serif;
+}
+
+/* Modal Container */
+.share-modal {
+    background-color: #929a84;
+    width: 600px;
+    max-width: 90%;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+/* Header */
+.share-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.share-modal-header h2 {
+    font-family: 'Kanit', sans-serif;
+    font-weight: 700;
+    font-size: 28px;
+    color: white;
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.copy-link-btn {
+    background: none;
+    border: none;
+    color: #d1d5c9;
+    font-family: 'Kanit', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.copy-link-btn:hover {
+    color: white;
+}
+
+.close-modal-btn {
+    background-color: #d8b48e;
+    border: none;
+    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    color: white;
+    font-weight: bold;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Invite Section */
+.invite-section {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 30px;
+}
+
+.invite-input {
+    flex: 1;
+    background-color: #e2e2e2;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 16px;
+    font-family: 'Outfit', sans-serif;
+    color: #333;
+}
+
+.invite-input:focus {
+    outline: 2px solid #6b735c;
+}
+
+.invite-btn {
+    background-color: #6b735c;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0 30px;
+    font-family: 'Kanit', sans-serif;
+    font-weight: 600;
+    font-size: 18px;
+    cursor: pointer;
+}
+
+/* Access Section */
+.access-section {
+    margin-bottom: 30px;
+}
+
+.access-section h3 {
+    font-family: 'Kanit', sans-serif;
+    font-weight: 700;
+    color: #4a4a4a;
+    font-size: 18px;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.access-item {
+    background-color: rgba(121, 130, 109, 0.5);
+    border-radius: 8px;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Kanit', sans-serif;
+    font-weight: 700;
+    color: #3a3a3a;
+    font-size: 16px;
+}
+
+.access-details {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.time-remaining {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+}
+
+.permission-dropdown {
+    background-color: rgba(138, 148, 126, 0.8);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 15px;
+    font-family: 'Kanit', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+/* Footer */
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+    margin-top: 40px;
+}
+
+.cancel-btn, .save-btn {
+    border: none;
+    border-radius: 20px;
+    padding: 10px 30px;
+    font-family: 'Kanit', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: white;
+    cursor: pointer;
+}
+
+.cancel-btn {
+    background-color: #798369;
+}
+
+.save-btn {
+    background-color: #555e46;
+}
+

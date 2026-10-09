@@ -18,7 +18,26 @@ app.use(express.urlencoded({ extended: true }));
 // 3. สร้าง Route สำหรับหน้าเว็บหลัก
 app.get('/', (req, res) => {
     // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
+    res.redirect('/signup');
+});
+
+app.get('/home', (req, res) => {
     res.render('pages/homepage', { 
+        files: [
+            { name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008' },
+            { name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' },
+            { name: 'Image1.png', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' }
+        ]
+    });
+});
+
+app.get('/signup', (req, res) => {
+    res.render('pages/login', { 
+    });
+});
+
+app.get('/shared', (req, res) => {
+    res.render('pages/shared', { 
         files: [
             { name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008' },
             { name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' },

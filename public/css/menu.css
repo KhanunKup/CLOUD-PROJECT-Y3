@@ -1,0 +1,49 @@
+/* public/css/menu.css */
+.options-wrapper {
+    position: relative;
+}
+
+.options-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background-color: #86917e; 
+    border-radius: 12px;
+    padding: 8px;
+    display: none; 
+    flex-direction: column;
+    gap: 6px;
+    z-index: 100;
+    width: 170px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.options-dropdown.show {
+    display: flex;
+}
+
+.option-item {
+    background-color: #dbccb9; 
+    border: none;
+    border-radius: 20px;
+    padding: 8px 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'EnglishFont', 'ThaiFont', sans-serif;
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #333;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+}
+
+.option-item:hover {
+    background-color: #eedebd;
+}
+
+.option-item i {
+    width: 16px;
+    text-align: center;
+}

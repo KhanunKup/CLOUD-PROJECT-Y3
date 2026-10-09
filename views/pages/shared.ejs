@@ -1,25 +1,25 @@
-<!-- views/pages/homepage.ejs -->
+<!-- views/pages/shared.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MY DRIVE - EASYDRIVE</title>
+    <title>Shared With Me - EASYDRIVE</title>
     
-    <!-- FontAwesome สำหรับไอคอน -->
+    <!-- FontAwesome สำหรับไอคอน (อิงตามที่เพื่อนทำใน homepage) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
     <!-- CSS สำหรับ Modal ที่เราแยกไว้ -->
     <link rel="stylesheet" href="/css/share-modal.css">
     <!-- CSS สำหรับ Menu Dropdown -->
     <link rel="stylesheet" href="/css/menu.css">
-    <!-- CSS โครงสร้างหลัก -->
-    <link rel="stylesheet" href="/css/homepage.css">
+    
+<link rel="stylesheet" href="/css/homepage.css">
 </head>
 <body>
 
     <!-- ดึง Sidebar ของเพื่อนมาใช้เลย -->
-    <%- include('../partials/nav/sidebar.ejs') %>
+    <%- include('../partials/nav/sidebar') %>
 
     <!-- Main Content -->
     <div class="main-content">
@@ -32,7 +32,7 @@
 
         <!-- Header -->
         <div class="page-header">
-            <h1>MY DRIVE ขนุนลูกโตๆ</h1>
+            <h1>SHARED WITH ME</h1>
             <button class="btn-new">+ New</button>
         </div>
 
@@ -65,7 +65,7 @@
                     </div>
                 <% }) %>
             <% } else { %>
-                <p style="text-align: center; margin-top: 20px;">No files found.</p>
+                <p style="text-align: center; margin-top: 20px;">No shared files found.</p>
             <% } %>
             
         </div>
