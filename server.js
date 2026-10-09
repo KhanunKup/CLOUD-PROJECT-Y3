@@ -28,10 +28,11 @@ app.get('/drive', (req, res) => {
                 name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: [
                     { name: 'Anan', permission: 'can edit', timeRemaining: null },
-                    { name: 'Passakorn', permission: 'can edit', timeRemaining: null },
+                    { name: 'Passakorn', permission: 'can edit', timeRemaining: '6 hours' },
                     { name: 'Khanun', permission: 'can edit', timeRemaining: null },
-                    { name: 'john', permission: 'can edit', timeRemaining: null },
-                    { name: 'peter', permission: 'can edit', timeRemaining: null }
+                    { name: 'peter', permission: 'can edit', timeRemaining: null },
+                    { name: 'Worapa', permission: 'can edit', timeRemaining: null },
+                    { name: 'john', permission: 'can edit', timeRemaining: '6 hours' },
                 ]
             },
             { 
@@ -39,6 +40,7 @@ app.get('/drive', (req, res) => {
                 accessList: [
                     { name: 'Passakorn', permission: 'can view', timeRemaining: '2 days' },
                     { name: 'โบนัส', permission: 'can view', timeRemaining: '2 days' },
+                    { name: 'Bonus', permission: 'can edit', timeRemaining: '3 days' },
                     { name: 'Worapa', permission: 'can edit', timeRemaining: null }
                 ]
             },
@@ -62,9 +64,11 @@ app.get('/shared', (req, res) => {
                 name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: [
                     { name: 'Anan', permission: 'can edit', timeRemaining: null },
-                    { name: 'Passakorn', permission: 'can edit', timeRemaining: null },
+                    { name: 'Passakorn', permission: 'can edit', timeRemaining: '6 hours' },
                     { name: 'Khanun', permission: 'can edit', timeRemaining: null },
-                    { name: 'john', permission: 'can edit', timeRemaining: null },
+                    { name: 'peter', permission: 'can edit', timeRemaining: null },
+                    { name: 'Worapa', permission: 'can edit', timeRemaining: null },
+                    { name: 'john', permission: 'can edit', timeRemaining: '6 hours' },
                 ]
             },
             { 
@@ -72,6 +76,7 @@ app.get('/shared', (req, res) => {
                 accessList: [
                     { name: 'Passakorn', permission: 'can view', timeRemaining: '2 days' },
                     { name: 'โบนัส', permission: 'can view', timeRemaining: '2 days' },
+                    { name: 'Bonus', permission: 'can edit', timeRemaining: '3 days' },
                     { name: 'Worapa', permission: 'can edit', timeRemaining: null }
                 ]
             },

@@ -20,7 +20,14 @@
 
         <!-- Invite -->
         <div class="invite-section">
-            <input type="text" class="invite-input" placeholder="Add people...">
+            <div class="invite-input-container">
+                <input type="text" class="invite-input" id="invite-input" placeholder="Add comma separated emails to invite">
+                <select class="invite-permission-dropdown" id="invite-permission" style="display: none;">
+                    <option value="can view">can view</option>
+                    <option value="can edit">can edit</option>
+                    <option value="can comment">can comment</option>
+                </select>
+            </div>
             <button class="invite-btn" id="invite-btn">Invite</button>
         </div>
 
@@ -37,7 +44,7 @@
         <!-- Footer -->
         <div class="modal-footer">
             <button class="cancel-btn" id="cancelShareBtn">Cancel</button>
-            <button class="save-btn">Save</button>
+            <button class="save-btn" id="saveChangesBtn">Save</button>
         </div>
 
     </div>

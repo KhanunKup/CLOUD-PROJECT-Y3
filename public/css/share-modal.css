@@ -46,7 +46,7 @@
 /* Header */
 .share-modal-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between; cursor: pointer;
     align-items: center;
     border-bottom: 1px solid rgba(255, 255, 255, 0.3);
     padding-bottom: 15px;
@@ -106,18 +106,63 @@
     margin-bottom: 30px;
 }
 
-.invite-input {
+.invite-input-container {
     flex: 1;
+    background-color: #3b4131; /* Dark grey-olive for the input area background if we follow the image, wait, image shows #3b4131 for background of modal in image 2 but maybe it's just e2e2e2 in original */
     background-color: #e2e2e2;
-    border: none;
     border-radius: 8px;
-    padding: 12px 20px;
-    font-size: 16px;
-    font-family: 'Outfit', 'Kanit', sans-serif;
+    display: flex;
+    align-items: center;
+    padding: 0 10px 0 20px;
+    outline: 2px solid transparent;
+    transition: outline 0.2s;
+}
+.invite-input-container:focus-within {
+    outline: 2px solid #6d7463;
+    background-color: #c5c6c4;
+}
+.invite-input-container:focus-within .invite-input {
     color: #333;
 }
 
+.invite-input {
+    flex: 1;
+    background-color: transparent;
+    border: none;
+    font-size: 16px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    color: #333;
+    padding: 12px 0;
+    min-width: 0;
+}
 .invite-input:focus {
+    outline: none;
+}
+.invite-input::placeholder {
+    color: #333; /* Darker placeholder color */
+}
+.invite-input:focus::placeholder {
+    color: #616758; /* Keep placeholder color same on focus */
+}
+
+.invite-permission-dropdown {
+    background-color: #798369;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url('data:image/svg+xml;utf8,<svg fill="white" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    padding-right: 28px;
+}
+.invite-permission-dropdown:focus {
     outline: 2px solid #6b735c;
 }
 
@@ -149,12 +194,12 @@
     margin-bottom: 15px;
 }
 
-.access-item {
+.access-item { cursor: pointer; transition: background 0.2s;
     background-color: rgba(121, 130, 109, 0.5);
     border-radius: 8px;
     padding: 12px 20px;
     display: flex;
-    justify-content: space-between;
+    justify-content: space-between; cursor: pointer;
     align-items: center;
     margin-bottom: 10px;
 }
@@ -168,6 +213,11 @@
     color: #3a3a3a;
     font-size: 16px;
 }
+
+#ma-user-dropdown-list::-webkit-scrollbar { width: 6px; }
+#ma-user-dropdown-list::-webkit-scrollbar-track { background: transparent; }
+#ma-user-dropdown-list::-webkit-scrollbar-thumb { background: #4a523d; border-radius: 4px; }
+#ma-user-dropdown-list::-webkit-scrollbar-thumb:hover { background: #3b4131; }
 
 .access-details {
     display: flex;
@@ -218,4 +268,19 @@
 .save-btn {
     background-color: #555e46;
 }
+
+.cancel-btn:hover {
+    background-color: #6a745c;
+}
+
+.save-btn:hover {
+    background-color: #4a523d;
+}
+
+.invite-btn:hover {
+    background-color: #5c634c;
+}
+
+
+.access-item:hover { background-color: rgba(121, 130, 109, 0.8); }
 

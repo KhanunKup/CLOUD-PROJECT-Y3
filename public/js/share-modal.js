@@ -1,5 +1,6 @@
 // ฟังก์ชันสำหรับรับค่ารายชื่อคนที่เข้าถึงไฟล์ได้ แล้วนำมาแสดงผลแบบไดนามิก
 window.renderAccessList = function(accessList = []) {
+    window.currentAccessList = accessList; // Store globally to allow editing
     const container = document.getElementById('dynamic-access-list');
     if (!container) return;
 
@@ -7,15 +8,18 @@ window.renderAccessList = function(accessList = []) {
     container.innerHTML = '';
 
     // 1. ใส่ "Anyone" เป็นค่า default ที่มีตลอดตามที่ต้องการ
+    if (!window.anyoneAccess) {
+        window.anyoneAccess = { permission: 'can view', timeRemaining: '67 days' };
+    }
     const anyoneHtml = `
-        <div class="access-item">
+        <div class="access-item" data-names='["Anyone"]'>
             <div class="user-info">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
                 <span>Anyone</span>
             </div>
             <div class="access-details">
-                <span class="time-remaining">Time remaining: 67 days</span>
-                <button class="permission-dropdown">can view</button>
+                <span class="time-remaining">Time remaining: ${window.anyoneAccess.timeRemaining || 'Unlimited'}</span>
+                <button class="permission-dropdown">${window.anyoneAccess.permission}</button>
             </div>
         </div>
     `;
@@ -41,7 +45,7 @@ window.renderAccessList = function(accessList = []) {
     // 3. วนลูปสร้าง HTML จากกลุ่มที่จัดแล้ว
     Object.values(grouped).forEach(group => {
         // จัดการข้อความเวลา
-        const timeRemainingText = group.timeRemaining ? `Time remaining: ${group.timeRemaining}` : 'Time remaining: --';
+        const timeRemainingText = group.timeRemaining ? `Time remaining: ${group.timeRemaining}` : 'Time remaining: Unlimited';
         
         // จัดการแสดงผลชื่อ ถ้าเกิน 2 คนให้แสดง ... and X others
         let displayName = '';
@@ -55,7 +59,7 @@ window.renderAccessList = function(accessList = []) {
         }
 
         const html = `
-            <div class="access-item">
+            <div class="access-item" data-names='${JSON.stringify(group.names).replace(/'/g, "&apos;")}'>
                 <div class="user-info">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                     <span>${displayName}</span>
@@ -73,6 +77,7 @@ window.renderAccessList = function(accessList = []) {
 document.addEventListener('DOMContentLoaded', () => {
     const shareModal = document.getElementById('shareModal');
     const closeShareModalBtn = document.getElementById('closeShareModalBtn');
+    const saveChangesBtn = document.getElementById('saveChangesBtn');
     const cancelShareBtn = document.getElementById('cancelShareBtn');
     const copyLinkBtn = document.getElementById('copyLinkBtn');
     const copyLinkText = document.getElementById('copyLinkText');
@@ -98,16 +103,44 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const inviteInput = document.getElementById('invite-input');
+    const invitePermission = document.getElementById('invite-permission');
+    
+    if (inviteInput && invitePermission) {
+        inviteInput.addEventListener('input', (e) => {
+            if (e.target.value.trim().length > 0) {
+                invitePermission.style.display = 'block';
+            } else {
+                invitePermission.style.display = 'none';
+            }
+        });
+    }
+
     // เมื่อกดปุ่ม Invite ให้เปลี่ยนข้อความเป็น "Invited!" และเปลี่ยนกลับหลังจาก 2 วินาที
     const inviteBtn = document.getElementById('invite-btn');
     if (inviteBtn) {
         inviteBtn.addEventListener('click', () => {
+            const val = inviteInput ? inviteInput.value.trim() : '';
+            // if (val.length === 0) return; // do nothing if empty
+            
+            // TODO: Here you could add the new person to the currentAccessList dynamically
+            
             inviteBtn.textContent = 'Invited!';
+            if (inviteInput) inviteInput.value = '';
+            if (invitePermission) invitePermission.style.display = 'none';
             
             setTimeout(() => {
                 inviteBtn.textContent = 'Invite';
             }, 1000);
         });
+    }
+
+    if (saveChangesBtn) {
+        saveChangesBtn.addEventListener('click', closeModal);
+    }
+
+    if (cancelShareBtn) {
+        cancelShareBtn.addEventListener('click', closeModal);
     }
 
     if (closeShareModalBtn) {
