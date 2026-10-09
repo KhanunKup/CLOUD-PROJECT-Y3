@@ -1,0 +1,52 @@
+<!-- views/modals/manage-access-modal.ejs -->
+<div class="manage-access-overlay" id="manageAccessModal" style="display: none;">
+    <div class="manage-access-modal">
+        
+        <h3>Who has access</h3>
+        <div class="ma-user-box" id="ma-user-box">
+            <svg id="ma-globe-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            <svg id="ma-user-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
+            <span id="ma-user-name">Anyone</span>
+        </div>
+
+        <h3>What can they do</h3>
+        <div class="ma-radio-group">
+            <label class="ma-radio">
+                <input type="radio" name="ma-permission" value="can view" checked>
+                <span class="ma-radio-custom"></span> can view
+            </label>
+            <label class="ma-radio">
+                <input type="radio" name="ma-permission" value="can edit">
+                <span class="ma-radio-custom"></span> can edit
+            </label>
+        </div>
+
+        <h3>Shared Time</h3>
+        <div class="ma-time-inputs">
+            <input type="text" class="ma-time-input" id="ma-time-year"> year(s)
+            <input type="text" class="ma-time-input" id="ma-time-month"> month(s)
+            <input type="text" class="ma-time-input" id="ma-time-day"> day(s)
+            <input type="text" class="ma-time-input" id="ma-time-hour"> hour(s)
+            <input type="text" class="ma-time-input" id="ma-time-min"> minute(s)
+        </div>
+        <div class="ma-radio-group mt-10">
+            <label class="ma-radio">
+                <input type="radio" name="ma-time-forever" value="forever" checked>
+                <span class="ma-radio-custom"></span> Forever
+            </label>
+        </div>
+
+        <h3>Additional security</h3>
+        <div class="ma-checkbox-group">
+            <label class="ma-checkbox">
+                <input type="checkbox" name="ma-password" id="ma-password-check">
+                <span class="ma-checkbox-custom"></span> Password required
+            </label>
+        </div>
+
+        <div class="ma-footer">
+            <button class="ma-save-btn" id="maSaveBtn">Save</button>
+        </div>
+        
+    </div>
+</div>

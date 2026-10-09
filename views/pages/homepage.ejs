@@ -60,7 +60,7 @@
                         
                         <div class="options-wrapper">
                             <button class="options-btn toggle-options"><i class="fas fa-ellipsis-h"></i></button>
-                            <%- include(file.type === 'folder' ? '../menus/folder-option-menu' : '../menus/file-option-menu') %>
+                            <%- include(file.type === 'folder' ? '../menus/folder-option-menu' : '../menus/file-option-menu', { file: file }) %>
                         </div>
                     </div>
                 <% }) %>

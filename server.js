@@ -21,12 +21,31 @@ app.get('/', (req, res) => {
     res.redirect('/signup');
 });
 
-app.get('/home', (req, res) => {
+app.get('/drive', (req, res) => {
     res.render('pages/homepage', { 
         files: [
-            { name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008' },
-            { name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' },
-            { name: 'Image1.png', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' }
+            { 
+                name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008',
+                accessList: [
+                    { name: 'Anan', permission: 'can edit', timeRemaining: null },
+                    { name: 'Passakorn', permission: 'can edit', timeRemaining: null },
+                    { name: 'Khanun', permission: 'can edit', timeRemaining: null },
+                    { name: 'john', permission: 'can edit', timeRemaining: null },
+                    { name: 'peter', permission: 'can edit', timeRemaining: null }
+                ]
+            },
+            { 
+                name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
+                accessList: [
+                    { name: 'Passakorn', permission: 'can view', timeRemaining: '2 days' },
+                    { name: 'โบนัส', permission: 'can view', timeRemaining: '2 days' },
+                    { name: 'Worapa', permission: 'can edit', timeRemaining: null }
+                ]
+            },
+            { 
+                name: 'Image1.png', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
+                accessList: []
+            }
         ]
     });
 });
@@ -39,9 +58,34 @@ app.get('/signup', (req, res) => {
 app.get('/shared', (req, res) => {
     res.render('pages/shared', { 
         files: [
-            { name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008' },
-            { name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' },
-            { name: 'Image1.png', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008' }
+            { 
+                name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008',
+                accessList: [
+                    { name: 'Anan', permission: 'can edit', timeRemaining: null },
+                    { name: 'Passakorn', permission: 'can edit', timeRemaining: null },
+                    { name: 'Khanun', permission: 'can edit', timeRemaining: null },
+                    { name: 'john', permission: 'can edit', timeRemaining: null },
+                ]
+            },
+            { 
+                name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
+                accessList: [
+                    { name: 'Passakorn', permission: 'can view', timeRemaining: '2 days' },
+                    { name: 'โบนัส', permission: 'can view', timeRemaining: '2 days' },
+                    { name: 'Worapa', permission: 'can edit', timeRemaining: null }
+                ]
+            },
+            { 
+                name: 'Image1.png', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
+                accessList: []
+            },
+            {
+                name: 'Document1.pdf', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
+                accessList: [
+                    { name: 'Anan', permission: 'can view', timeRemaining: '5 days' },
+                    { name: 'Passakorn', permission: 'can edit', timeRemaining: null }
+                ]
+            }
         ]
     });
 });

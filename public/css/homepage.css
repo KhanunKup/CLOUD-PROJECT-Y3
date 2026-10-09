@@ -1,17 +1,17 @@
 @font-face {
-    font-family: 'EnglishFont'; /* ตั้งชื่อฟอนต์ตามต้องการ */
+    font-family: 'Kanit'; /* ตั้งชื่อฟอนต์ตามต้องการ */
     src: url('/fonts/Kanit-Bold.ttf') format('truetype'); 
     /* หมายเหตุ: ไม่ต้องใส่ /public นำหน้า เพราะใน server.js เราตั้ง static folder ไว้แล้ว */
 }
 
 @font-face {
-    font-family: 'ThaiFont'; /* ตั้งชื่อฟอนต์ตามต้องการ */
+    font-family: 'Outfit'; /* ตั้งชื่อฟอนต์ตามต้องการ */
     src: url('/fonts/Outfit-VariableFont_wght.ttf') format('truetype'); 
     /* หมายเหตุ: ไม่ต้องใส่ /public นำหน้า เพราะใน server.js เราตั้ง static folder ไว้แล้ว */
 }
 body {
     margin:0%;
-    font-family: 'EnglishFont', 'ThaiFont', sans-serif;
+    font-family: 'Outfit', 'Kanit', sans-serif;
 }
 .main-content {
     background-color: #d6bead; /* สีพื้นหลังหลัก */
