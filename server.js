@@ -74,6 +74,8 @@ app.get('/shared', (req, res) => {
             { 
                 name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: [
+                    { name: 'Anyone', permission: 'can edit', timeRemaining: null },
+                    { name: 'Anan', permission: 'can view', timeRemaining: '5 days' },
                     { name: 'Passakorn', permission: 'can view', timeRemaining: '2 days' },
                     { name: 'โบนัส', permission: 'can view', timeRemaining: '2 days' },
                     { name: 'Bonus', permission: 'can edit', timeRemaining: '3 days' },

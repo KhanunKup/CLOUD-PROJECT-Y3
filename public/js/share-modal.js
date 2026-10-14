@@ -1,5 +1,5 @@
 // ฟังก์ชันสำหรับรับค่ารายชื่อคนที่เข้าถึงไฟล์ได้ แล้วนำมาแสดงผลแบบไดนามิก
-window.renderAccessList = function(accessList = []) {
+window.renderAccessList = function(accessList = [], triggerBtn = null) {
     window.currentAccessList = accessList; // Store globally to allow editing
     const container = document.getElementById('dynamic-access-list');
     if (!container) return;
@@ -7,10 +7,24 @@ window.renderAccessList = function(accessList = []) {
     // เคลียร์ข้อมูลเก่าก่อน
     container.innerHTML = '';
 
-    // 1. ใส่ "Anyone" เป็นค่า default ที่มีตลอดตามที่ต้องการ
-    if (!window.anyoneAccess) {
-        window.anyoneAccess = { permission: 'can view', timeRemaining: '67 days' };
+    // ถ้าเปิดจากปุ่มไฟล์ใหม่ (triggerBtn ส่งมา)
+    if (triggerBtn) {
+        window.activeShareFileBtn = triggerBtn;
+        const serverAnyone = accessList.find(acc => acc.name && (acc.name.toLowerCase() === 'anyone' || acc.name.toLowerCase() === 'everyone'));
+        if (serverAnyone) {
+            // ใช้ค่าที่ไฟล์นี้เคยตั้งไว้ หรือค่าที่ส่งมาจาก server
+            window.anyoneAccess = {
+                permission: serverAnyone.permission || 'can view',
+                timeRemaining: serverAnyone.timeRemaining || null
+            };
+        } else {
+            // ถ้ายังไม่มีการตั้งค่า ให้ใช้ Default: everyone can view (Unlimited)
+            window.anyoneAccess = { permission: 'can view', timeRemaining: null };
+        }
+    } else if (!window.anyoneAccess) {
+        window.anyoneAccess = { permission: 'can view', timeRemaining: null };
     }
+
     const anyoneHtml = `
         <div class="access-item" data-names='["Anyone"]'>
             <div class="user-info">
@@ -136,7 +150,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (saveChangesBtn) {
-        saveChangesBtn.addEventListener('click', closeModal);
+        saveChangesBtn.addEventListener('click', () => {
+            if (window.activeShareFileBtn) {
+                let fullList = window.currentAccessList ? [...window.currentAccessList] : [];
+                // ตัด Anyone เดิมออกก่อนแล้วใส่ Anyone ที่อัปเดตใหม่เข้าไป
+                fullList = fullList.filter(acc => acc.name && acc.name.toLowerCase() !== 'anyone');
+                fullList.push({
+                    name: 'Anyone',
+                    permission: (window.anyoneAccess && window.anyoneAccess.permission) || 'can view',
+                    timeRemaining: (window.anyoneAccess && window.anyoneAccess.timeRemaining) || null
+                });
+                window.activeShareFileBtn.dataset.access = encodeURIComponent(JSON.stringify(fullList));
+            }
+            closeModal();
+        });
     }
 
     if (cancelShareBtn) {

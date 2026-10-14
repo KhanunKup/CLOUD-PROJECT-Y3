@@ -130,29 +130,57 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // pre-fill the modal with current group settings
             // find one of the members to get their current settings
+            let acc = null;
             if (currentEditingNames.length > 0) {
                 const sampleName = currentEditingNames[0];
-                let acc = null;
                 if (sampleName === 'Anyone') {
                     acc = window.anyoneAccess;
                 } else if (window.currentAccessList) {
                     acc = window.currentAccessList.find(a => a.name === sampleName);
                 }
-                
-                if (acc) {
-                    const permRadio = document.querySelector(`input[name="ma-permission"][value="${acc.permission}"]`);
-                    if (permRadio) permRadio.checked = true;
-                    
-                    const foreverCheck = document.getElementById('ma-time-forever');
-                    if (acc.timeRemaining && acc.timeRemaining !== 'Unlimited') {
-                        foreverCheck.checked = false;
-                        // we'd parse timeRemaining here, but for simplicity we just leave inputs blank if it's a test
-                    } else {
-                        foreverCheck.checked = true;
-                    }
-                    toggleTimeInputs();
-                }
             }
+
+            // Defaults: permission 'can view', time 'Forever'
+            const targetPerm = (acc && acc.permission) ? acc.permission : 'can view';
+            const permRadio = document.querySelector(`input[name="ma-permission"][value="${targetPerm}"]`);
+            if (permRadio) permRadio.checked = true;
+
+            const foreverCheck = document.getElementById('ma-time-forever');
+            const hasTimeLimit = acc && acc.timeRemaining && acc.timeRemaining !== 'Unlimited';
+            if (foreverCheck) {
+                foreverCheck.checked = !hasTimeLimit;
+            }
+
+            // Reset time inputs
+            const timeYear = document.getElementById('ma-time-year');
+            const timeMonth = document.getElementById('ma-time-month');
+            const timeDay = document.getElementById('ma-time-day');
+            const timeHour = document.getElementById('ma-time-hour');
+            const timeMin = document.getElementById('ma-time-min');
+            [timeYear, timeMonth, timeDay, timeHour, timeMin].forEach(inp => { if (inp) inp.value = ''; });
+
+            if (hasTimeLimit) {
+                const str = acc.timeRemaining.toLowerCase();
+                const yMatch = str.match(/(\d+)\s*y/);
+                const moMatch = str.match(/(\d+)\s*mo/);
+                const dMatch = str.match(/(\d+)\s*d/);
+                const hMatch = str.match(/(\d+)\s*h/);
+                const mMatch = str.match(/(\d+)\s*m(?!o)/);
+                if (yMatch && timeYear) timeYear.value = yMatch[1];
+                if (moMatch && timeMonth) timeMonth.value = moMatch[1];
+                if (dMatch && timeDay) timeDay.value = dMatch[1];
+                if (hMatch && timeHour) timeHour.value = hMatch[1];
+                if (mMatch && timeMin) timeMin.value = mMatch[1];
+            }
+            toggleTimeInputs();
+
+            // Default password: false & hidden
+            const passwordCheck = document.getElementById('ma-password-check');
+            const passwordContainer = document.getElementById('ma-password-container');
+            const passwordInput = document.getElementById('ma-password-input');
+            if (passwordCheck) passwordCheck.checked = false;
+            if (passwordContainer) passwordContainer.style.display = 'none';
+            if (passwordInput) passwordInput.value = '';
             
             // Show modal
             if (manageModal) {

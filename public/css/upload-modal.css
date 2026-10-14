@@ -153,6 +153,69 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     padding-right: 10px;
+    min-width: 0;
+}
+
+.upload-file-name-text {
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.upload-file-name-text:hover {
+    text-decoration: underline;
+}
+
+.upload-edit-name-btn {
+    background: none;
+    border: none;
+    color: #ffffff;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0.6;
+    padding: 2px 4px;
+    transition: opacity 0.2s, transform 0.1s;
+}
+.upload-edit-name-btn:hover {
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+.upload-inline-name-input {
+    background-color: #555e46;
+    border: 1px solid #9ba78d;
+    border-radius: 4px;
+    color: #ffffff;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 6px;
+    outline: none;
+    max-width: 130px;
+}
+.upload-inline-name-input:focus {
+    border-color: #ffffff;
+    background-color: #485239;
+}
+
+.upload-inline-ext {
+    color: #d1dbca;
+    font-size: 13px;
+    margin-left: 2px;
+}
+
+.upload-save-name-btn {
+    background: none;
+    border: none;
+    color: #a5d6a7;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 2px 4px;
+    margin-left: 4px;
+    transition: transform 0.1s;
+}
+.upload-save-name-btn:hover {
+    transform: scale(1.2);
 }
 
 .upload-queue-row .col-upload-type {

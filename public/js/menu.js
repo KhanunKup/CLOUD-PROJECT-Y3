@@ -40,10 +40,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // กดปุ่ม Share เพื่อเปิด Modal
-    const shareBtns = document.querySelectorAll('.open-share-modal');
-    shareBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
+    // กดปุ่ม Share เพื่อเปิด Modal (ใช้ Event Delegation เพื่อรองรับไฟล์ที่เพิ่มเข้ามาใหม่ด้วย)
+    document.addEventListener('click', (e) => {
+        const shareBtn = e.target.closest('.open-share-modal');
+        if (shareBtn) {
             e.stopPropagation();
             const shareModal = document.getElementById('shareModal');
             if(shareModal) {
@@ -52,23 +52,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 // อ่านข้อมูล Access List จาก attribute data-access ของปุ่มที่ถูกคลิก
                 let fileAccessList = [];
                 try {
-                    if (btn.dataset.access) {
-                        fileAccessList = JSON.parse(decodeURIComponent(btn.dataset.access));
+                    if (shareBtn.dataset.access) {
+                        fileAccessList = JSON.parse(decodeURIComponent(shareBtn.dataset.access));
                     }
-                } catch (e) {
-                    console.error("Failed to parse access list", e);
+                } catch (err) {
+                    console.error("Failed to parse access list", err);
                 }
                 
-                // เรียกใช้ฟังก์ชันที่ประกาศไว้ใน share-modal.js
+                // เรียกใช้ฟังก์ชันที่ประกาศไว้ใน share-modal.js พร้อมส่ง shareBtn อ้างอิง
                 if (window.renderAccessList) {
-                    window.renderAccessList(fileAccessList);
+                    window.renderAccessList(fileAccessList, shareBtn);
                 }
             }
             
             // ปิด Dropdown
-            const dropdown = btn.closest('.options-dropdown');
+            const dropdown = shareBtn.closest('.options-dropdown');
             if(dropdown) dropdown.classList.remove('show');
-        });
+        }
     });
 
     // กดปุ่ม Copy link ใน Dropdown

@@ -58,20 +58,93 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         uploadQueueList.innerHTML = '';
-        selectedFiles.forEach((file, index) => {
+        selectedFiles.forEach((item, index) => {
             const row = document.createElement('div');
             row.className = 'upload-queue-row';
-            row.innerHTML = `
-                <span class="col-upload-name" title="${file.name}">
-                    <i class="far fa-file-alt"></i>
-                    ${file.name}
-                </span>
-                <span class="col-upload-type">${getFileTypeDisplay(file.name)}</span>
-                <button type="button" class="upload-remove-file-btn" data-index="${index}" title="Remove file">
-                    <i class="fas fa-times"></i>
-                </button>
-            `;
+            
+            if (item.isEditing) {
+                const lastDot = item.name.lastIndexOf('.');
+                const baseName = lastDot > 0 ? item.name.substring(0, lastDot) : item.name;
+                const ext = lastDot > 0 ? item.name.substring(lastDot) : '';
+
+                row.innerHTML = `
+                    <span class="col-upload-name" style="flex: 1.4;">
+                        <i class="far fa-file-alt"></i>
+                        <input type="text" class="upload-inline-name-input" data-index="${index}" data-ext="${ext}" value="${baseName}">
+                        <span class="upload-inline-ext">${ext}</span>
+                        <button type="button" class="upload-save-name-btn" data-index="${index}" title="Save">
+                            <i class="fas fa-check"></i>
+                        </button>
+                    </span>
+                    <span class="col-upload-type">${getFileTypeDisplay(item.name)}</span>
+                    <button type="button" class="upload-remove-file-btn" data-index="${index}" title="Remove file">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+            } else {
+                row.innerHTML = `
+                    <span class="col-upload-name" title="Click pencil or name to edit">
+                        <i class="far fa-file-alt"></i>
+                        <span class="upload-file-name-text" data-index="${index}">${item.name}</span>
+                        <button type="button" class="upload-edit-name-btn" data-index="${index}" title="Rename">
+                            <i class="fas fa-pencil-alt"></i>
+                        </button>
+                    </span>
+                    <span class="col-upload-type">${getFileTypeDisplay(item.name)}</span>
+                    <button type="button" class="upload-remove-file-btn" data-index="${index}" title="Remove file">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+            }
             uploadQueueList.appendChild(row);
+        });
+
+        // Auto focus if an input exists
+        const inlineInput = uploadQueueList.querySelector('.upload-inline-name-input');
+        if (inlineInput) {
+            inlineInput.focus();
+            inlineInput.select();
+
+            const saveInlineName = (idx) => {
+                const newBase = inlineInput.value.trim();
+                const ext = inlineInput.dataset.ext || '';
+                if (newBase.length > 0) {
+                    selectedFiles[idx].name = newBase + ext;
+                }
+                selectedFiles[idx].isEditing = false;
+                renderQueue();
+            };
+
+            inlineInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const idx = parseInt(inlineInput.dataset.index, 10);
+                    saveInlineName(idx);
+                } else if (e.key === 'Escape') {
+                    const idx = parseInt(inlineInput.dataset.index, 10);
+                    selectedFiles[idx].isEditing = false;
+                    renderQueue();
+                }
+            });
+
+            const saveBtn = uploadQueueList.querySelector('.upload-save-name-btn');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(saveBtn.dataset.index, 10);
+                    saveInlineName(idx);
+                });
+            }
+        }
+
+        // Click on pencil or text to start editing
+        uploadQueueList.querySelectorAll('.upload-edit-name-btn, .upload-file-name-text').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const idx = parseInt(btn.dataset.index, 10);
+                selectedFiles.forEach((f, i) => { f.isEditing = (i === idx); });
+                renderQueue();
+            });
         });
 
         // ผูก event ให้ปุ่มลบไฟล์ออกจากคิว
@@ -91,7 +164,11 @@ document.addEventListener('DOMContentLoaded', () => {
         Array.from(files).forEach(file => {
             // ไม่เพิ่มไฟล์ที่ชื่อซ้ำกันในคิวเดียวกัน
             if (!selectedFiles.some(f => f.name === file.name)) {
-                selectedFiles.push(file);
+                selectedFiles.push({
+                    file: file,
+                    name: file.name,
+                    isEditing: false
+                });
             }
         });
         renderQueue();
