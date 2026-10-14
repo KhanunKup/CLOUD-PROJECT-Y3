@@ -7,9 +7,21 @@
         <!-- Dropzone Section -->
         <div class="upload-dropzone" id="uploadDropzone">
             <input type="file" id="uploadFileInput" multiple style="display: none;">
-            <button type="button" class="upload-dropzone-badge" id="uploadBrowseBtn">
-                Click to Upload / Drag File or Folder Here
-            </button>
+            <input type="file" id="uploadFolderInput" webkitdirectory directory multiple style="display: none;">
+            
+            <div class="upload-dropzone-inner">
+                <div class="upload-dropzone-actions">
+                    <button type="button" class="upload-dropzone-badge" id="uploadBrowseFileBtn">
+                        <i class="fas fa-file-upload"></i> Upload Files
+                    </button>
+                    <button type="button" class="upload-dropzone-badge" id="uploadBrowseFolderBtn">
+                        <i class="fas fa-folder-plus"></i> Upload Folder
+                    </button>
+                </div>
+                <div class="upload-dropzone-hint">
+                    or Drag & Drop Files / Folders Here
+                </div>
+            </div>
         </div>
 
         <!-- File Queue Section -->

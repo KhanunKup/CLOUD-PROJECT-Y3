@@ -47,19 +47,52 @@
     outline: 2px dashed #414a33;
 }
 
+.upload-dropzone-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.upload-dropzone-actions {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
 .upload-dropzone-badge {
     background-color: #a0a797;
     color: #ffffff;
     font-family: 'Outfit', 'Kanit', sans-serif;
-    font-weight: 500;
+    font-weight: 600;
     font-size: 14px;
-    padding: 12px 20px;
+    padding: 10px 20px;
     border-radius: 25px;
     border: none;
     cursor: pointer;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-    transition: background-color 0.2s, transform 0.1s;
-    pointer-events: none; /* lets click pass through to dropzone */
+    transition: background-color 0.2s, transform 0.1s, box-shadow 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.upload-dropzone-badge:hover {
+    background-color: #8c9482;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+
+.upload-dropzone-badge:active {
+    transform: translateY(0);
+}
+
+.upload-dropzone-hint {
+    font-size: 13px;
+    color: #555d49;
+    font-weight: 500;
+    font-family: 'Outfit', 'Kanit', sans-serif;
 }
 
 /* Bottom Queue Table Section */
