@@ -1,0 +1,41 @@
+<!-- views/modals/upload-modal.ejs -->
+<link rel="stylesheet" href="/css/upload-modal.css">
+
+<div class="upload-modal-overlay" id="uploadModal" style="display: none;">
+    <div class="upload-modal">
+        
+        <!-- Dropzone Section -->
+        <div class="upload-dropzone" id="uploadDropzone">
+            <input type="file" id="uploadFileInput" multiple style="display: none;">
+            <button type="button" class="upload-dropzone-badge" id="uploadBrowseBtn">
+                Click to Upload / Drag File or Folder Here
+            </button>
+        </div>
+
+        <!-- File Queue Section -->
+        <div class="upload-queue-container">
+            <div class="upload-queue-header">
+                <span class="col-upload-name">Name</span>
+                <span class="col-upload-type">Type</span>
+                <span class="col-upload-action"></span>
+            </div>
+            <hr class="upload-queue-divider">
+
+            <div class="upload-queue-list" id="uploadQueueList">
+                <!-- Example initial row if empty, or populated dynamically -->
+                <div class="upload-queue-empty" id="uploadQueueEmpty" style="text-align: center; color: #6b735c; font-size: 14px; padding: 20px 0;">
+                    No files selected yet
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="upload-modal-footer">
+            <button type="button" class="upload-btn-cancel" id="uploadCancelBtn">Cancel</button>
+            <button type="button" class="upload-btn-submit" id="uploadSubmitBtn">Upload</button>
+        </div>
+
+    </div>
+</div>
+
+<script src="/js/upload-modal.js"></script>

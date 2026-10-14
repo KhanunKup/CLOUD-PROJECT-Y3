@@ -1,0 +1,222 @@
+/* public/css/upload-modal.css */
+.upload-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1060;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+}
+
+.upload-modal {
+    background-color: #8c967d;
+    width: 600px;
+    max-width: 92%;
+    border-radius: 16px;
+    padding: 26px 28px 22px 28px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Top Dropzone Section */
+.upload-dropzone {
+    background-color: #d2d4cf;
+    height: 150px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s, outline 0.2s;
+    outline: 2px dashed transparent;
+}
+
+.upload-dropzone:hover {
+    background-color: #cbcdc8;
+}
+
+.upload-dropzone.dragover {
+    background-color: #e5e8e1;
+    outline: 2px dashed #414a33;
+}
+
+.upload-dropzone-badge {
+    background-color: #a0a797;
+    color: #ffffff;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    padding: 12px 20px;
+    border-radius: 25px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    transition: background-color 0.2s, transform 0.1s;
+    pointer-events: none; /* lets click pass through to dropzone */
+}
+
+/* Bottom Queue Table Section */
+.upload-queue-container {
+    background-color: #d2d4cf;
+    border-radius: 10px;
+    margin-top: 16px;
+    padding: 12px 18px 14px 18px;
+    box-sizing: border-box;
+}
+
+.upload-queue-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: #3e4435;
+    padding: 0 4px;
+}
+
+.col-upload-name {
+    flex: 1.2;
+}
+
+.col-upload-type {
+    flex: 1;
+}
+
+.col-upload-action {
+    width: 32px;
+    text-align: right;
+}
+
+.upload-queue-divider {
+    border: none;
+    height: 1px;
+    background-color: #a0a797;
+    margin: 8px 0 10px 0;
+}
+
+.upload-queue-list {
+    max-height: 140px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-right: 4px;
+}
+
+/* Custom Scrollbar for Queue */
+.upload-queue-list::-webkit-scrollbar {
+    width: 5px;
+}
+.upload-queue-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.upload-queue-list::-webkit-scrollbar-thumb {
+    background: #798369;
+    border-radius: 4px;
+}
+.upload-queue-list::-webkit-scrollbar-thumb:hover {
+    background: #5c634c;
+}
+
+/* Queue Item Row */
+.upload-queue-row {
+    background-color: #798369;
+    border-radius: 8px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #ffffff;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background-color 0.15s;
+}
+
+.upload-queue-row:hover {
+    background-color: #6e7960;
+}
+
+.upload-queue-row .col-upload-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 10px;
+}
+
+.upload-queue-row .col-upload-type {
+    color: #e5ecd9;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.upload-remove-file-btn {
+    background: none;
+    border: none;
+    color: #ffffff;
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s, transform 0.1s;
+    width: 32px;
+    text-align: right;
+}
+
+.upload-remove-file-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+/* Footer Buttons */
+.upload-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    margin-top: 22px;
+}
+
+.upload-btn-cancel,
+.upload-btn-submit {
+    border: none;
+    border-radius: 20px;
+    padding: 8px 26px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: #ffffff;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.upload-btn-cancel {
+    background-color: #6e7960;
+}
+
+.upload-btn-cancel:hover {
+    background-color: #616c54;
+}
+
+.upload-btn-submit {
+    background-color: #414a33;
+}
+
+.upload-btn-submit:hover {
+    background-color: #323927;
+}
+
+.upload-btn-cancel:active,
+.upload-btn-submit:active {
+    transform: scale(0.98);
+}

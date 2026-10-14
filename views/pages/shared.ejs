@@ -31,7 +31,10 @@
         <!-- Header -->
         <div class="page-header">
             <h1>SHARED WITH ME</h1>
-            <button class="btn-new">+ New</button>
+            <div class="new-action-wrapper">
+                <button class="btn-new" id="btnNew">+ New</button>
+                <%- include('../menus/new-option-menu') %>
+            </div>
         </div>
 
         <!-- File List -->
@@ -73,6 +76,8 @@
     <%- include('../modals/share-modal') %>
     <%- include('../modals/manage-access-modal') %>
     <%- include('../modals/rename-modal') %>
+    <%- include('../modals/new-folder-modal') %>
+    <%- include('../modals/upload-modal') %>
     
     <!-- เรียกใช้ JS ของ Menu Dropdown -->
     <script src="/js/menu.js"></script>

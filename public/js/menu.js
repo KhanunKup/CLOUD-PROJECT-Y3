@@ -18,8 +18,27 @@ document.addEventListener('DOMContentLoaded', () => {
             if(btn.nextElementSibling) {
                 btn.nextElementSibling.classList.toggle('show');
             }
+            const newDropdown = document.getElementById('newOptionsDropdown');
+            if (newDropdown) newDropdown.classList.remove('show');
         });
     });
+
+    // ปุ่มสำหรับเปิด Dropdown ของ + New
+    const btnNew = document.querySelector('.btn-new');
+    const newOptionsDropdown = document.getElementById('newOptionsDropdown');
+
+    if (btnNew && newOptionsDropdown) {
+        btnNew.addEventListener('click', (e) => {
+            e.stopPropagation();
+            
+            // ปิด dropdown ของไฟล์อื่นๆ
+            document.querySelectorAll('.options-dropdown').forEach(dropdown => {
+                dropdown.classList.remove('show');
+            });
+            
+            newOptionsDropdown.classList.toggle('show');
+        });
+    }
 
     // กดปุ่ม Share เพื่อเปิด Modal
     const shareBtns = document.querySelectorAll('.open-share-modal');
@@ -72,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // คลิกที่อื่นในหน้าเว็บ ให้ปิด Dropdown
     document.addEventListener('click', () => {
-        document.querySelectorAll('.options-dropdown').forEach(dropdown => {
+        document.querySelectorAll('.options-dropdown, .new-options-dropdown').forEach(dropdown => {
             dropdown.classList.remove('show');
         });
     });
