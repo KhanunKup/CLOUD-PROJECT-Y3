@@ -1,0 +1,17 @@
+<!-- views/modals/rename-modal.ejs -->
+<link rel="stylesheet" href="/css/rename-modal.css">
+
+<div class="rename-modal-overlay" id="renameModal" style="display: none;">
+    <div class="rename-modal">
+        <h2 class="rename-modal-title">Rename</h2>
+        <div class="rename-input-wrapper">
+            <input type="text" class="rename-input" id="renameInput" placeholder="File" autocomplete="off">
+        </div>
+        <div class="rename-modal-footer">
+            <button type="button" class="rename-btn-cancel" id="renameCancelBtn">Cancel</button>
+            <button type="button" class="rename-btn-confirm" id="renameConfirmBtn">Rename</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/rename-modal.js"></script>
