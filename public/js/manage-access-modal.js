@@ -156,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Show modal
             if (manageModal) {
+                resetPasswordVisibility();
                 manageModal.style.display = 'flex';
             }
         }
@@ -225,32 +226,47 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.renderAccessList(window.currentAccessList);
                 }
                 
-                manageModal.style.display = 'none';
+                closeManageModal();
             }
         });
+    }
+
+    function resetPasswordVisibility() {
+        const pInput = document.getElementById('ma-password-input');
+        const pToggle = document.getElementById('ma-password-toggle');
+        if (pInput) {
+            pInput.type = 'password';
+        }
+        if (pToggle) {
+            pToggle.classList.remove('fa-eye-slash');
+            pToggle.classList.add('fa-eye');
+        }
+    }
+
+    function closeManageModal() {
+        if (manageModal) {
+            manageModal.style.display = 'none';
+        }
+        resetPasswordVisibility();
     }
 
     // Close on overlay click or cancel/close buttons
     if (manageModal) {
         manageModal.addEventListener('click', (e) => {
             if (e.target === manageModal) {
-                manageModal.style.display = 'none';
+                closeManageModal();
             }
         });
     }
 
     const cancelBtn = document.getElementById('maCancelBtn');
     if (cancelBtn) {
-        cancelBtn.addEventListener('click', () => {
-            if (manageModal) manageModal.style.display = 'none';
-        });
+        cancelBtn.addEventListener('click', closeManageModal);
     }
 
     const closeTopBtn = document.getElementById('maCloseTopBtn');
     if (closeTopBtn) {
-        closeTopBtn.addEventListener('click', () => {
-            if (manageModal) manageModal.style.display = 'none';
-        });
+        closeTopBtn.addEventListener('click', closeManageModal);
     }
 
     // Logic for Forever checkbox
@@ -293,6 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 passwordContainer.style.display = 'none';
                 if (passwordInput) passwordInput.value = '';
+                resetPasswordVisibility();
             }
         });
     }
