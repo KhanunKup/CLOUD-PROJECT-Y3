@@ -1,3 +1,19 @@
+@font-face {
+    font-family: "Kanit";
+    src: url("/fonts/Kanit-Bold.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Outfit";
+    src: url("/fonts/Outfit-VariableFont_wght.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -8,17 +24,13 @@ html,
 body {
     width: 100%;
     min-height: 100%;
+    font-family: "Outfit", "Kanit", sans-serif;
 }
 
 body {
-    font-family: "Outfit", "Kanit", sans-serif;
     color: #3b2b22;
     background: #cdb79f;
 }
-
-/* =====================================================
-   PAGE / BACKGROUND
-===================================================== */
 
 .page {
     position: relative;
@@ -29,59 +41,17 @@ body {
     padding: 42px;
     overflow: hidden;
     isolation: isolate;
-
     background:
-        radial-gradient(circle at 18% 15%, rgba(255,255,255,.82) 0 5%, transparent 23%),
-        radial-gradient(circle at 82% 18%, rgba(161,111,76,.20) 0 4%, transparent 20%),
-        radial-gradient(circle at 92% 82%, rgba(255,225,188,.32) 0 5%, transparent 22%),
-        radial-gradient(circle at 8% 88%, rgba(103,69,48,.12) 0 4%, transparent 18%),
-        repeating-linear-gradient(0deg, rgba(104,76,56,.045) 0 1px, transparent 1px 44px),
-        repeating-linear-gradient(90deg, rgba(104,76,56,.04) 0 1px, transparent 1px 44px),
-        linear-gradient(135deg, #efe5da 0%, #dcc8b3 42%, #c5a383 100%);
+        radial-gradient(ellipse at 13% 17%, rgba(255,255,255,.88) 0%, rgba(255,255,255,0) 31%),
+        radial-gradient(ellipse at 83% 15%, rgba(169,119,81,.20) 0%, rgba(169,119,81,0) 29%),
+        radial-gradient(ellipse at 90% 88%, rgba(255,224,186,.34) 0%, rgba(255,224,186,0) 28%),
+        radial-gradient(ellipse at 8% 88%, rgba(105,70,49,.08) 0%, rgba(105,70,49,0) 25%),
+        repeating-linear-gradient(0deg, rgba(104,76,56,.085) 0 1px, transparent 1px 36px),
+        repeating-linear-gradient(90deg, rgba(104,76,56,.08) 0 1px, transparent 1px 36px),
+        repeating-linear-gradient(0deg, transparent 0 179px, rgba(104,76,56,.10) 179px 180px),
+        repeating-linear-gradient(90deg, transparent 0 179px, rgba(104,76,56,.095) 179px 180px),
+        linear-gradient(135deg, #f1e8de 0%, #ddc8b3 43%, #c39a76 100%);
 }
-
-/* soft decorative blobs */
-.page::before,
-.page::after {
-    content: "";
-    position: absolute;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: -1;
-}
-
-.page::before {
-    width: 460px;
-    height: 460px;
-    top: -210px;
-    left: -140px;
-    background:
-        radial-gradient(circle, rgba(255,255,255,.42) 0 28%, rgba(255,255,255,0) 62%),
-        radial-gradient(circle at 70% 70%, rgba(255,255,255,.13) 0 4px, transparent 5px);
-    box-shadow:
-        520px 170px 0 -105px rgba(255,255,255,.10),
-        840px -30px 0 -125px rgba(106,72,51,.10),
-        1060px 560px 0 -90px rgba(255,255,255,.08);
-    filter: blur(4px);
-}
-
-.page::after {
-    width: 560px;
-    height: 560px;
-    right: -230px;
-    bottom: -260px;
-    background:
-        radial-gradient(circle, rgba(118,77,50,.22) 0 22%, rgba(118,77,50,0) 68%),
-        radial-gradient(circle at 28% 25%, rgba(255,226,193,.20) 0 3px, transparent 4px);
-    box-shadow:
-        -720px -460px 0 -175px rgba(123,83,58,.11),
-        -920px 100px 0 -195px rgba(255,255,255,.10);
-    filter: blur(12px);
-}
-
-/* =====================================================
-   MAIN CARD
-===================================================== */
 
 .signup-container {
     position: relative;
@@ -91,20 +61,16 @@ body {
     grid-template-columns: 41% 59%;
     overflow: hidden;
     border-radius: 30px;
-
     background: rgba(255,255,255,.18);
     border: 1px solid rgba(255,255,255,.58);
-
     box-shadow:
         0 40px 90px rgba(63,43,30,.22),
         0 16px 35px rgba(63,43,30,.12),
         inset 0 1px 0 rgba(255,255,255,.55);
-
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
 }
 
-/* subtle shine on card */
 .signup-container::before {
     content: "";
     position: absolute;
@@ -113,10 +79,6 @@ body {
     z-index: 10;
     background: linear-gradient(125deg, rgba(255,255,255,.16), transparent 34%, transparent 72%, rgba(255,255,255,.06));
 }
-
-/* =====================================================
-   FORM SIDE
-===================================================== */
 
 .form-side {
     display: flex;
@@ -147,10 +109,6 @@ body {
     color: #8a7463;
     margin-bottom: 31px;
 }
-
-/* =====================================================
-   INPUTS
-===================================================== */
 
 .input-box {
     position: relative;
@@ -207,10 +165,6 @@ body {
     stroke-width: 1.5;
 }
 
-/* =====================================================
-   PASSWORD RULES
-===================================================== */
-
 .password-rules {
     margin: 6px 0 20px;
     font-family: "Kanit", sans-serif;
@@ -237,10 +191,6 @@ body {
     font-size: 8px;
 }
 
-/* =====================================================
-   LOGIN TEXT
-===================================================== */
-
 .login-text {
     margin-bottom: 17px;
     text-align: center;
@@ -259,10 +209,6 @@ body {
     text-decoration: underline;
 }
 
-/* =====================================================
-   SIGN UP BUTTON
-===================================================== */
-
 .signup-btn {
     width: 100%;
     height: 53px;
@@ -273,12 +219,10 @@ body {
     border: 0;
     border-radius: 15px;
     cursor: pointer;
-
     color: #fff;
     font-family: "Outfit", sans-serif;
     font-size: 15px;
     font-weight: 600;
-
     background: linear-gradient(135deg, #3167ef, #1945d2);
     box-shadow: 0 12px 24px rgba(38,83,219,.25);
     transition: transform .22s ease, box-shadow .22s ease, filter .22s ease;
@@ -305,10 +249,6 @@ body {
     font-size: 13px;
 }
 
-/* =====================================================
-   RIGHT / VISUAL SIDE
-===================================================== */
-
 .visual-side {
     position: relative;
     min-height: 680px;
@@ -327,7 +267,6 @@ body {
     transform: scale(1.02);
 }
 
-/* improve contrast while keeping the original artwork visible */
 .visual-side::before {
     content: "";
     position: absolute;
@@ -339,7 +278,6 @@ body {
         linear-gradient(180deg, rgba(38,24,20,.10), rgba(38,24,20,.02) 55%, rgba(30,19,16,.14));
 }
 
-/* soft glow behind logo */
 .visual-side::after {
     content: "";
     position: absolute;
@@ -354,10 +292,6 @@ body {
     z-index: 3;
     pointer-events: none;
 }
-
-/* =====================================================
-   LOGO + TEXT
-===================================================== */
 
 .visual-content {
     position: relative;
@@ -408,13 +342,10 @@ body {
     width: 9px;
     height: 9px;
     border-radius: 50%;
+    flex-shrink: 0;
     background: #e0b17b;
     box-shadow: 0 0 12px rgba(224,177,123,.75);
 }
-
-/* =====================================================
-   RESPONSIVE
-===================================================== */
 
 @media (max-width: 1000px) {
     .signup-container {
@@ -430,11 +361,11 @@ body {
         padding-top: 52px;
     }
 
-     .logo {
+    .logo {
         width: 360px;
     }
 
-     .visual-content p {
+    .visual-content p {
         font-size: 18px;
     }
 }
@@ -450,7 +381,7 @@ body {
         max-width: 500px;
     }
 
-     .visual-side {
+    .visual-side {
         min-height: 350px;
         order: -1;
     }
@@ -463,14 +394,20 @@ body {
         padding-top: 28px;
     }
 
-     .logo {
+    .logo {
         width: 250px;
         max-width: 55%;
     }
 
-     .visual-content p {
+    .visual-content p {
         font-size: 15px;
         letter-spacing: 2.2px;
+    }
+
+    .visual-badge {
+        margin-top: 17px;
+        padding: 9px 14px;
+        font-size: 11px;
     }
 
     .form-side {
@@ -487,11 +424,11 @@ body {
         border-radius: 22px;
     }
 
-     .visual-side {
+    .visual-side {
         min-height: 300px;
     }
 
-     .logo {
+    .logo {
         width: 220px;
     }
 
