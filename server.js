@@ -53,6 +53,11 @@ app.get('/drive', (req, res) => {
 });
 
 app.get('/signup', (req, res) => {
+    res.render('pages/signup', { 
+    });
+});
+
+app.get('/signin', (req, res) => {
     res.render('pages/login', { 
     });
 });
