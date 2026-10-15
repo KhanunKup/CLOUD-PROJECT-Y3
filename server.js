@@ -15,6 +15,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// จำลองข้อมูลผู้ใช้ปัจจุบัน (ส่งผ่าน res.locals ให้ทุกหน้า EJS เข้าถึงได้อัตโนมัติ)
+// สามารถทดสอบสลับ role ได้โดยใส่ query param เช่น ?role=user หรือ ?role=admin (default: admin)
+app.use((req, res, next) => {
+    const roleParam = req.query.role;
+    res.locals.user = {
+        name: 'Rick and Morty',
+        role: roleParam ? roleParam.toLowerCase() : 'admin',
+        avatar: null
+    };
+    next();
+});
+
 // 3. สร้าง Route สำหรับหน้าเว็บหลัก
 app.get('/', (req, res) => {
     // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
@@ -60,6 +72,10 @@ app.get('/signup', (req, res) => {
 app.get('/signin', (req, res) => {
     res.render('pages/login', { 
     });
+});
+
+app.get('/logout', (req, res) => {
+    res.redirect('/signin');
 });
 
 app.get('/management', (req, res) => {

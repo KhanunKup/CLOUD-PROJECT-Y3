@@ -282,3 +282,7 @@
     </button>
   </div>
 </aside>
+
+<!-- Modal แสดงสถานะ User -->
+<%- include('../../modals/user-status-modal', { user: typeof user !== 'undefined' ? user : null }) %>
+

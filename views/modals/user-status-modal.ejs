@@ -1,0 +1,61 @@
+<!-- views/modals/user-status-modal.ejs -->
+<link rel="stylesheet" href="/css/user-status-modal.css">
+
+<div class="user-status-modal-overlay" id="userStatusModal" style="display: none;">
+    <div class="user-status-modal" role="dialog" aria-modal="true" aria-labelledby="userStatusTitle">
+        <!-- Close Button (Gold/Tan button with white X) -->
+        <button type="button" class="user-status-close-btn" id="userStatusCloseBtn" aria-label="Close modal">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+
+        <!-- Greeting Title -->
+        <h2 class="user-status-title" id="userStatusTitle">
+            Hello, <%= (typeof user !== 'undefined' && user && user.name) ? user.name : 'Rick and Morty' %>!
+        </h2>
+
+        <!-- Grey Info Card -->
+        <div class="user-status-card">
+            <div class="user-status-role-wrap">
+                <span class="user-status-role-label">Role:</span>
+                <% const isUserAdmin = (typeof user !== 'undefined' && user && (user.role === 'admin' || user.role === 'Admin')); %>
+                <span class="user-status-badge <%= isUserAdmin ? 'role-admin' : 'role-user' %>">
+                    <%= isUserAdmin ? 'Admin' : 'User' %>
+                </span>
+            </div>
+
+            <!-- Admin Actions (Shown ONLY if Role is Admin) -->
+            <% if (isUserAdmin) { %>
+            <div class="user-status-admin-actions">
+                <!-- Audit Log Button -->
+                <a href="/audit" class="admin-action-btn" title="Audit Log">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M5 4C5 2.89543 5.89543 2 7 2H17C18.1046 2 19 2.89543 19 4V18C19 19.1046 18.1046 20 17 20H7C5.89543 20 5 19.1046 5 18V4Z" fill="#1e1e1e"/>
+                        <path d="M4 17C4 18.6569 5.34315 20 7 20H8V17H4Z" fill="#333333"/>
+                        <circle cx="5.5" cy="18.5" r="1.5" fill="#555555"/>
+                        <text x="12" y="13.5" fill="#ffffff" font-family="'Outfit', sans-serif" font-size="6.5" font-weight="900" text-anchor="middle" letter-spacing="0.5">LOG</text>
+                    </svg>
+                </a>
+                <!-- User Management Button -->
+                <a href="/management" class="admin-action-btn" title="User Management">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e1e1e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <circle cx="19" cy="11" r="2"/>
+                        <path d="M19 8v1M19 13v1M16.5 9.5l.8.8M20.7 11.7l.8.8M16.5 12.5l.8-.8M20.7 10.3l.8-.8"/>
+                    </svg>
+                </a>
+            </div>
+            <% } %>
+        </div>
+
+        <!-- Footer / Logout -->
+        <div class="user-status-footer">
+            <a href="/signin" class="user-status-logout-btn">Logout</a>
+        </div>
+    </div>
+</div>
+
+<script src="/js/user-status-modal.js"></script>

@@ -88,9 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (shareBtn) {
             e.stopPropagation();
             const shareModal = document.getElementById('shareModal');
-            if(shareModal) {
+            if (shareModal) {
                 shareModal.style.display = 'flex';
-                
+
                 // อ่านข้อมูล Access List จาก attribute data-access ของปุ่มที่ถูกคลิก
                 let fileAccessList = [];
                 try {
@@ -100,16 +100,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (err) {
                     console.error("Failed to parse access list", err);
                 }
-                
+
                 // เรียกใช้ฟังก์ชันที่ประกาศไว้ใน share-modal.js พร้อมส่ง shareBtn อ้างอิง
                 if (window.renderAccessList) {
                     window.renderAccessList(fileAccessList, shareBtn);
                 }
             }
-            
+
             // ปิด Dropdown
             const dropdown = shareBtn.closest('.options-dropdown');
-            if(dropdown) dropdown.classList.remove('show');
+            if (dropdown) dropdown.classList.remove('show');
         }
     });
 
@@ -118,12 +118,12 @@ document.addEventListener('DOMContentLoaded', () => {
     copyLinkBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation(); // กัน event ทะลุไปที่ document
-            
+
             const textSpan = btn.querySelector('.copy-link-text');
             if (textSpan) {
                 const originalText = textSpan.textContent;
                 textSpan.textContent = 'Copied!';
-                
+
                 setTimeout(() => {
                     textSpan.textContent = originalText;
                 }, 1000);
@@ -135,12 +135,26 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation(); // กัน event ทะลุไปที่ document
-            
+
             const originalText = btn.textContent;
             btn.textContent = 'Downloaded!';
-            
+
             setTimeout(() => {
                 btn.textContent = originalText;
+            }, 1000);
+        });
+    });
+
+    const moveToTrashBtns = document.querySelectorAll('.move-to-trash-action');
+    moveToTrashBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // กัน event ทะลุไปที่ document
+
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fas fa-trash-alt"></i> Moved to Trash!`;
+
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
             }, 1000);
         });
     });

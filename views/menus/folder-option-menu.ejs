@@ -5,5 +5,5 @@
     <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
     <button class="option-item open-share-modal" data-access="<%= encodeURIComponent(JSON.stringify(typeof file !== 'undefined' && file.accessList ? file.accessList : [])) %>"><i class="fas fa-share"></i> Share</button>
     <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
-    <button class="option-item"><i class="fas fa-trash-alt"></i> Move to Trash</button>
+    <button class="option-item move-to-trash-action"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
 </div>

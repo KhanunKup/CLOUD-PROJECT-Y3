@@ -479,8 +479,9 @@ body {
 .share-modal-overlay,
 .rename-modal-overlay,
 .new-folder-modal-overlay,
-.upload-modal-overlay {
-    z-index: 9999 !important;
+.upload-modal-overlay,
+.user-status-modal-overlay {
+    z-index: 10000 !important;
 }
 
 .manage-access-modal-overlay {
