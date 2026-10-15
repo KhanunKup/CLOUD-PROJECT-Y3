@@ -21,6 +21,7 @@
   "homepage": "https://github.com/KhanunKup/CLOUD-PROJECT-Y3#readme",
   "dependencies": {
     "ejs": "^7.0.1",
-    "express": "^5.3.0"
+    "express": "^5.3.0",
+    "nodemon": "^3.1.14"
   }
 }

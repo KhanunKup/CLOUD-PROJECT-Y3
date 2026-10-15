@@ -22,9 +22,9 @@ app.get('/', (req, res) => {
 });
 
 app.get('/drive', (req, res) => {
-    res.render('pages/homepage', { 
+    res.render('pages/homepage', {
         files: [
-            { 
+            {
                 name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: [
                     { name: 'Anan', permission: 'can edit', timeRemaining: null },
@@ -35,7 +35,7 @@ app.get('/drive', (req, res) => {
                     { name: 'john', permission: 'can edit', timeRemaining: '6 hours' },
                 ]
             },
-            { 
+            {
                 name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: [
                     { name: 'Passakorn', permission: 'can view', timeRemaining: '2 days' },
@@ -44,7 +44,7 @@ app.get('/drive', (req, res) => {
                     { name: 'Worapa', permission: 'can edit', timeRemaining: null }
                 ]
             },
-            { 
+            {
                 name: 'Image1.png', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: []
             }
@@ -60,15 +60,16 @@ app.get('/management', (req, res) => {
 app.get('/audit', (req, res) => {
     // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
     res.render('pages/audit');
-app.get('/signup', (req, res) => {
-    res.render('pages/login', { 
+    app.get('/signup', (req, res) => {
+        res.render('pages/login', {
+        });
     });
 });
 
 app.get('/shared', (req, res) => {
-    res.render('pages/shared', { 
+    res.render('pages/shared', {
         files: [
-            { 
+            {
                 name: 'Folder 1', type: 'folder', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: [
                     { name: 'Anan', permission: 'can edit', timeRemaining: null },
@@ -79,7 +80,7 @@ app.get('/shared', (req, res) => {
                     { name: 'john', permission: 'can edit', timeRemaining: '6 hours' },
                 ]
             },
-            { 
+            {
                 name: 'File1.txt', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: [
                     { name: 'Anyone', permission: 'can edit', timeRemaining: null },
@@ -90,7 +91,7 @@ app.get('/shared', (req, res) => {
                     { name: 'Worapa', permission: 'can edit', timeRemaining: null }
                 ]
             },
-            { 
+            {
                 name: 'Image1.png', type: 'file', owner: 'me', uploadDate: '08 Aug. 2008',
                 accessList: []
             },
@@ -107,5 +108,5 @@ app.get('/shared', (req, res) => {
 
 // 4. เริ่มต้นเซิร์ฟเวอร์
 app.listen(PORT, () => {
-    console.log(`EASYDRIVE Server is running at http://localhost:${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
