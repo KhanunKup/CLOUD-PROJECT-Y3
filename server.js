@@ -18,7 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 // 3. สร้าง Route สำหรับหน้าเว็บหลัก
 app.get('/', (req, res) => {
     // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
-    res.redirect('/signup');
+    res.redirect('/signin');
 });
 
 app.get('/drive', (req, res) => {
@@ -53,12 +53,6 @@ app.get('/drive', (req, res) => {
 });
 
 app.get('/signup', (req, res) => {
-    res.render('pages/login', { 
-    });
-});
-
-
-app.get('/signup', (req, res) => {
     res.render('pages/signup', { 
     });
 });
@@ -66,6 +60,16 @@ app.get('/signup', (req, res) => {
 app.get('/signin', (req, res) => {
     res.render('pages/login', { 
     });
+});
+
+app.get('/management', (req, res) => {
+    // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
+    res.render('pages/usermanagement');
+});
+
+app.get('/audit', (req, res) => {
+    // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
+    res.render('pages/audit');
 });
 
 app.get('/shared', (req, res) => {
