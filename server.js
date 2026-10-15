@@ -52,14 +52,6 @@ app.get('/drive', (req, res) => {
     });
 });
 
-app.get('/management', (req, res) => {
-    // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
-    res.render('pages/usermanagement');
-});
-
-app.get('/audit', (req, res) => {
-    // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
-    res.render('pages/audit');
 app.get('/signup', (req, res) => {
     res.render('pages/login', { 
     });
