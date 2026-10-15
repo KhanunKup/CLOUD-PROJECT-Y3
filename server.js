@@ -97,19 +97,6 @@ app.get('/shared', (req, res) => {
     });
 });
 
-app.get('/trash', (req, res) => {
-    res.render('pages/trash', {
-        files: [
-            { id: '1', name: 'Folder 1', type: 'folder', owner: 'me', trashedAt: '08 Aug. 2008' },
-            { id: '2', name: 'File1.txt', type: 'file', owner: 'me', trashedAt: '08 Aug. 2008' },
-            { id: '3', name: 'Folder 2', type: 'folder', owner: 'me', trashedAt: '08 Aug. 2008' },
-            { id: '4', name: 'Image1.png', type: 'file', owner: 'me', trashedAt: '08 Aug. 2008' },
-            { id: '5', name: 'Image2.jpg', type: 'file', owner: 'me', trashedAt: '08 Aug. 2008' },
-            { id: '6', name: 'File3.sh', type: 'file', owner: 'me', trashedAt: '08 Aug. 2008' }
-        ]
-    });
-});
-
 // 4. เริ่มต้นเซิร์ฟเวอร์
 app.listen(PORT, () => {
     console.log(`EASYDRIVE Server is running at http://localhost:${PORT}`);
