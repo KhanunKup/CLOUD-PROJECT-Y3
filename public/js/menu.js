@@ -130,4 +130,43 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    const downloadBtns = document.querySelectorAll('.download-text');
+    downloadBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // กัน event ทะลุไปที่ document
+            
+            const originalText = btn.textContent;
+            btn.textContent = 'Downloaded!';
+            
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 1000);
+        });
+    });
+
+    // จัดการการกด Restore และ Delete Forever ในหน้า Trash
+    document.addEventListener('click', (e) => {
+        const restoreBtn = e.target.closest('.restore-trash-action');
+        if (restoreBtn) {
+            e.stopPropagation();
+            const id = restoreBtn.dataset.id;
+            if (id) {
+                window.location.href = `/trash/restore/${id}`;
+            }
+            return;
+        }
+
+        const deleteBtn = e.target.closest('.delete-forever-action');
+        if (deleteBtn) {
+            e.stopPropagation();
+            const id = deleteBtn.dataset.id;
+            if (confirm('Delete permanently?')) {
+                if (id) {
+                    window.location.href = `/trash/delete/${id}`;
+                }
+            }
+            return;
+        }
+    });
 });

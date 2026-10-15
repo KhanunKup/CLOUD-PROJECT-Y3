@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Trash — EasyDrive</title>
+  <!-- FontAwesome สำหรับไอคอน -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <!-- CSS สำหรับ Menu Dropdown -->
+  <link rel="stylesheet" href="/css/menu.css">
+  <!-- CSS โครงสร้างหลัก -->
   <link rel="stylesheet" href="/css/homepage.css">
 </head>
 <body>
@@ -93,16 +98,12 @@
               Restore
             </a>
           </div>
-          <!-- Options (permanent delete) -->
-          <div class="file-options">
-            <button class="file-options-btn" aria-label="Delete permanently"
-                    onclick="return confirm('Delete permanently?');">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/>
-                <circle cx="12" cy="19" r="1"/>
-              </svg>
+          <!-- Options Wrapper & Trash Menu Dropdown -->
+          <div class="options-wrapper">
+            <button class="options-btn toggle-options" aria-label="Options">
+              <i class="fas fa-ellipsis-v"></i>
             </button>
+            <%- include('../menus/trash-option-menu', { file: file }) %>
           </div>
         </div>
         <% }); %>
@@ -112,6 +113,9 @@
     </div>
   </main>
 </div>
+
+<!-- เรียกใช้ JS ของ Menu Dropdown -->
+<script src="/js/menu.js"></script>
 </body>
 </html>
 

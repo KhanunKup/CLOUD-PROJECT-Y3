@@ -125,6 +125,18 @@ app.get('/trash', (req, res) => {
     });
 });
 
+app.get('/trash/restore/:id', (req, res) => {
+    res.redirect('/trash');
+});
+
+app.get('/trash/delete/:id', (req, res) => {
+    res.redirect('/trash');
+});
+
+app.post('/trash/empty', (req, res) => {
+    res.redirect('/trash');
+});
+
 // 4. เริ่มต้นเซิร์ฟเวอร์
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
