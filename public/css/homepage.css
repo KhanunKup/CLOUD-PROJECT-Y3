@@ -1,142 +1,498 @@
-@font-face {
-    font-family: 'Kanit'; /* ตั้งชื่อฟอนต์ตามต้องการ */
-    src: url('/fonts/Kanit-Bold.ttf') format('truetype'); 
-    /* หมายเหตุ: ไม่ต้องใส่ /public นำหน้า เพราะใน server.js เราตั้ง static folder ไว้แล้ว */
+/* public/css/homepage.css */
+
+/* ── Reset & Base ────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
 @font-face {
-    font-family: 'Outfit'; /* ตั้งชื่อฟอนต์ตามต้องการ */
-    src: url('/fonts/Outfit-VariableFont_wght.ttf') format('truetype'); 
-    /* หมายเหตุ: ไม่ต้องใส่ /public นำหน้า เพราะใน server.js เราตั้ง static folder ไว้แล้ว */
+    font-family: 'Kanit';
+    src: url('/fonts/Kanit-Bold.ttf') format('truetype');
 }
+
+@font-face {
+    font-family: 'Outfit';
+    src: url('/fonts/Outfit-VariableFont_wght.ttf') format('truetype');
+}
+
 body {
-    margin:0%;
     font-family: 'Outfit', 'Kanit', sans-serif;
+    background-color: #CEB59E; /* Figma frame fill */
+    min-height: 100vh;
+    display: flex;
+    margin: 0;
 }
+
+.page-layout {
+    display: flex;
+    width: 100%;
+    min-height: 100vh;
+}
+
+.sidebar-spacer {
+    width: 160px;
+    flex-shrink: 0;
+}
+
+/* Base main-content (สำหรับหน้าเดี่ยวที่ไม่มี .page-layout เช่น homepage) */
 .main-content {
-    background-color: #d6bead; /* สีพื้นหลังหลัก */
-    padding: 40px;
+    background-color: #CEB59E;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 32px;
     min-height: 100vh;
     box-sizing: border-box;
     width: calc(100% - 160px);
     margin-left: 160px;
 }
 
-/* ส่วน Search Bar */
-.search-container {
-    background-color: #e8dbce;
-    border-radius: 25px;
-    padding: 10px 20px;
-    display: flex;
-    align-items: center;
-    width: 60%;
-    margin-bottom: 40px;
-}
-.search-container i {
-    color: #4a4a4a;
-    margin-right: 15px;
-    font-size: 1.2rem;
-}
-.search-container input {
-    border: none;
-    background: transparent;
-    outline: none;
-    font-size: 1rem;
+/* สำหรับหน้าที่อยู่ใน .page-layout (เช่น trash / shared ที่มี .sidebar-spacer แล้ว) */
+.page-layout .main-content {
+    margin-left: 0;
     width: 100%;
-    color: #4a4a4a;
-    font-weight: bold;
 }
 
-/* ส่วน Header (Title + Button) */
+/* ── Topbar (Search Bar + Actions) ───────────────────────── */
+.topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+    width: 100%;
+}
+
+/* สำหรับ search-wrapper ใน .topbar (row direction) */
+.search-wrapper {
+    position: relative;
+    flex: 1;
+    max-width: 600px;
+    background-color: #D9D9D9; /* Figma: Rectangle 51 */
+    height: 48px;
+    border-radius: 28px;
+    display: flex;
+    align-items: center;
+    transition: box-shadow 0.2s;
+    box-sizing: border-box;
+}
+
+/* สำหรับ search-container เดี่ยวๆ ใน homepage (column direction ไม่ให้ยืดตามแกน Y) */
+.search-container {
+    position: relative;
+    flex: none; /* ห้ามยืดแนวตั้ง */
+    width: 100%;
+    max-width: 600px;
+    background-color: #D9D9D9;
+    height: 48px;
+    border-radius: 28px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+    margin-bottom: 28px;
+    box-sizing: border-box;
+    transition: box-shadow 0.2s;
+}
+
+.search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #7a6251;
+    pointer-events: none;
+}
+
+.search-container i {
+    color: #7a6251;
+    font-size: 1rem;
+    pointer-events: none;
+    flex-shrink: 0;
+}
+
+.search-input {
+    width: 100%;
+    height: 48px;
+    border-radius: 28px;
+    border: none;
+    background-color: transparent;
+    padding: 0 20px 0 44px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 16px;
+    color: #44362A;
+    outline: none;
+}
+
+.search-container input {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: transparent;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 16px;
+    color: #44362A;
+    outline: none;
+}
+
+.search-input::placeholder,
+.search-container input::placeholder {
+    color: #888;
+}
+
+.search-wrapper:focus-within,
+.search-container:focus-within,
+.search-input:focus {
+    box-shadow: 0 0 0 2px #C4A071;
+}
+
+/* ── Page Header / Title — Figma: fill=#423E3B fs=70 ─────── */
 .page-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    min-height: 54px;
     margin-bottom: 20px;
 }
-.page-header h1 {
-    color: #4a4a4a;
-    font-size: 2.5rem;
-    font-weight: 900;
+
+.title-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.page-header h1,
+.page-title {
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 36px;
+    font-weight: 700;
+    color: #423E3B;
     margin: 0;
     line-height: 1.2;
 }
+
+.new-action-wrapper {
+    position: relative;
+    margin-left: auto;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+/* New Button — Figma: Rectangle 46 fill=#525A40 */
 .btn-new {
-    background-color: #556b4d;
-    color: white;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    background-color: #525A40;
+    color: #F6FAF2;
     border: none;
-    padding: 10px 25px;
-    border-radius: 8px;
-    font-size: 1.1rem;
-    font-weight: bold;
+    border-radius: 10px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    transition: background 0.2s, transform 0.1s;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
+
 .btn-new:hover {
-    background-color: #485a41;
+    background-color: #3f4730;
+    transform: translateY(-1px);
 }
 
-/* ส่วนตารางแสดงไฟล์ */
-.file-container {
-    background-color: #634f41; /* สีพื้นหลังกรอบตาราง */
-    border-radius: 15px;
-    padding: 25px 30px;
-    color: white;
-}
-.file-header {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr auto;
-    font-weight: bold;
-    font-size: 1.1rem;
-    margin-bottom: 15px;
-    padding: 0 15px;
-}
-.file-header-divider {
-    border: 0;
-    height: 1px;
-    background-color: rgba(255,255,255,0.3);
-    margin-bottom: 20px;
+.btn-new:active {
+    transform: translateY(0);
 }
 
-/* ส่วนแถวของแต่ละไฟล์ */
-.file-row {
-    background-color: #c89f78; /* สีพื้นหลังแต่ละแถว */
-    border-radius: 8px;
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr auto;
-    align-items: center;
-    padding: 15px;
-    margin-bottom: 12px;
-    font-weight: bold;
+.btn-new .plus {
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1;
 }
-.file-row:last-child {
-    margin-bottom: 0;
-}
-.col-name {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.col-owner {
+
+/* Trash specific button */
+.btn-empty-trash {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-weight: normal;
-}
-.col-date {
-    font-weight: normal;
-}
-.col-action {
-    text-align: right;
+    padding: 10px 22px;
+    background-color: #8B3030;
+    color: #F6FAF2;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
     cursor: pointer;
+    transition: background 0.2s;
+    margin-left: auto;
 }
 
-.options-btn {
+.btn-empty-trash:hover {
+    background-color: #6e2424;
+}
+
+/* Restore button (สำหรับ Trash) */
+.btn-restore {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 10px;
+    background-color: rgba(232, 226, 214, 0.2);
+    color: #F6FAF2;
+    border: 1.5px solid #E8E2D6;
+    border-radius: 6px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.btn-restore:hover {
+    background-color: rgba(232, 226, 214, 0.35);
+}
+
+/* ── File Table — Figma: Rect52 #4E3E2E ──────────────────── */
+.file-container,
+.file-table-container {
+    background-color: #4E3E2E;
+    border-radius: 12px;
+    overflow: visible;
+    padding: 0;
+    color: white;
+    min-height: 380px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+}
+
+/* 4 columns สำหรับ Homepage / Shared (Name | Owner | Date Uploaded | Options) */
+.file-header,
+.file-table-header,
+.file-row {
+    display: grid;
+    grid-template-columns: 1fr 160px 200px 56px;
+    align-items: center;
+}
+
+/* 5 columns สำหรับ Trash (Name | Owner | Date Trashed | Restore | Delete) */
+.trash-table .file-table-header,
+.trash-table .file-row,
+.file-row:has(.btn-restore) {
+    grid-template-columns: 1fr 160px 200px 80px 56px !important;
+}
+
+.file-header,
+.file-table-header {
+    padding: 14px 24px;
+    border-bottom: 1px solid rgba(245, 242, 235, 0.2);
+    border-radius: 12px 12px 0 0;
+}
+
+.file-header span,
+.file-table-header span {
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: #F5F2EB;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.file-header-divider {
+    display: none;
+}
+
+/* ── File Rows — Figma: Rect47 fill=#C4A071 ──────────────── */
+.file-row {
+    padding: 0 24px;
+    height: 56px;
+    min-height: 56px;
+    background-color: #C4A071;
+    border-bottom: 2px solid #4E3E2E;
+    transition: opacity 0.15s, background-color 0.15s;
+    font-weight: 500;
+    font-size: 14px;
+    color: #F6FAF2;
+}
+
+.file-row:last-child {
+    border-bottom: none;
+}
+
+.file-row:hover {
+    opacity: 0.88;
+}
+
+/* คอลัมน์ Name */
+.col-name,
+.file-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #F6FAF2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.col-name i,
+.file-name svg {
+    color: #F6FAF2;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+
+/* คอลัมน์ Owner */
+.col-owner,
+.file-owner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 14px;
+    color: #F6FAF2;
+}
+
+.col-owner i.fa-user-circle,
+.owner-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background-color: #7d5534;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #F6FAF2;
+    flex-shrink: 0;
+}
+
+.owner-avatar svg {
+    color: #F6FAF2;
+}
+
+/* คอลัมน์ Date */
+.col-date,
+.file-date {
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 13px;
+    color: #F6FAF2;
+    font-weight: normal;
+}
+
+/* คอลัมน์ Options */
+.options-wrapper,
+.file-options {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    position: relative;
+}
+
+.options-btn,
+.file-options-btn {
     background: none;
     border: none;
-    font-size: 1.2rem;
     cursor: pointer;
-    color: white; 
-    padding: 0 10px;
+    padding: 6px;
+    color: #F6FAF2;
+    border-radius: 6px;
+    transition: background 0.15s;
+    font-size: 1.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.options-btn:hover,
+.file-options-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* เมื่อแถวมี Dropdown เปิดอยู่ ให้ยก z-index สูงสุดเสมอ ไม่ให้แถวถัดไปหรือ hover มาบัง */
+.file-row:has(.options-dropdown.show),
+.file-row.has-open-menu {
+    z-index: 500 !important;
+    position: relative !important;
+}
+
+.options-wrapper:has(.options-dropdown.show),
+.options-wrapper.has-open-menu {
+    z-index: 501 !important;
+    position: relative !important;
+}
+
+.new-action-wrapper:has(.new-options-dropdown.show),
+.new-action-wrapper.has-open-menu {
+    z-index: 501 !important;
+    position: relative !important;
+}
+
+/* ป้องกัน Dropdown เมนูไม่ให้แสดงค้าง และยก z-index ตอนเปิด */
+.options-dropdown {
+    display: none !important;
+    position: absolute !important;
+    right: 0;
+    top: 100%;
+    z-index: 502 !important;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+}
+
+.options-dropdown.show {
+    display: flex !important;
+    z-index: 502 !important;
+}
+
+.options-dropdown.dropup {
+    top: auto !important;
+    bottom: calc(100% + 4px) !important;
+}
+
+.new-options-dropdown {
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+}
+
+.new-options-dropdown.show {
+    display: flex !important;
+    z-index: 502 !important;
+}
+
+.new-options-dropdown.dropup {
+    top: auto !important;
+    bottom: calc(100% + 6px) !important;
+}
+
+/* ให้หน้าต่าง Modal ทุกตัวอยู่บนสุดของหน้าจอเสมอ เหนือทุก Element */
+.share-modal-overlay,
+.rename-modal-overlay,
+.new-folder-modal-overlay,
+.upload-modal-overlay {
+    z-index: 9999 !important;
+}
+
+.manage-access-modal-overlay {
+    z-index: 10000 !important;
+}
+
+/* Empty State */
+.file-container > p,
+.empty-state {
+    padding: 60px 24px;
+    text-align: center;
+    color: #E8E2D6;
+    font-size: 14px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
 }

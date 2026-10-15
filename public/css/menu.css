@@ -16,10 +16,17 @@
     z-index: 100;
     width: 170px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
 }
 
 .options-dropdown.show {
     display: flex;
+}
+
+.options-dropdown.dropup {
+    top: auto;
+    bottom: calc(100% + 4px);
 }
 
 .option-item {
@@ -69,10 +76,17 @@
     width: 180px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     box-sizing: border-box;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
 }
 
 .new-options-dropdown.show {
     display: flex;
+}
+
+.new-options-dropdown.dropup {
+    top: auto;
+    bottom: calc(100% + 6px);
 }
 
 .new-options-dropdown .option-item {

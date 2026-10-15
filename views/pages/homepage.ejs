@@ -1,85 +1,109 @@
 <!-- views/pages/homepage.ejs -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MY DRIVE - EASYDRIVE</title>
-    
+
     <!-- FontAwesome สำหรับไอคอน -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
+
     <!-- CSS สำหรับ Menu Dropdown -->
     <link rel="stylesheet" href="/css/menu.css">
     <!-- CSS โครงสร้างหลัก -->
     <link rel="stylesheet" href="/css/homepage.css">
 </head>
+
 <body>
+<div class="page-layout">
 
-    <!-- ดึง Sidebar ของเพื่อนมาใช้เลย -->
-    <%- include('../partials/nav/sidebar.ejs') %>
+    <!-- Sidebar partial — currentPage='home' -->
+    <%- include('../partials/nav/sidebar', { currentPage: 'home', user: typeof user !== 'undefined' ? user : null }) %>
+    <div class="sidebar-spacer"></div>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        
-        <!-- Search Bar -->
-        <div class="search-container">
-            <i class="fas fa-search"></i>
-            <input type="text" placeholder="Search in Drive">
-        </div>
-
-        <!-- Header -->
-        <div class="page-header">
-            <h1>MY DRIVE ขนุนลูกโตๆ</h1>
+    <main class="main-content">
+        <!-- Topbar: Search Bar + New Action (Figma Style) -->
+        <div class="topbar">
+            <div class="search-wrapper">
+                <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input class="search-input" type="text" placeholder="Search in Drive" />
+            </div>
             <div class="new-action-wrapper">
                 <button class="btn-new" id="btnNew">+ New</button>
                 <%- include('../menus/new-option-menu') %>
             </div>
         </div>
 
-        <!-- File List -->
-        <div class="file-container">
-            <!-- หัวตาราง -->
-            <div class="file-header">
+        <!-- Title Row — Figma: fill=#423E3B fs=70 -->
+        <div class="title-row">
+            <h1 class="page-title">MY DRIVE ขนุนลูกโตๆ</h1>
+        </div>
+
+        <!-- File Table -->
+        <div class="file-table-container">
+            <div class="file-table-header">
                 <span>Name</span>
                 <span>Owner</span>
                 <span>Date Uploaded</span>
                 <span></span>
             </div>
-            <hr class="file-header-divider">
 
             <!-- รายการไฟล์จาก Backend -->
-            <% if (typeof files !== 'undefined' && files.length > 0) { %>
-                <% files.forEach(file => { %>
-                    <div class="file-row">
-                        <span class="col-name">
-                            <i class="<%= file.type === 'folder' ? 'fas fa-folder' : (file.name.endsWith('.png') || file.name.endsWith('.jpg') ? 'fas fa-image' : 'fas fa-file-alt') %>"></i> 
-                            <%= file.name %>
-                        </span>
-                        <span class="col-owner"><i class="far fa-user-circle"></i> <%= file.owner || 'me' %></span>
-                        <span class="col-date"><%= file.uploadDate %></span>
-                        
-                        <div class="options-wrapper">
-                            <button class="options-btn toggle-options"><i class="fas fa-ellipsis-h"></i></button>
-                            <%- include(file.type === 'folder' ? '../menus/folder-option-menu' : '../menus/file-option-menu', { file: file }) %>
-                        </div>
+            <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
+                <% files.forEach(function(file) { %>
+                <div class="file-row">
+                    <div class="file-name">
+                        <% if (file.type === 'folder') { %>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                        <% } else { %>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                        <% } %>
+                        <%= file.name %>
                     </div>
-                <% }) %>
+                    <div class="file-owner">
+                        <div class="owner-avatar">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <%= file.owner || 'me' %>
+                    </div>
+                    <div class="file-date"><%= file.uploadDate || file.uploadedAt || '—' %></div>
+                    <div class="options-wrapper">
+                        <button class="options-btn toggle-options" aria-label="Options"><i class="fas fa-ellipsis-v"></i></button>
+                        <%- include(file.type === 'folder' ? '../menus/folder-option-menu' : '../menus/file-option-menu', { file: file }) %>
+                    </div>
+                </div>
+                <% }); %>
             <% } else { %>
-                <p style="text-align: center; margin-top: 20px;">No files found.</p>
+                <div class="empty-state">No files found.</div>
             <% } %>
-            
         </div>
-    </div>
+    </main>
+</div>
 
-    <!-- ดึง Modal ต่างๆ มาใช้ตรงนี้ -->
-    <%- include('../modals/share-modal') %>
-    <%- include('../modals/manage-access-modal') %>
-    <%- include('../modals/rename-modal') %>
-    <%- include('../modals/new-folder-modal') %>
-    <%- include('../modals/upload-modal') %>
-    
-    <!-- เรียกใช้ JS ของ Menu Dropdown -->
-    <script src="/js/menu.js"></script>
+<!-- ดึง Modal ต่างๆ มาใช้ตรงนี้ -->
+<%- include('../modals/share-modal') %>
+<%- include('../modals/manage-access-modal') %>
+<%- include('../modals/rename-modal') %>
+<%- include('../modals/new-folder-modal') %>
+<%- include('../modals/upload-modal') %>
+
+<!-- เรียกใช้ JS ของ Menu Dropdown -->
+<script src="/js/menu.js"></script>
 </body>
 </html>
