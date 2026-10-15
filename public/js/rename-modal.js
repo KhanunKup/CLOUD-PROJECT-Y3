@@ -24,12 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let currentName = renameBtn.dataset.filename;
             if (!currentName && currentTargetRow) {
-                const nameSpan = currentTargetRow.querySelector('.col-name');
-                if (nameSpan) {
-                    // ดึงเฉพาะ text ไม่เอา icon
-                    const clone = nameSpan.cloneNode(true);
-                    const icon = clone.querySelector('i');
-                    if (icon) icon.remove();
+                const nameEl = currentTargetRow.querySelector('.file-name, .col-name');
+                if (nameEl) {
+                    const clone = nameEl.cloneNode(true);
+                    clone.querySelectorAll('svg, i').forEach(icon => icon.remove());
                     currentName = clone.textContent.trim();
                 }
             }
@@ -65,18 +63,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitRename = () => {
         const newName = renameInput ? renameInput.value.trim() : '';
         if (newName && currentTargetRow) {
-            const nameSpan = currentTargetRow.querySelector('.col-name');
-            if (nameSpan) {
-                const icon = nameSpan.querySelector('i');
-                nameSpan.innerHTML = '';
+            const nameEl = currentTargetRow.querySelector('.file-name, .col-name');
+            if (nameEl) {
+                const icon = nameEl.querySelector('svg, i');
+                nameEl.innerHTML = '';
                 if (icon) {
-                    nameSpan.appendChild(icon);
-                    nameSpan.append(' ');
+                    nameEl.appendChild(icon);
+                    nameEl.append(' ');
                 }
-                nameSpan.append(newName);
+                nameEl.append(newName);
             }
             if (currentRenameBtn) {
                 currentRenameBtn.dataset.filename = newName;
+            }
+            // อัปเดต data-filename ให้กับปุ่ม move to trash ด้วย
+            const trashBtn = currentTargetRow.querySelector('.move-to-trash-action, .open-delete-modal');
+            if (trashBtn) {
+                trashBtn.dataset.filename = newName;
             }
         }
         closeRenameModal();

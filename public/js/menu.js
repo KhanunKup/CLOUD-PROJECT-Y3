@@ -50,6 +50,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // หากคลิกปุ่ม copy link หรือ download ใน dropdown อย่าเพิ่งปิด dropdown ทันที เพื่อให้ผู้ใช้เห็นข้อความ Copied! / Downloaded!
+        if (e.target.closest('.copy-link-action, .download-action, .download-text')) {
+            return;
+        }
+
         // คลิกที่อื่นในหน้าเว็บ ให้ปิด Dropdown ทั้งหมด
         closeAllDropdowns();
     });
@@ -113,35 +118,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // กดปุ่ม Copy link ใน Dropdown
-    const copyLinkBtns = document.querySelectorAll('.copy-link-action');
-    copyLinkBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation(); // กัน event ทะลุไปที่ document
-
-            const textSpan = btn.querySelector('.copy-link-text');
+    // กดปุ่ม Copy link หรือ Download ใน Dropdown (ใช้ Event Delegation เพื่อรองรับทั้งไฟล์เดิมและไฟล์ที่เพิ่มเข้ามาใหม่)
+    document.addEventListener('click', (e) => {
+        // Copy link
+        const copyBtn = e.target.closest('.copy-link-action');
+        if (copyBtn) {
+            e.stopPropagation();
+            const textSpan = copyBtn.querySelector('.copy-link-text') || copyBtn;
             if (textSpan) {
                 const originalText = textSpan.textContent;
                 textSpan.textContent = 'Copied!';
-
                 setTimeout(() => {
                     textSpan.textContent = originalText;
                 }, 1000);
             }
-        });
-    });
+            return;
+        }
 
-    const downloadBtns = document.querySelectorAll('.download-text');
-    downloadBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation(); // กัน event ทะลุไปที่ document
-
-            const originalText = btn.textContent;
-            btn.textContent = 'Downloaded!';
-
-            setTimeout(() => {
-                btn.textContent = originalText;
-            }, 1000);
-        });
+        // Download
+        const downloadBtn = e.target.closest('.download-action, .download-text');
+        if (downloadBtn) {
+            e.stopPropagation();
+            const textSpan = downloadBtn.classList.contains('download-text') 
+                ? downloadBtn 
+                : (downloadBtn.querySelector('.download-text') || downloadBtn);
+            if (textSpan) {
+                const originalText = textSpan.textContent;
+                textSpan.textContent = 'Downloaded!';
+                setTimeout(() => {
+                    textSpan.textContent = originalText;
+                }, 1000);
+            }
+            return;
+        }
     });
 });

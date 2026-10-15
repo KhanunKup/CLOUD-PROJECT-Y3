@@ -367,83 +367,76 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const fileContainer = document.querySelector('.file-container');
+            const fileContainer = document.querySelector('.file-table-container, .file-container');
             if (fileContainer) {
-                const emptyNotice = fileContainer.querySelector('p');
-                if (emptyNotice && emptyNotice.textContent.toLowerCase().includes('no')) {
+                // ลบข้อความ empty state ถ้ามี
+                const emptyNotice = fileContainer.querySelector('.empty-state, p');
+                if (emptyNotice) {
                     emptyNotice.remove();
                 }
 
-                const divider = fileContainer.querySelector('.file-header-divider');
+                const tableHeader = fileContainer.querySelector('.file-table-header, .file-header-divider');
 
                 selectedFiles.forEach(item => {
                     const isFolder = item.type === 'folder';
                     const newRow = document.createElement('div');
                     newRow.className = 'file-row';
 
-                    if (isFolder) {
-                        // โครงสร้าง Folder (icon โฟลเดอร์ + folder-options ไม่มี Preview)
-                        newRow.innerHTML = `
-                            <span class="col-name">
-                                <i class="fas fa-folder"></i> 
-                                ${item.name}
-                            </span>
-                            <span class="col-owner"><i class="far fa-user-circle"></i> me</span>
-                            <span class="col-date">Just now</span>
-                            <div class="options-wrapper">
-                                <button class="options-btn toggle-options"><i class="fas fa-ellipsis-h"></i></button>
-                                <div class="options-dropdown folder-options">
-                                    <button class="option-item"><i class="fas fa-download"></i> Download</button>
-                                    <button class="option-item open-rename-modal" data-filename="${item.name}"><i class="fas fa-pencil-alt"></i> Rename</button>
-                                    <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
-                                    <button class="option-item open-share-modal" data-access="[]"><i class="fas fa-share"></i> Share</button>
-                                    <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
-                                    <button class="option-item"><i class="fas fa-trash-alt"></i> Move to Trash</button>
-                                </div>
+                    const safeName = item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                    const iconSvg = isFolder
+                        ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                           </svg>`
+                        : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                               <polyline points="14 2 14 8 20 8"/>
+                           </svg>`;
+
+                    const menuContent = isFolder
+                        ? `<div class="options-dropdown folder-options">
+                               <button class="option-item download-action"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
+                               <button class="option-item open-rename-modal" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
+                               <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
+                               <button class="option-item open-share-modal" data-access="[]"><i class="fas fa-share"></i> Share</button>
+                               <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
+                               <button class="option-item open-delete-modal move-to-trash-action" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
+                           </div>`
+                        : `<div class="options-dropdown file-options">
+                               <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
+                               <button class="option-item download-action"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
+                               <button class="option-item open-rename-modal" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
+                               <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
+                               <button class="option-item open-share-modal" data-access="[]"><i class="fas fa-share"></i> Share</button>
+                               <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
+                               <button class="option-item open-delete-modal move-to-trash-action" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
+                           </div>`;
+
+                    newRow.innerHTML = `
+                        <div class="file-name">
+                            ${iconSvg}
+                            ${safeName}
+                        </div>
+                        <div class="file-owner">
+                            <div class="owner-avatar">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                    <circle cx="12" cy="7" r="4"/>
+                                </svg>
                             </div>
-                        `;
-                    } else {
-                        // โครงสร้าง File (icon ตามนามสกุล + file-options มี Preview)
-                        const ext = item.name.split('.').pop().toLowerCase();
-                        const iconClass = (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) ? 'fas fa-image' : 'fas fa-file-alt';
+                            me
+                        </div>
+                        <div class="file-date">Just now</div>
+                        <div class="options-wrapper">
+                            <button class="options-btn toggle-options" aria-label="Options">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            ${menuContent}
+                        </div>
+                    `;
 
-                        newRow.innerHTML = `
-                            <span class="col-name">
-                                <i class="${iconClass}"></i> 
-                                ${item.name}
-                            </span>
-                            <span class="col-owner"><i class="far fa-user-circle"></i> me</span>
-                            <span class="col-date">Just now</span>
-                            <div class="options-wrapper">
-                                <button class="options-btn toggle-options"><i class="fas fa-ellipsis-h"></i></button>
-                                <div class="options-dropdown file-options">
-                                    <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
-                                    <button class="option-item"><i class="fas fa-download"></i> Download</button>
-                                    <button class="option-item open-rename-modal" data-filename="${item.name}"><i class="fas fa-pencil-alt"></i> Rename</button>
-                                    <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
-                                    <button class="option-item open-share-modal" data-access="[]"><i class="fas fa-share"></i> Share</button>
-                                    <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
-                                    <button class="option-item"><i class="fas fa-trash-alt"></i> Move to Trash</button>
-                                </div>
-                            </div>
-                        `;
-                    }
-
-                    // ผูก event ให้กับปุ่ม Toggle Options ของแถวใหม่
-                    const toggleBtn = newRow.querySelector('.toggle-options');
-                    if (toggleBtn) {
-                        toggleBtn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const dropdown = toggleBtn.nextElementSibling;
-                            document.querySelectorAll('.options-dropdown, .new-options-dropdown').forEach(d => {
-                                if (d !== dropdown) d.classList.remove('show');
-                            });
-                            if (dropdown) dropdown.classList.toggle('show');
-                        });
-                    }
-
-                    if (divider && divider.nextSibling) {
-                        fileContainer.insertBefore(newRow, divider.nextSibling);
+                    if (tableHeader && tableHeader.nextSibling) {
+                        fileContainer.insertBefore(newRow, tableHeader.nextSibling);
                     } else {
                         fileContainer.appendChild(newRow);
                     }
