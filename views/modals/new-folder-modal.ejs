@@ -1,0 +1,17 @@
+<!-- views/modals/new-folder-modal.ejs -->
+<link rel="stylesheet" href="/css/new-folder-modal.css">
+
+<div class="new-folder-modal-overlay" id="newFolderModal" style="display: none;">
+    <div class="new-folder-modal">
+        <h2 class="new-folder-modal-title">New Folder</h2>
+        <div class="new-folder-input-wrapper">
+            <input type="text" class="new-folder-input" id="newFolderNameInput" placeholder="Folder #1" value="Folder #1" autocomplete="off">
+        </div>
+        <div class="new-folder-modal-footer">
+            <button type="button" class="new-folder-btn-cancel" id="newFolderCancelBtn">Cancel</button>
+            <button type="button" class="new-folder-btn-create" id="newFolderCreateBtn">+ Create</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/new-folder-modal.js"></script>

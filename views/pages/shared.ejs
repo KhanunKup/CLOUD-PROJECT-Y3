@@ -9,12 +9,10 @@
     <!-- FontAwesome สำหรับไอคอน (อิงตามที่เพื่อนทำใน homepage) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     
-    <!-- CSS สำหรับ Modal ที่เราแยกไว้ -->
-    <link rel="stylesheet" href="/css/share-modal.css">
     <!-- CSS สำหรับ Menu Dropdown -->
     <link rel="stylesheet" href="/css/menu.css">
     
-<link rel="stylesheet" href="/css/homepage.css">
+    <link rel="stylesheet" href="/css/homepage.css">
 </head>
 <body>
 
@@ -33,7 +31,10 @@
         <!-- Header -->
         <div class="page-header">
             <h1>SHARED WITH ME</h1>
-            <button class="btn-new">+ New</button>
+            <div class="new-action-wrapper">
+                <button class="btn-new" id="btnNew">+ New</button>
+                <%- include('../menus/new-option-menu') %>
+            </div>
         </div>
 
         <!-- File List -->
@@ -60,7 +61,7 @@
                         
                         <div class="options-wrapper">
                             <button class="options-btn toggle-options"><i class="fas fa-ellipsis-h"></i></button>
-                            <%- include(file.type === 'folder' ? '../menus/folder-option-menu' : '../menus/file-option-menu') %>
+                            <%- include(file.type === 'folder' ? '../menus/folder-option-menu' : '../menus/file-option-menu', { file: file }) %>
                         </div>
                     </div>
                 <% }) %>
@@ -71,11 +72,12 @@
         </div>
     </div>
 
-    <!-- ดึง Share Modal มาใช้ตรงนี้ -->
+    <!-- ดึง Modal ต่างๆ มาใช้ตรงนี้ -->
     <%- include('../modals/share-modal') %>
-
-    <!-- เรียกใช้ JS ของ Modal -->
-    <script src="/js/share-modal.js"></script>
+    <%- include('../modals/manage-access-modal') %>
+    <%- include('../modals/rename-modal') %>
+    <%- include('../modals/new-folder-modal') %>
+    <%- include('../modals/upload-modal') %>
     
     <!-- เรียกใช้ JS ของ Menu Dropdown -->
     <script src="/js/menu.js"></script>
