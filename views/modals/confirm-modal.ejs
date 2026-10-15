@@ -1,0 +1,18 @@
+<!-- views/modals/confirm-modal.ejs -->
+<link rel="stylesheet" href="/css/confirm-modal.css">
+
+<div class="confirm-modal-overlay" id="confirmModal" style="display: none;">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+        <h2 class="confirm-modal-title" id="confirmModalTitle">Confirm Action</h2>
+        <div class="confirm-modal-body">
+            <div class="confirm-modal-message" id="confirmModalMessage">Are you sure to proceed?</div>
+            <div class="confirm-modal-warning" id="confirmModalWarning" style="display: none;"></div>
+        </div>
+        <div class="confirm-modal-footer">
+            <button type="button" class="confirm-btn-cancel" id="confirmModalCancelBtn">Cancel</button>
+            <button type="button" class="confirm-btn-action btn-danger" id="confirmModalConfirmBtn">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/confirm-modal.js"></script>

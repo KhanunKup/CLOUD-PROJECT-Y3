@@ -1,5 +1,5 @@
-/* public/css/delete-modal.css */
-.delete-modal-overlay {
+/* public/css/confirm-modal.css */
+.confirm-modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -14,7 +14,7 @@
     backdrop-filter: blur(2px);
 }
 
-.delete-modal {
+.confirm-modal {
     background-color: #8c967d; /* Olive green matching Figma modals */
     width: 480px;
     max-width: 90%;
@@ -24,10 +24,10 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    animation: deleteModalFadeIn 0.2s ease-out;
+    animation: confirmModalFadeIn 0.2s ease-out;
 }
 
-@keyframes deleteModalFadeIn {
+@keyframes confirmModalFadeIn {
     from {
         opacity: 0;
         transform: scale(0.95);
@@ -38,7 +38,7 @@
     }
 }
 
-.delete-modal-title {
+.confirm-modal-title {
     font-family: 'Outfit', 'Kanit', sans-serif;
     font-size: 28px;
     font-weight: 700;
@@ -46,7 +46,7 @@
     margin: 0 0 16px 0;
 }
 
-.delete-modal-body {
+.confirm-modal-body {
     background-color: #d2d4cf;
     border-radius: 8px;
     padding: 16px 18px;
@@ -57,13 +57,24 @@
     line-height: 1.5;
 }
 
-.delete-filename-highlight {
+.confirm-modal-message {
+    word-break: break-word;
+}
+
+.confirm-highlight {
     font-weight: 700;
     color: #2e3425;
     word-break: break-all;
 }
 
-.delete-modal-footer {
+.confirm-modal-warning {
+    margin-top: 6px;
+    font-size: 13px;
+    color: #8B3030;
+    font-weight: 600;
+}
+
+.confirm-modal-footer {
     display: flex;
     justify-content: flex-end;
     align-items: center;
@@ -71,8 +82,8 @@
     margin-top: 24px;
 }
 
-.delete-btn-cancel,
-.delete-btn-confirm {
+.confirm-btn-cancel,
+.confirm-btn-action {
     border: none;
     border-radius: 20px;
     padding: 8px 24px;
@@ -84,23 +95,34 @@
     transition: background-color 0.2s, transform 0.1s;
 }
 
-.delete-btn-cancel {
+.confirm-btn-cancel {
     background-color: #6e7960;
 }
 
-.delete-btn-cancel:hover {
+.confirm-btn-cancel:hover {
     background-color: #616c54;
 }
 
-.delete-btn-confirm {
-    background-color: #8B3030; /* Figma Red delete action */
+/* Action Button Variants */
+.confirm-btn-action.btn-danger {
+    background-color: #8B3030; /* Figma Red */
 }
 
-.delete-btn-confirm:hover {
+.confirm-btn-action.btn-danger:hover {
     background-color: #722424;
 }
 
-.delete-btn-cancel:active,
-.delete-btn-confirm:active {
+.confirm-btn-action.btn-success,
+.confirm-btn-action.btn-primary {
+    background-color: #525A40; /* Olive green */
+}
+
+.confirm-btn-action.btn-success:hover,
+.confirm-btn-action.btn-primary:hover {
+    background-color: #414833;
+}
+
+.confirm-btn-cancel:active,
+.confirm-btn-action:active {
     transform: scale(0.98);
 }

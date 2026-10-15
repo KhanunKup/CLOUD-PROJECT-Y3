@@ -483,7 +483,8 @@ body {
 .user-status-modal-overlay,
 .delete-modal-overlay,
 .restore-modal-overlay,
-.delete-forever-modal-overlay {
+.delete-forever-modal-overlay,
+.confirm-modal-overlay {
     z-index: 10000 !important;
 }
 
