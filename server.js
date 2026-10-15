@@ -27,6 +27,16 @@ app.get('/', (req, res) => {
     });
 });
 
+app.get('/management', (req, res) => {
+    // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
+    res.render('pages/usermanagement');
+});
+
+app.get('/audit', (req, res) => {
+    // ส่งข้อมูลไฟล์จำลองไปแสดงผลที่ views/pages/homepage.ejs
+    res.render('pages/audit');
+});
+
 // 4. เริ่มต้นเซิร์ฟเวอร์
 app.listen(PORT, () => {
     console.log(`EASYDRIVE Server is running at http://localhost:${PORT}`);
