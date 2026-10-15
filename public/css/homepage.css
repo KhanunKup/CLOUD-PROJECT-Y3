@@ -480,7 +480,8 @@ body {
 .rename-modal-overlay,
 .new-folder-modal-overlay,
 .upload-modal-overlay,
-.user-status-modal-overlay {
+.user-status-modal-overlay,
+.delete-modal-overlay {
     z-index: 10000 !important;
 }
 

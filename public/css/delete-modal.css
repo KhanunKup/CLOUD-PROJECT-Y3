@@ -1,0 +1,106 @@
+/* public/css/delete-modal.css */
+.delete-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000 !important;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    backdrop-filter: blur(2px);
+}
+
+.delete-modal {
+    background-color: #8c967d; /* Olive green matching Figma modals */
+    width: 480px;
+    max-width: 90%;
+    border-radius: 16px;
+    padding: 28px 30px 24px 30px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    animation: deleteModalFadeIn 0.2s ease-out;
+}
+
+@keyframes deleteModalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.delete-modal-title {
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0 0 16px 0;
+}
+
+.delete-modal-body {
+    background-color: #d2d4cf;
+    border-radius: 8px;
+    padding: 16px 18px;
+    box-sizing: border-box;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-size: 16px;
+    color: #4a523d;
+    line-height: 1.5;
+}
+
+.delete-filename-highlight {
+    font-weight: 700;
+    color: #2e3425;
+    word-break: break-all;
+}
+
+.delete-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.delete-btn-cancel,
+.delete-btn-confirm {
+    border: none;
+    border-radius: 20px;
+    padding: 8px 24px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: #ffffff;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.delete-btn-cancel {
+    background-color: #6e7960;
+}
+
+.delete-btn-cancel:hover {
+    background-color: #616c54;
+}
+
+.delete-btn-confirm {
+    background-color: #8B3030; /* Figma Red delete action */
+}
+
+.delete-btn-confirm:hover {
+    background-color: #722424;
+}
+
+.delete-btn-cancel:active,
+.delete-btn-confirm:active {
+    transform: scale(0.98);
+}

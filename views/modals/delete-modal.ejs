@@ -1,0 +1,17 @@
+<!-- views/modals/delete-modal.ejs -->
+<link rel="stylesheet" href="/css/delete-modal.css">
+
+<div class="delete-modal-overlay" id="deleteModal" style="display: none;">
+    <div class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+        <h2 class="delete-modal-title" id="deleteModalTitle">Move to Trash</h2>
+        <div class="delete-modal-body">
+            Are you sure to move <span class="delete-filename-highlight" id="deleteTargetName">this item</span> to trash?
+        </div>
+        <div class="delete-modal-footer">
+            <button type="button" class="delete-btn-cancel" id="deleteCancelBtn">Cancel</button>
+            <button type="button" class="delete-btn-confirm" id="deleteConfirmBtn">Move to Trash</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/delete-modal.js"></script>

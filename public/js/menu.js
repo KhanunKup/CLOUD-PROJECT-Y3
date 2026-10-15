@@ -145,20 +145,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const moveToTrashBtns = document.querySelectorAll('.move-to-trash-action');
-    moveToTrashBtns.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation(); // กัน event ทะลุไปที่ document
-
-            const originalHTML = btn.innerHTML;
-            btn.innerHTML = `<i class="fas fa-trash-alt"></i> Moved to Trash!`;
-
-            setTimeout(() => {
-                btn.innerHTML = originalHTML;
-            }, 1000);
-        });
-    });
-
     // จัดการการกด Restore และ Delete Forever ในหน้า Trash
     document.addEventListener('click', (e) => {
         const restoreBtn = e.target.closest('.restore-trash-action');
