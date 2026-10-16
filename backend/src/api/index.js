@@ -135,8 +135,8 @@ let mockUsers = [
     email: 'admin@kmitl.ac.th',
     password: 'admin123',
     role: 'admin',
-    quota: 10737418240,
-    created_at: new Date().toISOString()
+    quota: 10737418240, // 10 GB
+    created_at: new Date(Date.now() - 86400000 * 30).toISOString()
   },
   {
     user_id: 'user-normal-01',
@@ -145,14 +145,124 @@ let mockUsers = [
     email: 'user@kmitl.ac.th',
     password: 'user123',
     role: 'user',
-    quota: 10737418240,
-    created_at: new Date().toISOString()
+    quota: 10737418240, // 10 GB
+    created_at: new Date(Date.now() - 86400000 * 15).toISOString()
+  },
+  {
+    user_id: 'user-normal-02',
+    name: 'Summer Smith',
+    username: 'summer',
+    email: 'summer@kmitl.ac.th',
+    password: 'summer123',
+    role: 'user',
+    quota: 5368709120, // 5 GB
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString()
+  }
+];
+
+let mockAuditLogs = [
+  {
+    log_id: 'log-001',
+    user_id: 'user-admin-01',
+    user_name: 'Admin Rick',
+    user_email: 'admin@kmitl.ac.th',
+    role: 'admin',
+    action: 'LOGIN',
+    level: 'info',
+    details: 'Admin user logged in via web portal',
+    timestamp: new Date(Date.now() - 3600000 * 5).toISOString()
+  },
+  {
+    log_id: 'log-002',
+    user_id: 'user-normal-01',
+    user_name: 'Morty Smith',
+    user_email: 'user@kmitl.ac.th',
+    role: 'user',
+    action: 'UPLOAD',
+    level: 'info',
+    details: 'Uploaded file Project_Proposal.pdf (2.45 MB)',
+    timestamp: new Date(Date.now() - 3600000 * 3).toISOString()
+  },
+  {
+    log_id: 'log-003',
+    user_id: 'user-normal-01',
+    user_name: 'Morty Smith',
+    user_email: 'user@kmitl.ac.th',
+    role: 'user',
+    action: 'CREATE_SHARE',
+    level: 'info',
+    details: 'Created share link for Project_Proposal.pdf with Burn-After-Read',
+    timestamp: new Date(Date.now() - 3600000 * 1).toISOString()
   }
 ];
 
 // ==========================================
 // 3. Helper Functions
 // ==========================================
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function getUserStorage(userId) {
+  const user = mockUsers.find(u => u.user_id === userId) || {};
+  const quota = user.quota || 10737418240; // Default 10 GB
+
+  const userFiles = mockFiles.filter(f => {
+    if (f.status === 'trash') return false;
+    return f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user');
+  });
+
+  const breakdown = {
+    document: 0,
+    image: 0,
+    archive: 0,
+    video: 0,
+    audio: 0,
+    other: 0
+  };
+
+  let totalUsed = 0;
+  for (const f of userFiles) {
+    const size = Number(f.size) || 0;
+    totalUsed += size;
+    const cat = f.category || 'other';
+    breakdown[cat] = (breakdown[cat] || 0) + size;
+  }
+
+  const percent = quota > 0 ? parseFloat(Math.min(100, (totalUsed / quota) * 100).toFixed(1)) : 0;
+
+  return {
+    totalUsed,
+    usedBytes: totalUsed,
+    quota,
+    quotaBytes: quota,
+    percent,
+    formattedUsed: formatBytes(totalUsed),
+    formattedQuota: formatBytes(quota),
+    breakdown
+  };
+}
+
+function recordAuditLog({ user, action, level = 'info', details = '', req = null }) {
+  const logEntry = {
+    log_id: `log-${crypto.randomUUID().slice(0, 8)}`,
+    user_id: user ? (user.user_id || user.id || 'anonymous') : 'anonymous',
+    user_name: user ? (user.name || user.username || 'User') : 'Guest',
+    user_email: user ? (user.email || 'guest@easydrive.internal') : 'guest@easydrive.internal',
+    role: user ? (user.role || 'user') : 'guest',
+    action,
+    level, // 'info' | 'warning' | 'critical'
+    details,
+    timestamp: new Date().toISOString()
+  };
+  mockAuditLogs.unshift(logEntry);
+  return logEntry;
+}
+
 function getCategoryFromExtension(filename) {
   const ext = filename.split('.').pop().toLowerCase();
   const categories = {
@@ -345,6 +455,8 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
   const sessionToken = Buffer.from(JSON.stringify(sessionUser)).toString('base64');
   res.setHeader('Set-Cookie', `easydrive_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
 
+  recordAuditLog({ user: sessionUser, action: 'LOGIN', level: 'info', details: `User "${sessionUser.name}" logged in successfully`, req });
+
   if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
     return res.redirect('/drive');
   }
@@ -402,6 +514,8 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
   const sessionToken = Buffer.from(JSON.stringify(sessionUser)).toString('base64');
   res.setHeader('Set-Cookie', `easydrive_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
 
+  recordAuditLog({ user: sessionUser, action: 'SIGNUP', level: 'info', details: `New user "${newUser.name}" registered account`, req });
+
   if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
     return res.redirect('/drive');
   }
@@ -415,7 +529,10 @@ app.get('/drive', requireAuthWeb, (req, res) => {
     if (req.user.role === 'admin') return true;
     return f.owner_id === req.user.user_id || f.owner_id === 'demo-user';
   });
+  const storage = getUserStorage(req.user.user_id);
   res.render('pages/homepage', {
+    user: req.user,
+    storage,
     files: activeFiles.map(f => ({
       id: f.file_id,
       name: f.filename,
@@ -463,8 +580,10 @@ app.get('/shared', requireAuthWeb, (req, res) => {
     }
   ];
 
+  const storage = getUserStorage(req.user.user_id);
   res.render('pages/shared', {
     user: req.user,
+    storage,
     files: [...defaultShared, ...activeShares]
   });
 });
@@ -476,7 +595,10 @@ app.get('/trash', requireAuthWeb, (req, res) => {
     if (req.user.role === 'admin') return true;
     return f.owner_id === req.user.user_id || f.owner_id === 'demo-user';
   });
+  const storage = getUserStorage(req.user.user_id);
   res.render('pages/trash', {
+    user: req.user,
+    storage,
     files: trashedFiles.map(f => ({
       id: f.file_id,
       name: f.filename,
@@ -490,17 +612,41 @@ app.get('/trash', requireAuthWeb, (req, res) => {
 app.post('/trash/empty', requireAuthWeb, (req, res) => {
   if (IS_MOCK_MODE) {
     mockFiles = mockFiles.filter(f => f.status !== 'trash');
+    recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: 'Emptied entire trash bin' });
   }
   res.redirect('/trash');
 });
 
 // 4.6 Admin Pages (Admin-Only Guard)
-app.get('/management', requireAdminWeb, (req, res) => {
-  res.render('pages/usermanagement');
+app.get(['/management', '/admin'], requireAdminWeb, (req, res) => {
+  const totalUsers = mockUsers.length;
+  const adminCount = mockUsers.filter(u => u.role === 'admin').length;
+  const userCount = totalUsers - adminCount;
+  const storage = getUserStorage(req.user.user_id);
+  res.render('pages/usermanagement', {
+    user: req.user,
+    users: mockUsers.map(u => ({
+      ...u,
+      storageFormatted: formatBytes(getUserStorage(u.user_id).totalUsed)
+    })),
+    totalUsers,
+    adminCount,
+    userCount,
+    storage
+  });
 });
 
 app.get('/audit', requireAdminWeb, (req, res) => {
-  res.render('pages/audit');
+  const totalEvents = mockAuditLogs.length;
+  const warningCount = mockAuditLogs.filter(l => l.level === 'warning').length;
+  const criticalCount = mockAuditLogs.filter(l => l.level === 'critical').length;
+  const storage = getUserStorage(req.user.user_id);
+  res.render('pages/audit', {
+    user: req.user,
+    logs: mockAuditLogs,
+    stats: { totalEvents, warningCount, criticalCount },
+    storage
+  });
 });
 
 // 4.7 Public Share Page (Public access, no login required)
@@ -626,6 +772,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
 
   if (IS_MOCK_MODE) {
     mockFiles.unshift(newFolder);
+    recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
     return res.json({ success: true, file: newFolder });
   }
 
@@ -634,6 +781,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
       TableName: FILES_TABLE,
       Item: newFolder
     }));
+    recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
     res.json({ success: true, file: newFolder });
   } catch (err) {
     console.error('Create folder error:', err);
@@ -643,7 +791,8 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
 
 // 5.3 Request Presigned Upload URL
 app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
-  const { filename, size, contentType } = req.body;
+  const filename = req.body.filename || req.body.name;
+  const { size, contentType } = req.body;
   if (!filename || !size) {
     return res.status(400).json({ error: 'filename and size are required' });
   }
@@ -671,6 +820,8 @@ app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
     // Update mock storage breakdown
     mockUserStorage.totalUsed += Number(size);
     mockUserStorage.breakdown[category] = (mockUserStorage.breakdown[category] || 0) + Number(size);
+
+    recordAuditLog({ user: req.user, action: 'UPLOAD', level: 'info', details: `Uploaded file "${filename}" (${formatBytes(Number(size))})` });
 
     return res.json({
       success: true,
@@ -763,6 +914,7 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
     if (!file) return res.status(404).json({ error: 'File not found' });
     file.filename = filename;
     file.updated_at = new Date().toISOString();
+    recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
     return res.json({ success: true, file });
   }
 
@@ -779,6 +931,7 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
       },
       ReturnValues: 'ALL_NEW'
     }));
+    recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
     res.json({ success: true, file: result.Attributes });
   } catch (err) {
     console.error('Rename error:', err);
@@ -796,11 +949,13 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'File not found' });
 
     if (isPermanent) {
-      mockFiles.splice(index, 1);
+      const deletedFile = mockFiles.splice(index, 1)[0];
+      recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Permanently deleted file "${deletedFile ? deletedFile.filename : fileId}"` });
       return res.json({ success: true, message: 'File deleted permanently' });
     } else {
       mockFiles[index].status = 'trash';
       mockFiles[index].trashed_at = new Date().toISOString();
+      recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved file "${mockFiles[index].filename}" to trash` });
       return res.json({ success: true, message: 'File moved to trash' });
     }
   }
@@ -813,6 +968,7 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
         await s3Client.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: getRes.Item.s3_key }));
       }
       await docClient.send(new DeleteCommand({ TableName: FILES_TABLE, Key: { file_id: fileId } }));
+      recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Permanently deleted file ID: ${fileId}` });
       res.json({ success: true, message: 'File deleted permanently' });
     } else {
       await docClient.send(new UpdateCommand({
@@ -827,6 +983,7 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
           ':owner': req.user.user_id
         }
       }));
+      recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved file ID: ${fileId} to trash` });
       res.json({ success: true, message: 'File moved to trash' });
     }
   } catch (err) {
@@ -844,6 +1001,7 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
     if (!file) return res.status(404).json({ error: 'File not found' });
     file.status = 'active';
     delete file.trashed_at;
+    recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored file "${file.filename}" from trash` });
     return res.json({ success: true, message: 'File restored successfully', file });
   }
 
@@ -860,6 +1018,7 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
       },
       ReturnValues: 'ALL_NEW'
     }));
+    recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored file ID: ${fileId} from trash` });
     res.json({ success: true, message: 'File restored successfully', file: result.Attributes });
   } catch (err) {
     console.error('Restore file error:', err);
@@ -907,6 +1066,12 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
 
   if (IS_MOCK_MODE) {
     mockShares.push(shareRecord);
+    recordAuditLog({
+      user: req.user,
+      action: 'CREATE_SHARE',
+      level: 'info',
+      details: `Created share link (${shareId}) for "${shareRecord.filename}"${shareRecord.has_password ? ' [Password Protected]' : ''}${shareRecord.max_downloads > 0 ? ' [Burn-After-Read]' : ''}`
+    });
     return res.json({
       success: true,
       share_id: shareId,
@@ -924,6 +1089,13 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
       TableName: SHARES_TABLE,
       Item: shareRecord
     }));
+
+    recordAuditLog({
+      user: req.user,
+      action: 'CREATE_SHARE',
+      level: 'info',
+      details: `Created share link (${shareId}) for "${shareRecord.filename}"${shareRecord.has_password ? ' [Password Protected]' : ''}${shareRecord.max_downloads > 0 ? ' [Burn-After-Read]' : ''}`
+    });
 
     res.json({
       success: true,
@@ -979,6 +1151,12 @@ app.post('/api/shares/:id/verify', async (req, res) => {
     share.download_count += 1;
     const file = mockFiles.find(f => f.file_id === share.file_id);
     const resolvedFilename = (file ? file.filename : share.filename) || 'shared-file';
+    recordAuditLog({
+      user: null,
+      action: 'DOWNLOAD_SHARE',
+      level: 'info',
+      details: `Public downloaded shared file "${resolvedFilename}" (Share ID: ${shareId})`
+    });
     return res.json({
       success: true,
       filename: resolvedFilename,
@@ -1037,7 +1215,8 @@ app.post('/api/shares/:id/verify', async (req, res) => {
 // 5.10 User Storage Breakdown Dashboard
 app.get('/api/user/storage', authMiddleware, async (req, res) => {
   if (IS_MOCK_MODE) {
-    return res.json({ success: true, storage: mockUserStorage });
+    const storage = getUserStorage(req.user.user_id);
+    return res.json({ success: true, ...storage, storage });
   }
 
   try {
@@ -1054,7 +1233,7 @@ app.get('/api/user/storage', authMiddleware, async (req, res) => {
       breakdown: { image: 0, document: 0, archive: 0, other: 0 }
     };
 
-    res.json({ success: true, storage });
+    res.json({ success: true, ...storage, storage });
   } catch (err) {
     console.error('Storage breakdown error:', err);
     res.status(500).json({ error: 'Failed to retrieve storage details' });
@@ -1063,23 +1242,18 @@ app.get('/api/user/storage', authMiddleware, async (req, res) => {
 
 // 5.11 Admin: Get All Users & Storage Quotas
 app.get('/api/admin/users', authMiddleware, async (req, res) => {
-  if (req.user.role !== 'admin' && !IS_MOCK_MODE) {
-    return res.status(403).json({ error: 'Admin access required' });
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Admin access required' });
   }
 
   if (IS_MOCK_MODE) {
+    const usersWithStorage = mockUsers.map(u => ({
+      ...u,
+      storage: getUserStorage(u.user_id)
+    }));
     return res.json({
       success: true,
-      users: [
-        mockUserStorage,
-        {
-          user_id: 'user-002',
-          email: 'student@kmitl.ac.th',
-          totalUsed: 120000000,
-          quota: 10737418240,
-          status: 'active'
-        }
-      ]
+      users: usersWithStorage
     });
   }
 
@@ -1090,6 +1264,95 @@ app.get('/api/admin/users', authMiddleware, async (req, res) => {
     console.error('Admin users error:', err);
     res.status(500).json({ error: 'Failed to scan users' });
   }
+});
+
+// 5.12 Admin: Update User Role & Quota
+app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  }
+
+  const targetUserId = req.params.id;
+  const { role, quota, storageQuota } = req.body;
+  const user = mockUsers.find(u => u.user_id === targetUserId);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (role && (role === 'admin' || role === 'user')) {
+    user.role = role;
+  }
+  const targetQuota = quota || storageQuota;
+  if (targetQuota && Number(targetQuota) > 0) {
+    user.quota = Number(targetQuota);
+    user.storage_quota = Number(targetQuota);
+  }
+  user.updated_at = new Date().toISOString();
+
+  recordAuditLog({
+    user: req.user,
+    action: 'ROLE_CHANGE',
+    level: 'warning',
+    details: `Admin updated user "${user.name}" (${user.email}): Role=${user.role}, Quota=${formatBytes(user.quota)}`
+  });
+
+  res.json({ success: true, message: 'User updated successfully', user });
+});
+
+// 5.13 Admin: Delete User (With self-deletion protection)
+app.delete('/api/admin/users/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  }
+
+  const targetUserId = req.params.id;
+  if (targetUserId === req.user.user_id) {
+    return res.status(400).json({ error: 'Cannot delete your own admin account' });
+  }
+
+  const userIndex = mockUsers.findIndex(u => u.user_id === targetUserId);
+  if (userIndex === -1) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const deletedUser = mockUsers.splice(userIndex, 1)[0];
+  recordAuditLog({
+    user: req.user,
+    action: 'DELETE_USER',
+    level: 'critical',
+    details: `Admin permanently deleted user "${deletedUser.name}" (${deletedUser.email})`
+  });
+
+  res.json({ success: true, message: 'User deleted successfully' });
+});
+
+// 5.14 Admin: Get Audit Logs (With filtering)
+app.get('/api/admin/audit', authMiddleware, (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  }
+
+  const actionFilter = req.query.action;
+  const levelFilter = req.query.level;
+
+  let filtered = [...mockAuditLogs];
+  if (actionFilter && actionFilter !== 'All') {
+    filtered = filtered.filter(l => l.action.toLowerCase() === actionFilter.toLowerCase());
+  }
+  if (levelFilter && levelFilter !== 'All') {
+    filtered = filtered.filter(l => l.level.toLowerCase() === levelFilter.toLowerCase());
+  }
+
+  const stats = {
+    totalEvents: mockAuditLogs.length,
+    total: mockAuditLogs.length,
+    warningCount: mockAuditLogs.filter(l => l.level === 'warning').length,
+    warning: mockAuditLogs.filter(l => l.level === 'warning').length,
+    criticalCount: mockAuditLogs.filter(l => l.level === 'critical').length,
+    critical: mockAuditLogs.filter(l => l.level === 'critical').length
+  };
+
+  res.json({ success: true, count: filtered.length, stats, logs: filtered });
 });
 
 // Export Lambda handler

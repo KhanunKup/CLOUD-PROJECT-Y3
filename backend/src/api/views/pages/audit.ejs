@@ -261,7 +261,7 @@
                             <svg viewBox="0 0 24 24" fill="#333"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 14.59L14.59 18l-2.12-2.12c-.56.34-1.2.53-1.88.53-1.93 0-3.5-1.57-3.5-3.5S8.66 9.41 10.59 9.41s3.5 1.57 3.5 3.5c0 .68-.19 1.32-.53 1.88L16 16.59zM10.59 10.91c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-number text-orange">50</div>
+                            <div class="stat-number text-orange" id="totalEventsStat"><%= typeof stats !== 'undefined' ? stats.totalEvents : (typeof logs !== 'undefined' ? logs.length : 0) %></div>
                             <div class="stat-label">เหตุการณ์ทั้งหมด</div>
                         </div>
                     </div>
@@ -271,7 +271,7 @@
                             <svg viewBox="0 0 24 24" fill="#f5b041"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-number text-yellow">3</div>
+                            <div class="stat-number text-yellow" id="warningStat"><%= typeof stats !== 'undefined' ? stats.warningCount : 0 %></div>
                             <div class="stat-label">Warning</div>
                         </div>
                     </div>
@@ -281,7 +281,7 @@
                             <svg viewBox="0 0 24 24" fill="#e74c3c"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-number text-red">12</div>
+                            <div class="stat-number text-red" id="criticalStat"><%= typeof stats !== 'undefined' ? stats.criticalCount : 0 %></div>
                             <div class="stat-label">Critical</div>
                         </div>
                     </div>
@@ -301,154 +301,177 @@
                             <th></th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <!-- Row 1 -->
-                        <tr>
-                            <td>
-                                <div class="user-cell">
-                                    <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-                                    <div class="user-name-email">
-                                        <strong>Example User</strong>
-                                        <span>Example@gmail.com</span>
-                                    </div>
-                                </div>
-                            </td>
-                            <td><span class="badge-role role-user">User</span></td>
-                            <td>
-                                <div class="datetime-cell">
-                                    <span>21:45:30</span>
-                                    <span>2005-08-08</span>
-                                </div>
-                            </td>
-                            <td class="level-text level-info">info</td>
-                            <td><span class="badge-action action-update">Update</span></td>
-                            <td><button class="btn-detail">ดูรายละเอียด</button></td>
-                        </tr>
-                        <!-- Row 2 -->
-                        <tr>
-                            <td>
-                                <div class="user-cell">
-                                    <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-                                    <div class="user-name-email">
-                                        <strong>Example User</strong>
-                                        <span>Example@gmail.com</span>
-                                    </div>
-                                </div>
-                            </td>
-                            <td><span class="badge-role role-admin">Admin</span></td>
-                            <td>
-                                <div class="datetime-cell">
-                                    <span>21:45:30</span>
-                                    <span>2005-08-08</span>
-                                </div>
-                            </td>
-                            <td class="level-text level-warning">Warning</td>
-                            <td><span class="badge-action action-create">Create</span></td>
-                            <td><button class="btn-detail">ดูรายละเอียด</button></td>
-                        </tr>
-                        <!-- Row 3 -->
-                        <tr>
-                            <td>
-                                <div class="user-cell">
-                                    <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-                                    <div class="user-name-email">
-                                        <strong>Example User</strong>
-                                        <span>Example@gmail.com</span>
-                                    </div>
-                                </div>
-                            </td>
-                            <td><span class="badge-role role-user">User</span></td>
-                            <td>
-                                <div class="datetime-cell">
-                                    <span>21:45:30</span>
-                                    <span>2005-08-08</span>
-                                </div>
-                            </td>
-                            <td class="level-text level-critical">Critical</td>
-                            <td><span class="badge-action action-loginfail">Login Failed</span></td>
-                            <td><button class="btn-detail">ดูรายละเอียด</button></td>
-                        </tr>
-                        <!-- Row 4 -->
-                        <tr>
-                            <td>
-                                <div class="user-cell">
-                                    <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-                                    <div class="user-name-email">
-                                        <strong>Example User</strong>
-                                        <span>Example@gmail.com</span>
-                                    </div>
-                                </div>
-                            </td>
-                            <td><span class="badge-role role-admin">Admin</span></td>
-                            <td>
-                                <div class="datetime-cell">
-                                    <span>21:45:30</span>
-                                    <span>2005-08-08</span>
-                                </div>
-                            </td>
-                            <td class="level-text level-info">Info</td>
-                            <td><span class="badge-action action-delete">Delete</span></td>
-                            <td><button class="btn-detail">ดูรายละเอียด</button></td>
-                        </tr>
-                        <!-- Row 5 -->
-                        <tr>
-                            <td>
-                                <div class="user-cell">
-                                    <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-                                    <div class="user-name-email">
-                                        <strong>Example User</strong>
-                                        <span>Example@gmail.com</span>
-                                    </div>
-                                </div>
-                            </td>
-                            <td><span class="badge-role role-user">User</span></td>
-                            <td>
-                                <div class="datetime-cell">
-                                    <span>21:45:30</span>
-                                    <span>2005-08-08</span>
-                                </div>
-                            </td>
-                            <td class="level-text level-critical">Critical</td>
-                            <td><span class="badge-action action-permission">Permission</span></td>
-                            <td><button class="btn-detail">ดูรายละเอียด</button></td>
-                        </tr>
-                        <!-- Row 6 -->
-                        <tr>
-                            <td>
-                                <div class="user-cell">
-                                    <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-                                    <div class="user-name-email">
-                                        <strong>Example User</strong>
-                                        <span>Example@gmail.com</span>
-                                    </div>
-                                </div>
-                            </td>
-                            <td><span class="badge-role role-admin">Admin</span></td>
-                            <td>
-                                <div class="datetime-cell">
-                                    <span>21:45:30</span>
-                                    <span>2005-08-08</span>
-                                </div>
-                            </td>
-                            <td class="level-text level-warning">Warning</td>
-                            <td><span class="badge-action action-login">Login</span></td>
-                            <td><button class="btn-detail">ดูรายละเอียด</button></td>
-                        </tr>
+                    <tbody id="auditTableBody">
+                        <% if (typeof logs !== 'undefined' && logs && logs.length > 0) { %>
+                            <% logs.forEach(function(log) { %>
+                                <tr class="audit-row" data-action="<%= log.action %>" data-level="<%= log.level %>" data-user="<%= (log.user_name || '').toLowerCase() %>" data-email="<%= (log.user_email || '').toLowerCase() %>" data-details="<%= (log.details || '').toLowerCase() %>">
+                                    <td>
+                                        <div class="user-cell">
+                                            <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
+                                            <div class="user-name-email">
+                                                <strong><%= log.user_name %></strong>
+                                                <span><%= log.user_email %></span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge-role role-<%= log.role === 'admin' ? 'admin' : 'user' %>"><%= log.role === 'admin' ? 'Admin' : 'User' %></span></td>
+                                    <td>
+                                        <div class="datetime-cell">
+                                            <span><%= new Date(log.timestamp).toLocaleTimeString('en-GB') %></span>
+                                            <span><%= new Date(log.timestamp).toLocaleDateString('en-GB') %></span>
+                                        </div>
+                                    </td>
+                                    <td class="level-text level-<%= log.level %>"><%= log.level %></td>
+                                    <td><span class="badge-action action-<%= log.action.toLowerCase() %>"><%= log.action %></span></td>
+                                    <td><button type="button" class="btn-detail view-log-detail-btn" data-log="<%= encodeURIComponent(JSON.stringify(log)) %>">ดูรายละเอียด</button></td>
+                                </tr>
+                            <% }); %>
+                        <% } else { %>
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 30px; color: #888;">ไม่พบบันทึกเหตุการณ์ในระบบ</td>
+                            </tr>
+                        <% } %>
                     </tbody>
                 </table>
             </div>
 
             <!-- Pagination -->
             <div class="pagination">
+                <span id="auditCountSpan" style="margin-right: auto; font-size: 0.85rem; color: #777;">
+                    แสดง <%= typeof logs !== 'undefined' ? logs.length : 0 %> เหตุการณ์
+                </span>
                 <button class="page-btn">ก่อนหน้า</button>
                 <button class="page-num active">1</button>
-                <button class="page-num">2</button>
-                <button class="page-num">3</button>
                 <button class="page-btn">ถัดไป</button>
             </div>
 
         </div>
     </main>
+
+    <!-- Modal ดูรายละเอียด Log -->
+    <div id="logDetailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: #fff; width: 500px; max-width: 90%; border-radius: 16px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 12px;">
+                <h3 style="margin: 0; color: #222; font-size: 1.2rem;">รายละเอียดเหตุการณ์ (Audit Log)</h3>
+                <button type="button" id="closeLogModalBtn" style="background: none; border: none; font-size: 22px; cursor: pointer; color: #888;">&times;</button>
+            </div>
+
+            <div id="logDetailContent" style="display: flex; flex-direction: column; gap: 12px; font-size: 0.95rem;">
+                <!-- Content injected dynamically via JS -->
+            </div>
+
+            <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
+                <button type="button" id="dismissLogModalBtn" style="padding: 8px 24px; border-radius: 20px; border: none; background: #333; color: white; cursor: pointer; font-weight: 600;">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts: Search, Filter, Modal -->
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const searchInput = document.querySelector('.filter-section input');
+        const filterBtns = document.querySelectorAll('.filter-buttons button');
+        const auditRows = document.querySelectorAll('.audit-row');
+
+        const actionBtn = filterBtns[0];
+        const levelBtn = filterBtns[1];
+
+        const actions = ['All', 'LOGIN', 'SIGNUP', 'UPLOAD', 'CREATE_FOLDER', 'RENAME', 'MOVE_TO_TRASH', 'RESTORE', 'PERMANENT_DELETE', 'CREATE_SHARE', 'DOWNLOAD_SHARE', 'ROLE_CHANGE', 'DELETE_USER'];
+        const levels = ['All', 'info', 'warning', 'critical'];
+
+        let actionIdx = 0;
+        let levelIdx = 0;
+
+        function applyFilters() {
+            const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const selectedAction = actions[actionIdx];
+            const selectedLevel = levels[levelIdx];
+
+            let visibleCount = 0;
+
+            auditRows.forEach(row => {
+                const action = row.dataset.action || '';
+                const level = row.dataset.level || '';
+                const user = row.dataset.user || '';
+                const email = row.dataset.email || '';
+                const details = row.dataset.details || '';
+
+                const matchesQuery = !query || user.includes(query) || email.includes(query) || action.toLowerCase().includes(query) || details.includes(query);
+                const matchesAction = selectedAction === 'All' || action.toLowerCase() === selectedAction.toLowerCase();
+                const matchesLevel = selectedLevel === 'All' || level.toLowerCase() === selectedLevel.toLowerCase();
+
+                if (matchesQuery && matchesAction && matchesLevel) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            const countEl = document.getElementById('auditCountSpan');
+            if (countEl) countEl.textContent = `แสดง ${visibleCount} เหตุการณ์`;
+        }
+
+        if (searchInput) searchInput.addEventListener('input', applyFilters);
+
+        if (actionBtn) {
+            actionBtn.addEventListener('click', () => {
+                actionIdx = (actionIdx + 1) % actions.length;
+                actionBtn.textContent = `ACTION: ${actions[actionIdx]} ▼`;
+                applyFilters();
+            });
+        }
+
+        if (levelBtn) {
+            levelBtn.addEventListener('click', () => {
+                levelIdx = (levelIdx + 1) % levels.length;
+                levelBtn.textContent = `LEVEL: ${levels[levelIdx]} ▼`;
+                applyFilters();
+            });
+        }
+
+        // Log Detail Modal
+        const modal = document.getElementById('logDetailModal');
+        const contentBox = document.getElementById('logDetailContent');
+        const closeBtn = document.getElementById('closeLogModalBtn');
+        const dismissBtn = document.getElementById('dismissLogModalBtn');
+
+        function closeModal() {
+            if (modal) modal.style.display = 'none';
+        }
+
+        document.querySelectorAll('.view-log-detail-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                try {
+                    const log = JSON.parse(decodeURIComponent(btn.dataset.log));
+                    contentBox.innerHTML = `
+                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">Log ID:</strong> <span>${log.log_id}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">ผู้ดำเนินการ:</strong> <span>${log.user_name} (${log.user_email})</span></div>
+                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">Role:</strong> <span style="font-weight: bold; text-transform: uppercase;">${log.role}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">Action:</strong> <span style="background: #eee; padding: 2px 8px; border-radius: 4px; font-weight: bold;">${log.action}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">ระดับความรุนแรง:</strong> <span style="font-weight: bold; text-transform: uppercase;">${log.level}</span></div>
+                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">วันเวลา:</strong> <span>${new Date(log.timestamp).toLocaleString('th-TH')}</span></div>
+                        <div style="margin-top: 8px; padding: 12px; background: #fdfbf7; border: 1px solid #ecd8c6; border-radius: 8px;">
+                            <strong style="display: block; margin-bottom: 4px; color: #44362A;">รายละเอียดเพิ่มเติม:</strong>
+                            <span style="color: #555;">${log.details || 'ไม่มีรายละเอียดเพิ่มเติม'}</span>
+                        </div>
+                    `;
+                    if (modal) modal.style.display = 'flex';
+                } catch (e) {
+                    console.error('Failed to parse log detail', e);
+                }
+            });
+        });
+
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        if (dismissBtn) dismissBtn.addEventListener('click', closeModal);
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+        }
+    });
+    </script>
 
 </body>
 </html>

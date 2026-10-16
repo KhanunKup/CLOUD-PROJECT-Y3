@@ -247,9 +247,15 @@
 
   <!-- Storage bar — Figma: Rect33 track + Rect34 fill (#C4A070) -->
   <div class="sidebar-storage">
-    <div class="sidebar-storage-label">STORAGE</div>
-    <div class="sidebar-storage-track">
-      <div class="sidebar-storage-fill"></div>
+    <div class="sidebar-storage-label" style="display: flex; justify-content: space-between; align-items: center;">
+      <span>STORAGE</span>
+      <span style="font-size: 8.5px; opacity: 0.85;"><%= typeof storage !== 'undefined' && storage ? storage.percent + '%' : '0%' %></span>
+    </div>
+    <div class="sidebar-storage-track" title="<%= typeof storage !== 'undefined' && storage ? storage.percent + '%' : '0%' %>">
+      <div class="sidebar-storage-fill" style="width: <%= typeof storage !== 'undefined' && storage ? Math.min(100, Math.max(2, storage.percent)) : 0 %>%;"></div>
+    </div>
+    <div style="font-size: 8.5px; color: #E8E2D6; margin-top: 5px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      <%= typeof storage !== 'undefined' && storage ? storage.formattedUsed + ' / ' + storage.formattedQuota : '0 B / 10 GB' %>
     </div>
   </div>
 
