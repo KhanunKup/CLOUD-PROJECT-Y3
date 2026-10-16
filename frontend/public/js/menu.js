@@ -146,6 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             window.showToast('Share link copied to clipboard!', 'success');
                         }
                         textSpan.textContent = 'Copied!';
+                        if (window.markFileAsShared) {
+                            window.markFileAsShared(fileId, data);
+                        }
                     } else {
                         textSpan.textContent = originalText;
                     }
@@ -290,26 +293,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             if (window.showToast) window.showToast(`Stopped sharing "${filename}"`, 'success');
 
-                            const targetRow = stopShareBtn.closest('.file-row');
-                            if (window.location.pathname.includes('/shared') && targetRow) {
-                                // Decrement counter immediately
-                                const countEl = document.getElementById('sharedByMeCount');
-                                if (countEl) {
-                                    const curr = parseInt(countEl.textContent, 10) || 0;
-                                    countEl.textContent = Math.max(0, curr - 1);
-                                }
-
-                                if (window.animateRowRemoval) {
-                                    window.animateRowRemoval(targetRow, 'You haven\'t shared any files yet. Share files from My Drive to see them here.', '#sharedByMeTable');
-                                } else {
-                                    targetRow.remove();
-                                }
-
-                                setTimeout(() => {
-                                    if (window.updateSharedTabCounts) window.updateSharedTabCounts();
-                                }, 350);
-                            } else {
-                                setTimeout(() => window.location.reload(), 600);
+                            const fileId = stopShareBtn.dataset.fileId;
+                            if (window.markFileAsUnshared) {
+                                window.markFileAsUnshared(fileId, shareId);
                             }
                         } catch (err) {
                             console.error('Stop share error:', err);
@@ -321,6 +307,120 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
     });
+
+    // ─── Real-Time DOM Helper: Mark file as Shared ───
+    window.markFileAsShared = function(fileId, shareData) {
+        if (!fileId) return;
+        const trigger = document.querySelector(`[data-id="${fileId}"]`) || document.querySelector(`[data-file-id="${fileId}"]`);
+        const row = trigger ? trigger.closest('.file-row') : null;
+        if (!row) return;
+
+        const shareId = shareData.shareId || shareData.share_id || '';
+        const shareUrl = shareData.shareUrl || `/share/${shareId}`;
+        const filename = trigger.dataset.filename || '';
+        const hasPassword = Boolean(shareData.hasPassword);
+        const expireHours = shareData.expireHours || '24';
+        const maxDownloads = shareData.maxDownloads !== undefined ? shareData.maxDownloads : '0';
+
+        // 1. Update or create .shared-badge-inline in .file-name
+        const fileNameEl = row.querySelector('.file-name');
+        if (fileNameEl) {
+            let badge = fileNameEl.querySelector('.shared-badge-inline');
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'shared-badge-inline open-share-modal';
+                badge.title = 'Click to edit share settings';
+                badge.innerHTML = '<i class="fas fa-link"></i> Shared';
+                fileNameEl.appendChild(badge);
+            }
+            badge.dataset.id = fileId;
+            badge.dataset.shareId = shareId;
+            badge.dataset.filename = filename;
+            badge.dataset.mode = 'edit';
+            badge.dataset.expireHours = expireHours;
+            badge.dataset.maxDownloads = maxDownloads;
+            badge.dataset.hasPassword = hasPassword ? 'true' : 'false';
+            badge.dataset.shareUrl = shareUrl;
+            badge.dataset.access = encodeURIComponent(JSON.stringify(shareData.accessList || []));
+        }
+
+        // 2. Update .open-share-modal button in dropdown menu
+        const shareModalBtn = row.querySelector('.open-share-modal:not(.shared-badge-inline)');
+        if (shareModalBtn) {
+            shareModalBtn.dataset.mode = 'edit';
+            shareModalBtn.dataset.shareId = shareId;
+            shareModalBtn.dataset.shareUrl = shareUrl;
+            shareModalBtn.dataset.expireHours = expireHours;
+            shareModalBtn.dataset.maxDownloads = maxDownloads;
+            shareModalBtn.dataset.hasPassword = hasPassword ? 'true' : 'false';
+            shareModalBtn.innerHTML = '<i class="fas fa-sliders-h"></i> Edit Share';
+
+            // 3. Add .stop-sharing-action button if not already present
+            let stopBtn = row.querySelector('.stop-sharing-action');
+            if (!stopBtn) {
+                stopBtn = document.createElement('button');
+                stopBtn.className = 'option-item stop-sharing-action';
+                stopBtn.style.color = '#d32f2f';
+                stopBtn.dataset.shareId = shareId;
+                stopBtn.dataset.fileId = fileId;
+                stopBtn.dataset.filename = filename;
+                stopBtn.innerHTML = '<i class="fas fa-link-slash"></i> Stop Sharing';
+                shareModalBtn.insertAdjacentElement('afterend', stopBtn);
+            } else {
+                stopBtn.dataset.shareId = shareId;
+                stopBtn.dataset.fileId = fileId;
+                stopBtn.dataset.filename = filename;
+            }
+        }
+    };
+
+    // ─── Real-Time DOM Helper: Mark file as Unshared / Stop Sharing ───
+    window.markFileAsUnshared = function(fileId, shareId) {
+        // If on /shared page
+        if (window.location.pathname.includes('/shared')) {
+            const targetRow = (shareId ? document.getElementById(`row-share-${shareId}`) : null) || 
+                              (fileId ? document.querySelector(`[data-id="${fileId}"]`)?.closest('.file-row') : null);
+            if (targetRow) {
+                const countEl = document.getElementById('sharedByMeCount');
+                if (countEl) {
+                    const curr = parseInt(countEl.textContent, 10) || 0;
+                    countEl.textContent = Math.max(0, curr - 1);
+                }
+                if (window.animateRowRemoval) {
+                    window.animateRowRemoval(targetRow, 'You haven\'t shared any files yet. Share files from My Drive to see them here.', '#sharedByMeTable');
+                } else {
+                    targetRow.remove();
+                }
+                setTimeout(() => {
+                    if (window.updateSharedTabCounts) window.updateSharedTabCounts();
+                }, 350);
+            }
+            return;
+        }
+
+        // If on /drive or other pages
+        const trigger = (fileId ? document.querySelector(`[data-id="${fileId}"]`) : null) || 
+                        (shareId ? document.querySelector(`[data-share-id="${shareId}"]`) : null);
+        const row = trigger ? trigger.closest('.file-row') : null;
+        if (!row) return;
+
+        // 1. Remove .shared-badge-inline
+        const badge = row.querySelector('.shared-badge-inline');
+        if (badge) badge.remove();
+
+        // 2. Revert .open-share-modal button to create mode
+        const shareModalBtn = row.querySelector('.open-share-modal:not(.shared-badge-inline)');
+        if (shareModalBtn) {
+            shareModalBtn.dataset.mode = 'create';
+            delete shareModalBtn.dataset.shareId;
+            delete shareModalBtn.dataset.shareUrl;
+            shareModalBtn.innerHTML = '<i class="fas fa-share"></i> Share';
+        }
+
+        // 3. Remove .stop-sharing-action button
+        const stopBtn = row.querySelector('.stop-sharing-action');
+        if (stopBtn) stopBtn.remove();
+    };
 
     // ─── Shared Page Real-Time Tab Counts Helper ───
     window.updateSharedTabCounts = function() {

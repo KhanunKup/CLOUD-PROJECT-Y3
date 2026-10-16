@@ -237,14 +237,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(data.error || 'Failed to update share settings');
                 }
 
+                const hasPw = removePassword ? false : (password ? true : (window.activeShareFileBtn?.dataset?.hasPassword === 'true'));
                 if (window.activeShareFileBtn) {
                     window.activeShareFileBtn.dataset.expireHours = expireHours;
                     window.activeShareFileBtn.dataset.maxDownloads = maxDownloads;
-                    if (removePassword) {
-                        window.activeShareFileBtn.dataset.hasPassword = 'false';
-                    } else if (password) {
-                        window.activeShareFileBtn.dataset.hasPassword = 'true';
-                    }
+                    window.activeShareFileBtn.dataset.hasPassword = hasPw ? 'true' : 'false';
+                }
+
+                if (window.updateShareRowBadges) {
+                    window.updateShareRowBadges(shareId, {
+                        expireHours: Number(expireHours),
+                        maxDownloads: Number(maxDownloads),
+                        hasPassword: hasPw
+                    });
                 }
 
                 if (window.showToast) {
@@ -254,16 +259,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 setTimeout(() => {
                     closeModal();
-                    if (window.location.pathname.includes('/shared')) {
-                        try {
-                            localStorage.setItem('shared_active_tab', 'sharedByMeTable');
-                        } catch (e) {}
-                        window.location.hash = '#shared-by-me';
-                        window.location.reload();
-                    } else {
-                        window.location.reload();
-                    }
-                }, 600);
+                    if (createShareLinkBtn) createShareLinkBtn.disabled = false;
+                    if (createShareLinkText) createShareLinkText.textContent = origBtnText;
+                }, 400);
                 return;
             } else {
                 // Mode Create
@@ -314,6 +312,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.showToast('Share link created & copied to clipboard!', 'success');
                 }
 
+                // Real-Time DOM Update on Drive
+                if (window.markFileAsShared) {
+                    window.markFileAsShared(fileId, data);
+                }
+
                 if (createShareLinkText) createShareLinkText.innerHTML = '<i class="fas fa-check"></i> Link Copied!';
                 if (copyLinkText) copyLinkText.textContent = 'Copied!';
 
@@ -321,10 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (createShareLinkBtn) createShareLinkBtn.disabled = false;
                     if (createShareLinkText) createShareLinkText.textContent = origBtnText;
                     if (copyLinkText) copyLinkText.textContent = 'copy link';
-                    if (window.location.pathname.includes('/drive') || window.location.pathname === '/') {
-                        window.location.reload();
-                    }
-                }, 1200);
+                }, 1800);
             }
         } catch (err) {
             console.error('Share action error:', err);
@@ -391,26 +391,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             if (window.showToast) window.showToast(`Stopped sharing "${filename}"`, 'success');
 
-                            const targetRow = document.getElementById(`row-share-${shareId}`) || (window.activeShareFileBtn ? window.activeShareFileBtn.closest('.file-row') : null);
-                            if (targetRow && window.location.pathname.includes('/shared')) {
-                                // Decrement counter immediately
-                                const countEl = document.getElementById('sharedByMeCount');
-                                if (countEl) {
-                                    const curr = parseInt(countEl.textContent, 10) || 0;
-                                    countEl.textContent = Math.max(0, curr - 1);
-                                }
-
-                                if (window.animateRowRemoval) {
-                                    window.animateRowRemoval(targetRow, 'You haven\'t shared any files yet. Share files from My Drive to see them here.', '#sharedByMeTable');
-                                } else {
-                                    targetRow.remove();
-                                }
-
-                                setTimeout(() => {
-                                    if (window.updateSharedTabCounts) window.updateSharedTabCounts();
-                                }, 350);
-                            } else {
-                                setTimeout(() => window.location.reload(), 600);
+                            const fileId = (window.activeShareFileBtn && window.activeShareFileBtn.dataset.id) || null;
+                            if (window.markFileAsUnshared) {
+                                window.markFileAsUnshared(fileId, shareId);
                             }
                         } catch (err) {
                             console.error('Stop share error:', err);
@@ -421,6 +404,58 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // ─── Real-Time DOM Helper: Update Share Row Badges on /shared and /drive ───
+    window.updateShareRowBadges = function(shareId, updateData) {
+        if (!shareId) return;
+
+        // 1. If on /shared, update row in #sharedByMeTable
+        const row = document.getElementById(`row-share-${shareId}`) || document.querySelector(`[data-share-id="${shareId}"]`)?.closest('.file-row');
+        if (row) {
+            const badgesContainer = row.querySelector('.file-share-badges');
+            if (badgesContainer) {
+                badgesContainer.dataset.expireHours = updateData.expireHours;
+                badgesContainer.dataset.maxDownloads = updateData.maxDownloads;
+                if (updateData.hasPassword !== undefined) {
+                    badgesContainer.dataset.hasPassword = updateData.hasPassword ? 'true' : 'false';
+                }
+
+                const isPw = badgesContainer.dataset.hasPassword === 'true';
+                const pwHtml = isPw
+                    ? '<span class="badge-share-status badge-pw" title="Password Protected"><i class="fas fa-lock"></i> Password</span>'
+                    : '<span class="badge-share-status badge-public" title="Public Link"><i class="fas fa-globe"></i> Public</span>';
+
+                const ttlHtml = `<span class="badge-share-status badge-ttl" title="Time Remaining"><i class="fas fa-clock"></i> ${updateData.expireHours}h left</span>`;
+
+                const maxDl = Number(updateData.maxDownloads) || 0;
+                const dlHtml = maxDl > 0
+                    ? `<span class="badge-share-status badge-dl-limit" title="Downloads Left"><i class="fas fa-fire"></i> ${maxDl} DL left</span>`
+                    : '<span class="badge-share-status badge-dl-unlimited" title="Downloads"><i class="fas fa-download"></i> Unlimited</span>';
+
+                badgesContainer.innerHTML = `${pwHtml}\n${ttlHtml}\n${dlHtml}`;
+            }
+
+            // Also update any trigger button inside this row
+            const shareBtn = row.querySelector('.open-share-modal:not(.file-share-badges)');
+            if (shareBtn) {
+                shareBtn.dataset.expireHours = updateData.expireHours;
+                shareBtn.dataset.maxDownloads = updateData.maxDownloads;
+                if (updateData.hasPassword !== undefined) {
+                    shareBtn.dataset.hasPassword = updateData.hasPassword ? 'true' : 'false';
+                }
+            }
+        }
+
+        // 2. If on /drive, update .shared-badge-inline and dropdown button
+        const driveBadges = document.querySelectorAll(`.shared-badge-inline[data-share-id="${shareId}"], .open-share-modal[data-share-id="${shareId}"]`);
+        driveBadges.forEach(el => {
+            el.dataset.expireHours = updateData.expireHours;
+            el.dataset.maxDownloads = updateData.maxDownloads;
+            if (updateData.hasPassword !== undefined) {
+                el.dataset.hasPassword = updateData.hasPassword ? 'true' : 'false';
+            }
+        });
+    };
 
     const inviteInput = document.getElementById('invite-input');
     const invitePermission = document.getElementById('invite-permission');
