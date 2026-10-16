@@ -429,13 +429,43 @@ app.get('/drive', requireAuthWeb, (req, res) => {
 
 // 4.4 Shared Page (Protected)
 app.get('/shared', requireAuthWeb, (req, res) => {
+  // Map active shares
+  const activeShares = mockShares.map(s => {
+    const f = mockFiles.find(file => file.file_id === s.file_id) || {};
+    const remainingDownloads = s.max_downloads > 0 ? (s.max_downloads - s.download_count) : 'Unlimited';
+    const remainingHours = s.expires_at ? Math.max(0, Math.round((s.expires_at - Math.floor(Date.now() / 1000)) / 3600)) : null;
+    return {
+      id: s.file_id,
+      name: s.filename || f.filename || 'Shared File',
+      type: 'file',
+      owner: s.owner_email || s.owner_id || 'Shared Link',
+      uploadDate: new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      shareUrl: `/share/${s.share_id}`,
+      maxDownloads: s.max_downloads,
+      downloadCount: s.download_count,
+      hasPassword: s.has_password,
+      accessList: [{
+        name: s.has_password ? 'Protected (PW)' : 'Anyone with link',
+        permission: s.max_downloads > 0 ? `Limit: ${remainingDownloads}` : 'can view',
+        timeRemaining: remainingHours !== null ? `${remainingHours} hrs` : 'Unlimited'
+      }]
+    };
+  });
+
+  const defaultShared = [
+    {
+      id: 'demo-shared-doc',
+      name: 'Shared_Document.pdf',
+      type: 'file',
+      owner: 'Passakorn',
+      uploadDate: '10 Oct. 2026',
+      accessList: [{ name: 'Anan', permission: 'can view', timeRemaining: '5 days' }]
+    }
+  ];
+
   res.render('pages/shared', {
-    files: [
-      {
-        name: 'Shared_Document.pdf', type: 'file', owner: 'Passakorn', uploadDate: '10 Oct. 2026',
-        accessList: [{ name: 'Anan', permission: 'can view', timeRemaining: '5 days' }]
-      }
-    ]
+    user: req.user,
+    files: [...defaultShared, ...activeShares]
   });
 });
 
@@ -471,6 +501,55 @@ app.get('/management', requireAdminWeb, (req, res) => {
 
 app.get('/audit', requireAdminWeb, (req, res) => {
   res.render('pages/audit');
+});
+
+// 4.7 Public Share Page (Public access, no login required)
+app.get('/share/:id', async (req, res) => {
+  const shareId = req.params.id;
+  let share = null;
+
+  if (IS_MOCK_MODE) {
+    share = mockShares.find(s => s.share_id === shareId);
+    if (share && (!share.filename || !share.size)) {
+      const f = mockFiles.find(file => file.file_id === share.file_id);
+      if (f) {
+        share.filename = f.filename;
+        share.size = f.size;
+        share.category = f.category;
+      }
+    }
+  } else {
+    try {
+      const result = await docClient.send(new GetCommand({
+        TableName: SHARES_TABLE,
+        Key: { share_id: shareId }
+      }));
+      share = result.Item;
+      if (share && (!share.filename || !share.size)) {
+        const fileRes = await docClient.send(new GetCommand({
+          TableName: FILES_TABLE,
+          Key: { file_id: share.file_id }
+        }));
+        if (fileRes.Item) {
+          share.filename = fileRes.Item.filename;
+          share.size = fileRes.Item.size;
+          share.category = fileRes.Item.category;
+        }
+      }
+    } catch (err) {
+      console.error('Get share link error:', err);
+    }
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const isExpired = share ? (share.expires_at && now > share.expires_at) : true;
+  const isLimitReached = share ? (share.max_downloads > 0 && share.download_count >= share.max_downloads) : false;
+
+  res.render('pages/public-share', {
+    share,
+    isExpired,
+    isLimitReached
+  });
 });
 
 // ==========================================
@@ -793,6 +872,17 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
   const { file_id, password, maxDownloads, expireHours } = req.body;
   if (!file_id) return res.status(400).json({ error: 'file_id is required' });
 
+  // Lookup target file details
+  let fileInfo = null;
+  if (IS_MOCK_MODE) {
+    fileInfo = mockFiles.find(f => f.file_id === file_id);
+  } else {
+    try {
+      const getFileRes = await docClient.send(new GetCommand({ TableName: FILES_TABLE, Key: { file_id } }));
+      fileInfo = getFileRes.Item;
+    } catch (e) {}
+  }
+
   const shareId = `share-${crypto.randomUUID().slice(0, 8)}`;
   const hours = Number(expireHours) || 24;
   const expiresAt = Math.floor(Date.now() / 1000) + (hours * 3600); // Unix timestamp for DynamoDB TTL
@@ -802,8 +892,11 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
   const shareRecord = {
     share_id: shareId,
     file_id,
+    filename: fileInfo ? fileInfo.filename : 'Shared File',
+    size: fileInfo ? fileInfo.size : 0,
+    category: fileInfo ? fileInfo.category : 'file',
     owner_id: req.user.user_id,
-    owner_email: req.user.email,
+    owner_email: req.user.email || req.user.name || 'Owner',
     password_hash: passwordHash,
     has_password: Boolean(password),
     max_downloads: downloadLimit,
@@ -818,6 +911,8 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
       success: true,
       share_id: shareId,
       shareUrl: `/share/${shareId}`,
+      filename: shareRecord.filename,
+      size: shareRecord.size,
       hasPassword: Boolean(password),
       maxDownloads: downloadLimit,
       expiresAt: new Date(expiresAt * 1000).toISOString()
@@ -883,10 +978,11 @@ app.post('/api/shares/:id/verify', async (req, res) => {
   if (IS_MOCK_MODE) {
     share.download_count += 1;
     const file = mockFiles.find(f => f.file_id === share.file_id);
+    const resolvedFilename = (file ? file.filename : share.filename) || 'shared-file';
     return res.json({
       success: true,
-      filename: file ? file.filename : 'shared-file',
-      downloadUrl: `http://localhost:3000/mock-download/${file ? file.filename : 'file'}`,
+      filename: resolvedFilename,
+      downloadUrl: `http://localhost:3000/mock-download/${encodeURIComponent(resolvedFilename)}`,
       downloadsRemaining: share.max_downloads > 0 ? (share.max_downloads - share.download_count) : 'unlimited'
     });
   }

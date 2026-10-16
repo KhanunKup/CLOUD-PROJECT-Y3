@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= share ? share.filename : 'Shared File' %> — EasyDrive</title>
+    <!-- FontAwesome & Fonts -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', 'Kanit', sans-serif;
+        }
+
+        body {
+            background-color: #F4EFE6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .share-card {
+            background: #ffffff;
+            width: 100%;
+            max-width: 480px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(68, 54, 42, 0.1);
+            overflow: hidden;
+            border: 1px solid #e8e0d4;
+        }
+
+        .share-card-header {
+            background: #846145;
+            padding: 28px 24px;
+            text-align: center;
+            color: #ffffff;
+        }
+
+        .share-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .share-logo svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        .share-logo-text {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #E8E2D6;
+        }
+
+        .share-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #f7f3ee;
+        }
+
+        .share-card-body {
+            padding: 30px 28px;
+        }
+
+        .file-preview-box {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: #fdfbf7;
+            border: 1.5px solid #eae3d7;
+            padding: 16px 18px;
+            border-radius: 14px;
+            margin-bottom: 24px;
+        }
+
+        .file-icon-wrap {
+            width: 50px;
+            height: 50px;
+            background: #C4A071;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .file-details {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .file-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #44362A;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .file-meta {
+            font-size: 13px;
+            color: #8c8275;
+            display: flex;
+            gap: 12px;
+        }
+
+        .security-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        .badge-burn {
+            background: #fbe9e7;
+            color: #d84315;
+            border: 1px solid #ffccbc;
+        }
+
+        .badge-password {
+            background: #fff8e1;
+            color: #f57f17;
+            border: 1px solid #ffe082;
+        }
+
+        .badge-expiry {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+
+        .password-form-box {
+            margin-bottom: 20px;
+        }
+
+        .password-form-box label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #44362A;
+            margin-bottom: 6px;
+        }
+
+        .password-input-wrap {
+            position: relative;
+        }
+
+        .password-input-wrap input {
+            width: 100%;
+            padding: 12px 14px 12px 40px;
+            border: 1.5px solid #d1c7b7;
+            border-radius: 10px;
+            font-size: 14px;
+            outline: none;
+            transition: border 0.2s;
+        }
+
+        .password-input-wrap input:focus {
+            border-color: #846145;
+        }
+
+        .password-input-wrap i {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #8c8275;
+            font-size: 15px;
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ef9a9a;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 18px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .expired-notice {
+            text-align: center;
+            padding: 30px 10px;
+        }
+
+        .expired-icon {
+            font-size: 48px;
+            color: #d32f2f;
+            margin-bottom: 14px;
+        }
+
+        .expired-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #44362A;
+            margin-bottom: 8px;
+        }
+
+        .expired-desc {
+            font-size: 14px;
+            color: #736b5e;
+            line-height: 1.5;
+        }
+
+        .btn-download {
+            width: 100%;
+            background: #44362A;
+            color: #ffffff;
+            border: none;
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .btn-download:hover {
+            background: #31261d;
+        }
+
+        .btn-download:active {
+            transform: scale(0.99);
+        }
+
+        .btn-download:disabled {
+            background: #b0a498;
+            cursor: not-allowed;
+        }
+
+        .share-footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 12px;
+            color: #a89f92;
+        }
+    </style>
+</head>
+<body>
+
+<div class="share-card">
+    <div class="share-card-header">
+        <div class="share-logo">
+            <svg viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="26" cy="30" rx="20" ry="13" fill="#E8E2D6"/>
+                <ellipse cx="17" cy="26" rx="10" ry="10" fill="#E8E2D6"/>
+                <ellipse cx="33" cy="24" rx="12" ry="12" fill="#E8E2D6"/>
+                <circle cx="26" cy="20" r="9" fill="#E8E2D6"/>
+            </svg>
+            <span class="share-logo-text">EasyDrive</span>
+        </div>
+        <h1 class="share-title">Shared File Download</h1>
+    </div>
+
+    <div class="share-card-body">
+        <% if (!share || isExpired || isLimitReached) { %>
+            <div class="expired-notice">
+                <div class="expired-icon">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <h2 class="expired-title">Link Has Expired</h2>
+                <p class="expired-desc">
+                    ลิงก์นี้หมดอายุการใช้งานแล้ว หรือถูกดาวน์โหลดครบตามจำนวนครั้งที่ผู้แชร์กำหนดไว้ (Burn-After-Read)
+                </p>
+                <div style="margin-top: 20px;">
+                    <a href="/signin" style="display: inline-block; padding: 10px 20px; background: #846145; color: #fff; text-decoration: none; border-radius: 8px; font-size: 13px; font-weight: 600;">Go to EasyDrive</a>
+                </div>
+            </div>
+        <% } else { %>
+            <div class="file-preview-box">
+                <div class="file-icon-wrap">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="file-details">
+                    <div class="file-name" title="<%= share.filename %>"><%= share.filename %></div>
+                    <div class="file-meta">
+                        <span><i class="fas fa-database"></i> <%= share.size ? (share.size / 1024 / 1024).toFixed(2) + ' MB' : 'File' %></span>
+                        <span><i class="fas fa-user"></i> Shared by <%= share.owner_email %></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="security-badges">
+                <% if (share.has_password) { %>
+                    <span class="badge badge-password"><i class="fas fa-lock"></i> Password Protected</span>
+                <% } %>
+                <% if (share.max_downloads > 0) { %>
+                    <span class="badge badge-burn"><i class="fas fa-fire"></i> Limit: <%= share.max_downloads - share.download_count %> left</span>
+                <% } %>
+                <span class="badge badge-expiry"><i class="fas fa-clock"></i> Expires: <%= new Date(share.expires_at * 1000).toLocaleDateString('en-GB') %></span>
+            </div>
+
+            <div id="errorAlert" class="error-message">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span id="errorText">Invalid password</span>
+            </div>
+
+            <% if (share.has_password) { %>
+                <div class="password-form-box">
+                    <label for="sharePasswordInput">Enter Password to Download:</label>
+                    <div class="password-input-wrap">
+                        <i class="fas fa-key"></i>
+                        <input type="password" id="sharePasswordInput" placeholder="Password required" autofocus autocomplete="current-password">
+                    </div>
+                </div>
+            <% } %>
+
+            <button type="button" class="btn-download" id="downloadBtn">
+                <i class="fas fa-cloud-download-alt"></i>
+                <span>Download File</span>
+            </button>
+        <% } %>
+
+        <div class="share-footer">
+            Protected by EasyDrive Cloud Storage &copy; 2026
+        </div>
+    </div>
+</div>
+
+<% if (share && !isExpired && !isLimitReached) { %>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const downloadBtn = document.getElementById('downloadBtn');
+    const passwordInput = document.getElementById('sharePasswordInput');
+    const errorAlert = document.getElementById('errorAlert');
+    const errorText = document.getElementById('errorText');
+
+    async function handleDownload() {
+        const password = passwordInput ? passwordInput.value : '';
+        const shareId = '<%= share.share_id %>';
+
+        errorAlert.style.display = 'none';
+        downloadBtn.disabled = true;
+        const originalText = downloadBtn.innerHTML;
+        downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+
+        try {
+            const res = await fetch(`/api/shares/${shareId}/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Failed to download file');
+            }
+
+            // Start downloading
+            const a = document.createElement('a');
+            a.href = data.downloadUrl;
+            a.download = data.filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            downloadBtn.innerHTML = '<i class="fas fa-check"></i> Download Started!';
+
+            // Check if burn after read exhausted
+            if (data.downloadsRemaining === 0) {
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                setTimeout(() => {
+                    downloadBtn.disabled = false;
+                    downloadBtn.innerHTML = originalText;
+                }, 2000);
+            }
+        } catch (err) {
+            console.error('Download error:', err);
+            errorText.textContent = err.message;
+            errorAlert.style.display = 'flex';
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = originalText;
+        }
+    }
+
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', handleDownload);
+    }
+
+    if (passwordInput) {
+        passwordInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleDownload();
+            }
+        });
+    }
+});
+</script>
+<% } %>
+
+</body>
+</html>

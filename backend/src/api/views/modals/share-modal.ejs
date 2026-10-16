@@ -7,7 +7,10 @@
         
         <!-- Header -->
         <div class="share-modal-header">
-            <h2>Share this</h2>
+            <div>
+                <h2>Share this</h2>
+                <div id="shareModalFileName" style="font-size: 13px; color: #e8e2d6; margin-top: 4px; font-weight: 500;"></div>
+            </div>
             <div class="header-actions">
                 <button class="copy-link-btn" id="copyLinkBtn">
                     <!-- SVG Link Icon -->
@@ -17,6 +20,57 @@
                 <button class="close-modal-btn" id="closeShareModalBtn">
                     ✖
                 </button>
+            </div>
+        </div>
+
+        <!-- Public Link & Security Settings -->
+        <div class="share-security-section" style="background: rgba(0,0,0,0.12); padding: 14px 18px; border-radius: 10px; margin-bottom: 22px;">
+            <div style="font-weight: 700; color: #fff; margin-bottom: 12px; font-size: 15px; display: flex; align-items: center; justify-content: space-between;">
+                <span style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-shield-alt"></i> Public Link &amp; Access Control
+                </span>
+                <span id="shareStatusBadge" style="font-size: 12px; font-weight: normal; color: #e2e2e2;"></span>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div>
+                    <label style="display: block; font-size: 13px; color: #e2e2e2; margin-bottom: 5px; font-weight: 500;">
+                        <i class="fas fa-clock"></i> Expiration (TTL)
+                    </label>
+                    <select id="shareExpireHours" style="width: 100%; background: #e2e2e2; border: none; border-radius: 6px; padding: 8px 10px; font-size: 14px; color: #333; outline: none; font-weight: 500;">
+                        <option value="1">1 hour</option>
+                        <option value="24" selected>24 hours (1 day)</option>
+                        <option value="168">7 days</option>
+                        <option value="720">30 days</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="display: block; font-size: 13px; color: #e2e2e2; margin-bottom: 5px; font-weight: 500;">
+                        <i class="fas fa-fire"></i> Download Limit
+                    </label>
+                    <select id="shareMaxDownloads" style="width: 100%; background: #e2e2e2; border: none; border-radius: 6px; padding: 8px 10px; font-size: 14px; color: #333; outline: none; font-weight: 500;">
+                        <option value="0" selected>Unlimited</option>
+                        <option value="1">1 download (Burn-After-Read)</option>
+                        <option value="5">5 downloads</option>
+                        <option value="10">10 downloads</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 12px;">
+                <label style="display: block; font-size: 13px; color: #e2e2e2; margin-bottom: 5px; font-weight: 500;">
+                    <i class="fas fa-lock"></i> Passcode Protection (Optional)
+                </label>
+                <input type="password" id="sharePassword" placeholder="Leave empty for public link" style="width: 100%; background: #e2e2e2; border: none; border-radius: 6px; padding: 8px 12px; font-size: 14px; color: #333; outline: none; box-sizing: border-box;">
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
+                <button type="button" id="createShareLinkBtn" style="flex: 1; background: #555e46; color: white; border: none; border-radius: 8px; padding: 10px; font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.2s;">
+                    <i class="fas fa-link"></i> <span id="createShareLinkText">Create &amp; Copy Share Link</span>
+                </button>
+            </div>
+            <div id="shareLinkResultBox" style="display: none; margin-top: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #fff; word-break: break-all;">
+                <span style="color: #d1d5c9;">Generated URL: </span><a id="shareGeneratedLink" href="#" target="_blank" style="color: #fff; font-weight: 600; text-decoration: underline;"></a>
             </div>
         </div>
 

@@ -10,6 +10,23 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
     // ถ้าเปิดจากปุ่มไฟล์ใหม่ (triggerBtn ส่งมา)
     if (triggerBtn) {
         window.activeShareFileBtn = triggerBtn;
+
+        // แสดงชื่อไฟล์ที่กำลังแชร์
+        const fileNameEl = document.getElementById('shareModalFileName');
+        if (fileNameEl) {
+            fileNameEl.textContent = 'File: ' + (triggerBtn.dataset.filename || 'Selected File');
+        }
+
+        // รีเซ็ตค่า Security Settings กลับเป็นค่าเริ่มต้น
+        const expireSelect = document.getElementById('shareExpireHours');
+        if (expireSelect) expireSelect.value = '24';
+        const maxDownSelect = document.getElementById('shareMaxDownloads');
+        if (maxDownSelect) maxDownSelect.value = '0';
+        const passInput = document.getElementById('sharePassword');
+        if (passInput) passInput.value = '';
+        const resultBox = document.getElementById('shareLinkResultBox');
+        if (resultBox) resultBox.style.display = 'none';
+
         const serverAnyone = accessList.find(acc => acc.name && (acc.name.toLowerCase() === 'anyone' || acc.name.toLowerCase() === 'everyone'));
         if (serverAnyone) {
             // ใช้ค่าที่ไฟล์นี้เคยตั้งไว้ หรือค่าที่ส่งมาจาก server
@@ -102,19 +119,97 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    if (copyLinkBtn && copyLinkText) {
-        copyLinkBtn.addEventListener('click', () => {
-            // โค้ดจำลองการคัดลอกลิงก์
-            // navigator.clipboard.writeText("https://easydrive.com/share/...");
-            
-            // เปลี่ยนข้อความเพื่อ Feedback ผู้ใช้
-            copyLinkText.textContent = 'Copied!';
-            
-            // เปลี่ยนข้อความกลับหลังจาก 2 วินาที
+    const createShareLinkBtn = document.getElementById('createShareLinkBtn');
+    const createShareLinkText = document.getElementById('createShareLinkText');
+
+    async function handleCreateShareLink() {
+        const fileId = window.activeShareFileBtn ? window.activeShareFileBtn.dataset.id : null;
+        if (!fileId) {
+            if (window.showToast) window.showToast('Please select a file to share first', 'warning');
+            return;
+        }
+
+        const expireHours = document.getElementById('shareExpireHours') ? document.getElementById('shareExpireHours').value : 24;
+        const maxDownloads = document.getElementById('shareMaxDownloads') ? document.getElementById('shareMaxDownloads').value : 0;
+        const password = document.getElementById('sharePassword') ? document.getElementById('sharePassword').value.trim() : '';
+
+        const origBtnText = createShareLinkText ? createShareLinkText.textContent : 'Create & Copy Share Link';
+        if (createShareLinkBtn) createShareLinkBtn.disabled = true;
+        if (createShareLinkText) createShareLinkText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+
+        try {
+            const res = await fetch('/api/shares', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    file_id: fileId,
+                    expireHours: Number(expireHours),
+                    maxDownloads: Number(maxDownloads),
+                    password: password || undefined
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Failed to generate share link');
+            }
+
+            const fullUrl = window.location.origin + data.shareUrl;
+
+            // Copy to clipboard
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(fullUrl);
+                } else {
+                    const tempInput = document.createElement('input');
+                    tempInput.value = fullUrl;
+                    document.body.appendChild(tempInput);
+                    tempInput.select();
+                    document.execCommand('copy');
+                    tempInput.remove();
+                }
+            } catch (clipErr) {
+                console.warn('Clipboard write failed, link displayed in modal', clipErr);
+            }
+
+            // Display in result box
+            const resultBox = document.getElementById('shareLinkResultBox');
+            const linkA = document.getElementById('shareGeneratedLink');
+            if (resultBox && linkA) {
+                linkA.href = fullUrl;
+                linkA.textContent = fullUrl;
+                resultBox.style.display = 'block';
+            }
+
+            if (window.showToast) {
+                window.showToast('Share link created & copied to clipboard!', 'success');
+            }
+
+            if (createShareLinkText) createShareLinkText.innerHTML = '<i class="fas fa-check"></i> Link Copied!';
+            if (copyLinkText) copyLinkText.textContent = 'Copied!';
+
             setTimeout(() => {
-                copyLinkText.textContent = 'copy link';
-            }, 1000);
-        });
+                if (createShareLinkBtn) createShareLinkBtn.disabled = false;
+                if (createShareLinkText) createShareLinkText.textContent = origBtnText;
+                if (copyLinkText) copyLinkText.textContent = 'copy link';
+            }, 2500);
+
+        } catch (err) {
+            console.error('Share generation error:', err);
+            if (window.showToast) {
+                window.showToast(`Error: ${err.message}`, 'error');
+            }
+            if (createShareLinkBtn) createShareLinkBtn.disabled = false;
+            if (createShareLinkText) createShareLinkText.textContent = origBtnText;
+        }
+    }
+
+    if (createShareLinkBtn) {
+        createShareLinkBtn.addEventListener('click', handleCreateShareLink);
+    }
+
+    if (copyLinkBtn) {
+        copyLinkBtn.addEventListener('click', handleCreateShareLink);
     }
 
     const inviteInput = document.getElementById('invite-input');

@@ -125,8 +125,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (copyBtn) {
             e.stopPropagation();
             const textSpan = copyBtn.querySelector('.copy-link-text') || copyBtn;
-            if (textSpan) {
-                const originalText = textSpan.textContent;
+            const originalText = textSpan.textContent;
+            textSpan.textContent = 'Generating...';
+
+            const fileId = copyBtn.dataset.id;
+            if (fileId) {
+                fetch('/api/shares', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_id: fileId, expireHours: 24, maxDownloads: 0 })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.shareUrl) {
+                        const fullUrl = window.location.origin + data.shareUrl;
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(fullUrl);
+                        }
+                        if (window.showToast) {
+                            window.showToast('Share link copied to clipboard!', 'success');
+                        }
+                        textSpan.textContent = 'Copied!';
+                    } else {
+                        textSpan.textContent = originalText;
+                    }
+                })
+                .catch(err => {
+                    console.error('Quick copy share link failed:', err);
+                    textSpan.textContent = originalText;
+                })
+                .finally(() => {
+                    setTimeout(() => {
+                        textSpan.textContent = originalText;
+                    }, 1500);
+                });
+            } else {
                 textSpan.textContent = 'Copied!';
                 setTimeout(() => {
                     textSpan.textContent = originalText;
