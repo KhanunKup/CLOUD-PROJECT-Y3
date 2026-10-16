@@ -1,4 +1,91 @@
-/node_modules
-package-lock.json
-package.json
+# ==========================================
+# 1. Node.js & Dependencies
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ==========================================
+# 2. Environment Variables & Secrets
+# ==========================================
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+# ยกเว้นไฟล์ template ตัวอย่าง
+!.env.example
+
+# ==========================================
+# 3. Terraform State & Files
+# ==========================================
+# โฟลเดอร์ดาวน์โหลด Provider ของ Terraform
+**/.terraform/
+.terraform/
+
+# ไฟล์สถานะของโครงสร้างพื้นฐาน (ห้าม Commit เด็ดขาด)
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# ไฟล์ตัวแปรที่อาจมีความลับ
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# อนุญาตให้ Commit ไฟล์ Lock ตาม Best Practice ของ HashiCorp
+!.terraform.lock.hcl
+
+# ==========================================
+# 4. Lambda Build & Archive Artifacts
+# ==========================================
+# ไฟล์ Zip ที่สร้างขึ้นโดย archive_file ใน infrastructure
+*.zip
+infrastructure/api_function.zip
+infrastructure/worker_function.zip
+
+# ==========================================
+# 5. Operating System & Editor Files
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+
+# Editors & IDEs
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# ==========================================
+# 6. Logs & Temp Files
+# ==========================================
+logs/
+*.log
+*.tmp
+.cache/
+
