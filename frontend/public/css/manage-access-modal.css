@@ -1,5 +1,6 @@
 /* public/css/manage-access-modal.css */
-.manage-access-overlay {
+.manage-access-overlay,
+.manage-access-modal-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -9,7 +10,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1050; /* higher than share modal */
+    z-index: 20000 !important; /* higher than share modal (10000) */
     font-family: 'Outfit', 'Kanit', sans-serif;
 }
 

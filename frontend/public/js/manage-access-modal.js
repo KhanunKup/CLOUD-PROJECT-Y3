@@ -185,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Show modal
             if (manageModal) {
                 resetPasswordVisibility();
+                manageModal.style.zIndex = '20000';
                 manageModal.style.display = 'flex';
             }
         }

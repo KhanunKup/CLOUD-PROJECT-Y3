@@ -488,8 +488,9 @@ body {
     z-index: 10000 !important;
 }
 
-.manage-access-modal-overlay {
-    z-index: 10000 !important;
+.manage-access-modal-overlay,
+.manage-access-overlay {
+    z-index: 20000 !important;
 }
 
 /* Empty State */
