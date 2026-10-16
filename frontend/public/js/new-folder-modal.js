@@ -37,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitCreateFolder = async () => {
         const folderName = folderNameInput ? folderNameInput.value.trim() : '';
         const finalName = folderName || 'Folder #1';
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentFolderId = urlParams.get('folder') || null;
 
         closeNewFolderModal();
 
@@ -44,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/folders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folderName: finalName })
+                body: JSON.stringify({ folderName: finalName, folder_id: currentFolderId })
             });
 
             const data = await response.json();
@@ -66,13 +68,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const safeName = finalName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
                 const newRow = document.createElement('div');
-                newRow.className = 'file-row';
+                newRow.className = 'file-row folder-row';
+                newRow.dataset.id = fileId;
+                newRow.dataset.name = safeName;
+                newRow.dataset.type = 'folder';
+                newRow.dataset.folderId = currentFolderId || '';
+                newRow.dataset.category = 'folder';
+                newRow.dataset.tags = 'folder';
                 newRow.innerHTML = `
                     <div class="file-name">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                         </svg>
-                        ${safeName}
+                        <span class="file-name-text">${safeName}</span>
+                        <div class="file-tags-wrapper">
+                            <span class="file-tag-badge" title="Tag: folder">folder</span>
+                        </div>
                     </div>
                     <div class="file-owner">
                         <div class="owner-avatar">
@@ -89,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <div class="options-dropdown folder-options">
+                            <button class="option-item open-folder-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-folder-open"></i> Open</button>
                             <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                             <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                             <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>

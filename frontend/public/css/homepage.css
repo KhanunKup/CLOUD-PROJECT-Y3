@@ -716,4 +716,66 @@ body {
     background-color: rgba(68, 54, 42, 0.15);
 }
 
+/* ─── Drive Breadcrumbs ─────────────────────────────────── */
+.drive-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 18px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 14.5px;
+    flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.25);
+    padding: 8px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(68, 54, 42, 0.1);
+}
+
+.crumb-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #6B5B4D;
+    text-decoration: none;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+
+.crumb-link:hover {
+    background-color: rgba(68, 54, 42, 0.12);
+    color: #2D251E;
+}
+
+.crumb-separator {
+    color: #8C7B6B;
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.crumb-current {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    color: #2D251E;
+    padding: 4px 8px;
+}
+
+.crumb-current i {
+    color: #846145;
+}
+
+/* ─── Folder Row Interaction ────────────────────────────── */
+.folder-row {
+    cursor: pointer;
+    user-select: none;
+}
+
+.folder-row:hover {
+    background-color: rgba(68, 54, 42, 0.08);
+}
+
+
 

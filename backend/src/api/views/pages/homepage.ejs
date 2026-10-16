@@ -63,6 +63,22 @@
             </button>
         </div>
 
+        <!-- Breadcrumb Trail -->
+        <div class="drive-breadcrumbs" id="driveBreadcrumbs">
+            <% (typeof breadcrumbs !== 'undefined' && breadcrumbs && breadcrumbs.length > 0 ? breadcrumbs : [{ name: 'My Drive', url: '/drive' }]).forEach(function(crumb, index, arr) { %>
+                <% if (index === arr.length - 1) { %>
+                    <span class="crumb-current">
+                        <i class="fas <%= index === 0 ? 'fa-hdd' : 'fa-folder-open' %>"></i> <%= crumb.name %>
+                    </span>
+                <% } else { %>
+                    <a href="<%= crumb.url %>" class="crumb-link">
+                        <i class="fas <%= index === 0 ? 'fa-hdd' : 'fa-folder' %>"></i> <%= crumb.name %>
+                    </a>
+                    <span class="crumb-separator"><i class="fas fa-chevron-right"></i></span>
+                <% } %>
+            <% }); %>
+        </div>
+
         <!-- File Table -->
         <div class="file-table-container">
             <div class="file-table-header">
@@ -75,9 +91,11 @@
             <!-- รายการไฟล์จาก Backend -->
             <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
                 <% files.forEach(function(file) { %>
-                <div class="file-row"
+                <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %>"
                      data-id="<%= file.id %>"
                      data-name="<%= file.name %>"
+                     data-type="<%= file.type %>"
+                     data-folder-id="<%= file.folderId || '' %>"
                      data-category="<%= file.category || 'other' %>"
                      data-tags="<%= (file.tags || []).join(',') %>">
                     <div class="file-name">
@@ -136,7 +154,7 @@
                 </div>
                 <% }); %>
             <% } else { %>
-                <div class="empty-state">No files found.</div>
+                <div class="empty-state"><%= (typeof currentFolderId !== 'undefined' && currentFolderId) ? 'This folder is empty. Click "+ New" to add files or subfolders.' : 'No files found.' %></div>
             <% } %>
         </div>
     </main>

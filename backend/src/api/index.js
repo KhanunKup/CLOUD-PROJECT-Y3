@@ -75,8 +75,22 @@ if (!IS_MOCK_MODE) {
 // ==========================================
 let mockFiles = [
   {
+    file_id: 'folder-001',
+    owner_id: 'user-normal-01',
+    folder_id: null,
+    filename: 'Projects',
+    size: 0,
+    category: 'folder',
+    tags: ['folder'],
+    s3_key: 'folders/user-normal-01/folder-001/',
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 3).toISOString()
+  },
+  {
     file_id: 'file-001',
     owner_id: 'user-normal-01',
+    folder_id: null,
     filename: 'Project_Proposal.pdf',
     size: 2450000,
     category: 'document',
@@ -89,6 +103,7 @@ let mockFiles = [
   {
     file_id: 'file-002',
     owner_id: 'user-normal-01',
+    folder_id: null,
     filename: 'Architecture_Diagram.png',
     size: 5120000,
     category: 'image',
@@ -99,8 +114,22 @@ let mockFiles = [
     updated_at: new Date(Date.now() - 86400000).toISOString()
   },
   {
+    file_id: 'file-004',
+    owner_id: 'user-normal-01',
+    folder_id: 'folder-001',
+    filename: 'Meeting_Notes.docx',
+    size: 1120000,
+    category: 'document',
+    tags: ['document', 'docx', 'notes'],
+    file_hash: 'd4e5f6a1b2c37890123456789abcdef0123456789abcdef0123456789abcdef0',
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
+  },
+  {
     file_id: 'file-003',
     owner_id: 'user-normal-01',
+    folder_id: null,
     filename: 'Dataset_Backup.zip',
     size: 45000000,
     category: 'archive',
@@ -270,6 +299,18 @@ function getUserStorage(userId) {
     breakdownFormatted,
     breakdownPercent
   };
+}
+
+function getFolderDescendantIds(folderId) {
+  const descendantIds = [];
+  const children = mockFiles.filter(f => f.folder_id === folderId);
+  for (const child of children) {
+    descendantIds.push(child.file_id);
+    if (child.category === 'folder') {
+      descendantIds.push(...getFolderDescendantIds(child.file_id));
+    }
+  }
+  return descendantIds;
 }
 
 function recordAuditLog({ user, action, level = 'info', details = '', req = null }) {
@@ -551,15 +592,50 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
 
 // 4.3 Drive Page (Protected)
 app.get('/drive', requireAuthWeb, (req, res) => {
+  const currentFolderId = req.query.folder ? String(req.query.folder).trim() : null;
+  const currentFolder = currentFolderId ? mockFiles.find(f => f.file_id === currentFolderId && f.category === 'folder') : null;
+
+  // Build breadcrumb ancestry trail
+  const breadcrumbs = [{ name: 'My Drive', id: null, url: '/drive' }];
+  if (currentFolder) {
+    const ancestors = [];
+    let curr = currentFolder;
+    const visited = new Set();
+    while (curr && !visited.has(curr.file_id)) {
+      visited.add(curr.file_id);
+      ancestors.unshift({
+        name: curr.filename,
+        id: curr.file_id,
+        url: `/drive?folder=${curr.file_id}`
+      });
+      if (curr.folder_id) {
+        curr = mockFiles.find(f => f.file_id === curr.folder_id && f.category === 'folder');
+      } else {
+        break;
+      }
+    }
+    breadcrumbs.push(...ancestors);
+  }
+
   const activeFiles = mockFiles.filter(f => {
     if (f.status !== 'active') return false;
-    if (req.user.role === 'admin') return true;
-    return f.owner_id === req.user.user_id || f.owner_id === 'demo-user';
+    if (req.user.role !== 'admin' && !(f.owner_id === req.user.user_id || f.owner_id === 'demo-user')) return false;
+
+    // Filter by folder hierarchy
+    if (currentFolderId) {
+      return f.folder_id === currentFolderId;
+    } else {
+      return !f.folder_id || f.folder_id === 'root';
+    }
   });
+
   const storage = getUserStorage(req.user.user_id);
   res.render('pages/homepage', {
     user: req.user,
     storage,
+    currentFolderId,
+    currentFolder,
+    breadcrumbs,
     files: activeFiles.map(f => {
       const share = mockShares.find(s => s.file_id === f.file_id);
       const remainingDownloads = share && share.max_downloads > 0 ? Math.max(0, share.max_downloads - share.download_count) : 'Unlimited';
@@ -569,6 +645,7 @@ app.get('/drive', requireAuthWeb, (req, res) => {
         id: f.file_id,
         name: f.filename,
         type: f.category === 'folder' ? 'folder' : 'file',
+        folderId: f.folder_id || null,
         category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
         tags: Array.isArray(f.tags) ? f.tags : (f.category ? [f.category] : []),
         owner: f.owner_id === req.user.user_id ? 'me' : (f.owner_id === 'demo-user' ? 'me' : f.owner_id),
@@ -820,15 +897,17 @@ app.get('/api/files', authMiddleware, async (req, res) => {
 
 // 5.2.1 Create Folder
 app.post('/api/folders', authMiddleware, async (req, res) => {
-  const { folderName } = req.body;
+  const { folderName, folder_id, parent_id } = req.body;
   if (!folderName) {
     return res.status(400).json({ error: 'folderName is required' });
   }
 
+  const parentFolderId = folder_id || parent_id || null;
   const fileId = `folder-${crypto.randomUUID()}`;
   const newFolder = {
     file_id: fileId,
     owner_id: req.user.user_id,
+    folder_id: parentFolderId,
     filename: folderName,
     size: 0,
     category: 'folder',
@@ -861,19 +940,23 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
 // 5.3 Request Presigned Upload URL
 app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
   const filename = req.body.filename || req.body.name;
-  const { size, contentType } = req.body;
+  const { size, contentType, folder_id, parent_id } = req.body;
+  const parentFolderId = folder_id || parent_id || null;
   if (!filename || !size) {
     return res.status(400).json({ error: 'filename and size are required' });
   }
 
   const fileId = `file-${crypto.randomUUID()}`;
-  const s3Key = `uploads/${req.user.user_id}/${fileId}/${filename}`;
+  const s3Key = parentFolderId
+    ? `uploads/${req.user.user_id}/${parentFolderId}/${fileId}/${filename}`
+    : `uploads/${req.user.user_id}/${fileId}/${filename}`;
   const category = getCategoryFromExtension(filename);
 
   if (IS_MOCK_MODE) {
     const mockFileRecord = {
       file_id: fileId,
       owner_id: req.user.user_id,
+      folder_id: parentFolderId,
       filename,
       size: Number(size),
       category,
@@ -913,6 +996,7 @@ app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
     const newFile = {
       file_id: fileId,
       owner_id: req.user.user_id,
+      folder_id: parentFolderId,
       filename,
       size: Number(size),
       category,
@@ -1057,15 +1141,30 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
     const index = mockFiles.findIndex(f => f.file_id === fileId && canUserAccessFile(f, req.user));
     if (index === -1) return res.status(404).json({ error: 'File not found' });
 
+    const targetFile = mockFiles[index];
+    const isFolder = targetFile.category === 'folder';
+    const descendantIds = isFolder ? getFolderDescendantIds(fileId) : [];
+
     if (isPermanent) {
       const deletedFile = mockFiles.splice(index, 1)[0];
-      recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Permanently deleted file "${deletedFile ? deletedFile.filename : fileId}"` });
-      return res.json({ success: true, message: 'File deleted permanently' });
+      if (descendantIds.length > 0) {
+        mockFiles = mockFiles.filter(f => !descendantIds.includes(f.file_id));
+      }
+      recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Permanently deleted ${isFolder ? 'folder' : 'file'} "${deletedFile ? deletedFile.filename : fileId}"${descendantIds.length > 0 ? ` and ${descendantIds.length} nested item(s)` : ''}` });
+      return res.json({ success: true, message: `${isFolder ? 'Folder' : 'File'} deleted permanently` });
     } else {
-      mockFiles[index].status = 'trash';
-      mockFiles[index].trashed_at = new Date().toISOString();
-      recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved file "${mockFiles[index].filename}" to trash` });
-      return res.json({ success: true, message: 'File moved to trash' });
+      targetFile.status = 'trash';
+      targetFile.trashed_at = new Date().toISOString();
+      if (descendantIds.length > 0) {
+        mockFiles.forEach(f => {
+          if (descendantIds.includes(f.file_id)) {
+            f.status = 'trash';
+            f.trashed_at = new Date().toISOString();
+          }
+        });
+      }
+      recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved ${isFolder ? 'folder' : 'file'} "${targetFile.filename}" to trash${descendantIds.length > 0 ? ` and ${descendantIds.length} nested item(s)` : ''}` });
+      return res.json({ success: true, message: `${isFolder ? 'Folder' : 'File'} moved to trash` });
     }
   }
 
@@ -1110,8 +1209,19 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
     if (!file) return res.status(404).json({ error: 'File not found' });
     file.status = 'active';
     delete file.trashed_at;
-    recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored file "${file.filename}" from trash` });
-    return res.json({ success: true, message: 'File restored successfully', file });
+
+    if (file.category === 'folder') {
+      const descendantIds = getFolderDescendantIds(fileId);
+      mockFiles.forEach(f => {
+        if (descendantIds.includes(f.file_id)) {
+          f.status = 'active';
+          delete f.trashed_at;
+        }
+      });
+    }
+
+    recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored ${file.category === 'folder' ? 'folder' : 'file'} "${file.filename}" from trash` });
+    return res.json({ success: true, message: 'Restored successfully', file });
   }
 
   try {

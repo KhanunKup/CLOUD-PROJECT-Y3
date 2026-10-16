@@ -665,4 +665,42 @@ document.addEventListener('DOMContentLoaded', () => {
             storageSection.classList.toggle('popover-open');
         });
     }
+
+    // ─── Folder Navigation ───
+    // 1. Double click on folder row
+    document.addEventListener('dblclick', (e) => {
+        const folderRow = e.target.closest('.folder-row');
+        if (folderRow) {
+            if (e.target.closest('.options-wrapper, .options-dropdown, button')) return;
+            const folderId = folderRow.dataset.id;
+            if (folderId) {
+                window.location.href = `/drive?folder=${encodeURIComponent(folderId)}`;
+            }
+        }
+    });
+
+    // 2. Single click on folder name
+    document.addEventListener('click', (e) => {
+        const folderNameEl = e.target.closest('.folder-row .file-name');
+        if (folderNameEl) {
+            if (e.target.closest('.shared-badge-inline, .file-tag-badge, .options-wrapper, button')) return;
+            const folderRow = folderNameEl.closest('.folder-row');
+            const folderId = folderRow ? folderRow.dataset.id : null;
+            if (folderId) {
+                window.location.href = `/drive?folder=${encodeURIComponent(folderId)}`;
+            }
+        }
+    });
+
+    // 3. Click 'Open' in folder options dropdown
+    document.addEventListener('click', (e) => {
+        const openBtn = e.target.closest('.open-folder-action');
+        if (openBtn) {
+            e.stopPropagation();
+            const folderId = openBtn.dataset.id;
+            if (folderId) {
+                window.location.href = `/drive?folder=${encodeURIComponent(folderId)}`;
+            }
+        }
+    });
 });

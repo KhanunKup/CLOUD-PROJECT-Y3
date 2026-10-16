@@ -380,6 +380,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let successCount = 0;
 
+            const urlParams = new URLSearchParams(window.location.search);
+            const currentFolderId = urlParams.get('folder') || null;
+
             try {
                 for (const item of selectedFiles) {
                     const isFolder = item.type === 'folder';
@@ -391,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const res = await fetch('/api/folders', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ folderName: item.name })
+                            body: JSON.stringify({ folderName: item.name, folder_id: currentFolderId })
                         });
                         const data = await res.json();
                         if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create folder');
@@ -408,7 +411,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             body: JSON.stringify({
                                 filename: item.name,
                                 size: fileSize,
-                                contentType: contentType
+                                contentType: contentType,
+                                folder_id: currentFolderId
                             })
                         });
 
@@ -455,6 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         const menuContent = isFolder
                             ? `<div class="options-dropdown folder-options">
+                                   <button class="option-item open-folder-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-folder-open"></i> Open</button>
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
@@ -474,9 +479,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                </div>`;
 
                         const newRow = document.createElement('div');
-                        newRow.className = 'file-row';
+                        newRow.className = isFolder ? 'file-row folder-row' : 'file-row';
                         newRow.dataset.id = fileId;
                         newRow.dataset.name = safeName;
+                        newRow.dataset.type = isFolder ? 'folder' : 'file';
+                        newRow.dataset.folderId = currentFolderId || '';
                         newRow.dataset.category = fileCat;
                         newRow.dataset.tags = tagsJoined;
                         newRow.innerHTML = `
