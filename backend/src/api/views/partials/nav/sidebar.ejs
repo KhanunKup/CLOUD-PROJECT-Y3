@@ -101,11 +101,13 @@
     color: #E8E2D6;
   }
 
-  /* Storage section — Figma: Rectangle 33 (#000000 bar, Rect 34 filled %) */
+  /* Storage section — Multi-color Breakdown & Popover */
   .sidebar-storage {
     width: 100%;
     padding: 20px 14px 8px 14px;
     margin-top: auto;
+    position: relative;
+    cursor: pointer;
   }
 
   .sidebar-storage-label {
@@ -121,16 +123,129 @@
   .sidebar-storage-track {
     width: 100%;
     height: 9px;
-    background-color: #E8E2D6;    /* Figma: Rectangle 33 = #000 but inverted */
+    background-color: #E8E2D6;
     border-radius: 999px;
     overflow: hidden;
+    display: flex;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.2);
   }
+
+  .storage-seg {
+    height: 100%;
+    transition: width 0.3s ease;
+  }
+  .storage-seg.seg-doc { background-color: #5B9BD5; } /* Document Blue */
+  .storage-seg.seg-img { background-color: #ED7D31; } /* Image Orange */
+  .storage-seg.seg-archive { background-color: #99738E; } /* Archive Purple */
+  .storage-seg.seg-other { background-color: #A5A5A5; } /* Other Gray */
 
   .sidebar-storage-fill {
     height: 100%;
-    width: 45%;
-    background-color: #C4A070;    /* Figma: Rectangle 34 fill #C4A070 */
+    width: 0%;
+    background-color: #C4A070;
     border-radius: 999px;
+    transition: width 0.3s ease;
+  }
+
+  /* Popover */
+  .storage-popover {
+    display: none;
+    position: fixed;
+    bottom: 90px;
+    left: 170px;
+    width: 230px;
+    background: #FFFFFF;
+    color: #44362A;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    padding: 14px 16px;
+    z-index: 1000;
+    font-family: 'Outfit', sans-serif;
+    pointer-events: none;
+  }
+
+  .sidebar-storage:hover .storage-popover,
+  .sidebar-storage.popover-open .storage-popover {
+    display: block;
+    pointer-events: auto;
+  }
+
+  .storage-popover::after {
+    content: '';
+    position: absolute;
+    bottom: 20px;
+    left: -7px;
+    border-width: 7px 7px 7px 0;
+    border-style: solid;
+    border-color: transparent #FFFFFF transparent transparent;
+  }
+
+  .storage-popover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    border-bottom: 1px solid #ECECEC;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    color: #6B5B4D;
+  }
+
+  .storage-popover-header .popover-total {
+    font-size: 10px;
+    font-weight: 500;
+    color: #8C7B6B;
+  }
+
+  .storage-popover-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font-size: 11px;
+  }
+
+  .popover-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .popover-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .popover-dot.dot-doc { background-color: #5B9BD5; }
+  .popover-dot.dot-img { background-color: #ED7D31; }
+  .popover-dot.dot-archive { background-color: #99738E; }
+  .popover-dot.dot-other { background-color: #A5A5A5; }
+
+  .popover-cat {
+    flex: 1;
+    color: #44362A;
+  }
+
+  .popover-val {
+    font-weight: 600;
+    color: #2D251E;
+    font-size: 11px;
+  }
+
+  .storage-popover-footer {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #E0E0E0;
+    font-size: 10px;
+    color: #7A6F64;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .storage-popover-footer strong {
+    color: #2E7D32;
   }
 
   /* Bottom user profile — Figma: Rectangle 50 = #E8E2D6, w=370 h=80 */
@@ -274,17 +389,59 @@
 
   </nav>
 
-  <!-- Storage bar — Figma: Rect33 track + Rect34 fill (#C4A070) -->
-  <div class="sidebar-storage">
+  <!-- Storage bar — Multi-color Segments & Breakdown Popover -->
+  <div class="sidebar-storage" id="sidebarStorageSection">
     <div class="sidebar-storage-label" style="display: flex; justify-content: space-between; align-items: center;">
       <span>STORAGE</span>
-      <span style="font-size: 8.5px; opacity: 0.85;"><%= typeof storage !== 'undefined' && storage ? storage.percent + '%' : '0%' %></span>
+      <span class="storage-percent-label" style="font-size: 8.5px; opacity: 0.85;"><%= typeof storage !== 'undefined' && storage ? storage.percent + '%' : '0%' %></span>
     </div>
-    <div class="sidebar-storage-track" title="<%= typeof storage !== 'undefined' && storage ? storage.percent + '%' : '0%' %>">
-      <div class="sidebar-storage-fill" style="width: <%= typeof storage !== 'undefined' && storage ? Math.min(100, Math.max(2, storage.percent)) : 0 %>%;"></div>
+    <div class="sidebar-storage-track" id="sidebarStorageTrack" title="Click or hover for storage breakdown">
+      <% if (typeof storage !== 'undefined' && storage && storage.breakdownPercent) { %>
+        <% const bp = storage.breakdownPercent; %>
+        <div class="storage-seg seg-doc" style="width: <%= bp.document || 0 %>%;" title="Documents: <%= storage.breakdownFormatted ? storage.breakdownFormatted.document : '' %>"></div>
+        <div class="storage-seg seg-img" style="width: <%= bp.image || 0 %>%;" title="Images: <%= storage.breakdownFormatted ? storage.breakdownFormatted.image : '' %>"></div>
+        <div class="storage-seg seg-archive" style="width: <%= bp.archive || 0 %>%;" title="Archives: <%= storage.breakdownFormatted ? storage.breakdownFormatted.archive : '' %>"></div>
+        <div class="storage-seg seg-other" style="width: <%= (bp.other || 0) + (bp.video || 0) + (bp.audio || 0) %>%;" title="Other: <%= storage.breakdownFormatted ? storage.breakdownFormatted.other : '' %>"></div>
+      <% } else { %>
+        <div class="sidebar-storage-fill" style="width: <%= typeof storage !== 'undefined' && storage ? Math.min(100, Math.max(2, storage.percent)) : 0 %>%;"></div>
+      <% } %>
     </div>
-    <div style="font-size: 8.5px; color: #E8E2D6; margin-top: 5px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-      <%= typeof storage !== 'undefined' && storage ? storage.formattedUsed + ' / ' + storage.formattedQuota : '0 B / 10 GB' %>
+    <div class="storage-text-summary" style="font-size: 8.5px; color: #E8E2D6; margin-top: 5px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+      <span class="storage-used-quota-text"><%= typeof storage !== 'undefined' && storage ? storage.formattedUsed + ' / ' + storage.formattedQuota : '0 B / 10 GB' %></span>
+    </div>
+
+    <!-- Storage Popover Card -->
+    <div class="storage-popover" id="storagePopover">
+      <div class="storage-popover-header">
+        <span>Storage Breakdown</span>
+        <span class="popover-total"><%= typeof storage !== 'undefined' && storage ? storage.formattedUsed : '0 B' %></span>
+      </div>
+      <div class="storage-popover-list">
+        <div class="popover-item">
+          <span class="popover-dot dot-doc"></span>
+          <span class="popover-cat">Documents</span>
+          <span class="popover-val doc-val"><%= (typeof storage !== 'undefined' && storage && storage.breakdownFormatted) ? storage.breakdownFormatted.document : '0 B' %></span>
+        </div>
+        <div class="popover-item">
+          <span class="popover-dot dot-img"></span>
+          <span class="popover-cat">Images</span>
+          <span class="popover-val img-val"><%= (typeof storage !== 'undefined' && storage && storage.breakdownFormatted) ? storage.breakdownFormatted.image : '0 B' %></span>
+        </div>
+        <div class="popover-item">
+          <span class="popover-dot dot-archive"></span>
+          <span class="popover-cat">Archives</span>
+          <span class="popover-val archive-val"><%= (typeof storage !== 'undefined' && storage && storage.breakdownFormatted) ? storage.breakdownFormatted.archive : '0 B' %></span>
+        </div>
+        <div class="popover-item">
+          <span class="popover-dot dot-other"></span>
+          <span class="popover-cat">Other files</span>
+          <span class="popover-val other-val"><%= (typeof storage !== 'undefined' && storage && storage.breakdownFormatted) ? storage.breakdownFormatted.other : '0 B' %></span>
+        </div>
+      </div>
+      <div class="storage-popover-footer">
+        <span>Free: <strong class="free-val"><%= (typeof storage !== 'undefined' && storage && storage.formattedFree) ? storage.formattedFree : '10 GB' %></strong></span>
+        <span>Quota: <%= (typeof storage !== 'undefined' && storage) ? storage.formattedQuota : '10 GB' %></span>
+      </div>
     </div>
   </div>
 

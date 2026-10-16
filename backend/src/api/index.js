@@ -240,11 +240,21 @@ function getUserStorage(userId) {
   for (const f of userFiles) {
     const size = Number(f.size) || 0;
     totalUsed += size;
-    const cat = f.category || 'other';
+    const cat = f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other');
     breakdown[cat] = (breakdown[cat] || 0) + size;
   }
 
   const percent = quota > 0 ? parseFloat(Math.min(100, (totalUsed / quota) * 100).toFixed(1)) : 0;
+
+  const breakdownFormatted = {};
+  const breakdownPercent = {};
+  for (const [cat, bytes] of Object.entries(breakdown)) {
+    breakdownFormatted[cat] = formatBytes(bytes);
+    const rawPct = quota > 0 ? (bytes / quota) * 100 : 0;
+    breakdownPercent[cat] = bytes > 0 ? Math.max(2, parseFloat(rawPct.toFixed(1))) : 0;
+  }
+
+  const freeBytes = Math.max(0, quota - totalUsed);
 
   return {
     totalUsed,
@@ -254,7 +264,11 @@ function getUserStorage(userId) {
     percent,
     formattedUsed: formatBytes(totalUsed),
     formattedQuota: formatBytes(quota),
-    breakdown
+    formattedFree: formatBytes(freeBytes),
+    freeBytes,
+    breakdown,
+    breakdownFormatted,
+    breakdownPercent
   };
 }
 
@@ -555,6 +569,8 @@ app.get('/drive', requireAuthWeb, (req, res) => {
         id: f.file_id,
         name: f.filename,
         type: f.category === 'folder' ? 'folder' : 'file',
+        category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+        tags: Array.isArray(f.tags) ? f.tags : (f.category ? [f.category] : []),
         owner: f.owner_id === req.user.user_id ? 'me' : (f.owner_id === 'demo-user' ? 'me' : f.owner_id),
         uploadDate: new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
         accessList: [],
@@ -989,6 +1005,46 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Rename error:', err);
     res.status(500).json({ error: 'Failed to rename file' });
+  }
+});
+
+// 5.5.1 Update File Tags
+app.patch('/api/files/:id/tags', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+  let { tags } = req.body;
+  if (!Array.isArray(tags)) {
+    return res.status(400).json({ error: 'tags must be an array of strings' });
+  }
+  // Sanitize tags: trim, lowercase, remove duplicates and empties
+  tags = Array.from(new Set(tags.map(t => String(t).trim().toLowerCase()).filter(t => t.length > 0)));
+
+  if (IS_MOCK_MODE) {
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    file.tags = tags;
+    file.updated_at = new Date().toISOString();
+    recordAuditLog({ user: req.user, action: 'UPDATE_TAGS', level: 'info', details: `Updated tags for "${file.filename}" to: [${tags.join(', ')}]` });
+    return res.json({ success: true, file, tags });
+  }
+
+  try {
+    const result = await docClient.send(new UpdateCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId },
+      ConditionExpression: req.user.role === 'admin' ? undefined : 'owner_id = :owner',
+      UpdateExpression: 'SET tags = :tags, updated_at = :up',
+      ExpressionAttributeValues: {
+        ':tags': tags,
+        ':up': new Date().toISOString(),
+        ...(req.user.role === 'admin' ? {} : { ':owner': req.user.user_id })
+      },
+      ReturnValues: 'ALL_NEW'
+    }));
+    recordAuditLog({ user: req.user, action: 'UPDATE_TAGS', level: 'info', details: `Updated tags for file ${fileId} to: [${tags.join(', ')}]` });
+    res.json({ success: true, file: result.Attributes, tags });
+  } catch (err) {
+    console.error('Update tags error:', err);
+    res.status(500).json({ error: 'Failed to update file tags' });
   }
 });
 

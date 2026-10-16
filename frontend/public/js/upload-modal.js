@@ -445,6 +445,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                    <polyline points="14 2 14 8 20 8"/>
                                </svg>`;
 
+                        const fileCat = isFolder ? 'folder' : ((data.file && data.file.category) || 'other');
+                        const fileTags = isFolder ? ['folder'] : ((data.file && Array.isArray(data.file.tags)) ? data.file.tags : [fileCat]);
+                        const tagsJoined = fileTags.join(',');
+
                         const menuContent = isFolder
                             ? `<div class="options-dropdown folder-options">
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
@@ -458,6 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                    <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
+                                   <button class="option-item open-tags-modal" data-id="${fileId}" data-filename="${safeName}" data-tags="${tagsJoined}"><i class="fas fa-tags"></i> Edit Tags</button>
                                    <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
                                    <button class="option-item open-share-modal" data-id="${fileId}" data-filename="${safeName}" data-access="[]"><i class="fas fa-share"></i> Share</button>
                                    <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
@@ -466,10 +471,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         const newRow = document.createElement('div');
                         newRow.className = 'file-row';
+                        newRow.dataset.id = fileId;
+                        newRow.dataset.name = safeName;
+                        newRow.dataset.category = fileCat;
+                        newRow.dataset.tags = tagsJoined;
                         newRow.innerHTML = `
                             <div class="file-name">
                                 ${iconSvg}
-                                ${safeName}
+                                <span class="file-name-text">${safeName}</span>
+                                <div class="file-tags-wrapper">
+                                    ${fileTags.map(t => `<span class="file-tag-badge" title="Tag: ${t}">${t}</span>`).join('')}
+                                </div>
                             </div>
                             <div class="file-owner">
                                 <div class="owner-avatar">
@@ -499,6 +511,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (window.showToast) {
                     window.showToast(`Uploaded ${successCount} item(s) successfully!`, 'success');
+                }
+
+                // Refresh sidebar storage and filters
+                if (window.refreshSidebarStorage) {
+                    window.refreshSidebarStorage();
+                }
+                if (window.applyDriveFilters) {
+                    window.applyDriveFilters();
                 }
 
                 // ล้างคิวและปิด Modal

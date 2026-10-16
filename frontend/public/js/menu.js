@@ -521,45 +521,148 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addEventListener('hashchange', initSharedTabState);
     }
 
-    // ─── Real-time Search Filtering (Drive, Shared, Trash) ───
+    // ─── Real-time Category & Search Filtering (Drive, Shared, Trash) ───
     const searchInput = document.querySelector('.search-input');
-    if (searchInput) {
-        searchInput.addEventListener('input', () => {
-            const query = searchInput.value.toLowerCase().trim();
-            const fileRows = document.querySelectorAll('.file-row');
-            let visibleCount = 0;
+    const categoryChips = document.querySelectorAll('#categoryFilters .category-chip');
+    let activeCategory = 'all';
 
-            fileRows.forEach(row => {
-                const nameEl = row.querySelector('.file-name');
-                const name = nameEl ? nameEl.textContent.toLowerCase() : '';
-                if (!query || name.includes(query)) {
-                    row.style.display = '';
-                    visibleCount++;
+    function applyDriveFilters() {
+        const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const fileRows = document.querySelectorAll('.file-row');
+        let visibleCount = 0;
+
+        fileRows.forEach(row => {
+            const rowCat = (row.dataset.category || '').toLowerCase();
+            const rowTags = (row.dataset.tags || '').toLowerCase();
+            const nameEl = row.querySelector('.file-name');
+            const name = (row.dataset.name || (nameEl ? nameEl.textContent : '')).toLowerCase();
+
+            // 1. Category match
+            let matchCategory = true;
+            if (activeCategory !== 'all') {
+                if (activeCategory === 'folder') {
+                    matchCategory = rowCat === 'folder';
                 } else {
-                    row.style.display = 'none';
+                    matchCategory = rowCat === activeCategory;
                 }
-            });
-
-            // Handle empty state display if no items match
-            const container = document.querySelector('.file-table-container');
-            let emptyEl = document.getElementById('searchNoResultsMsg');
-            if (visibleCount === 0 && query) {
-                if (!emptyEl && container) {
-                    emptyEl = document.createElement('div');
-                    emptyEl.id = 'searchNoResultsMsg';
-                    emptyEl.style.padding = '25px';
-                    emptyEl.style.textAlign = 'center';
-                    emptyEl.style.color = '#736b5e';
-                    emptyEl.style.fontSize = '14px';
-                    emptyEl.textContent = `No items found matching "${query}"`;
-                    container.appendChild(emptyEl);
-                } else if (emptyEl) {
-                    emptyEl.textContent = `No items found matching "${query}"`;
-                    emptyEl.style.display = 'block';
-                }
-            } else if (emptyEl) {
-                emptyEl.style.display = 'none';
             }
+
+            // 2. Query match (matches either filename or tags)
+            let matchQuery = true;
+            if (query) {
+                matchQuery = name.includes(query) || rowTags.includes(query);
+            }
+
+            if (matchCategory && matchQuery) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Empty state
+        const container = document.querySelector('.file-table-container');
+        let emptyEl = document.getElementById('searchNoResultsMsg');
+        if (visibleCount === 0 && (query || activeCategory !== 'all')) {
+            const message = query 
+                ? `No items found matching "${query}"`
+                : `No files found in category "${activeCategory}"`;
+            if (!emptyEl && container) {
+                emptyEl = document.createElement('div');
+                emptyEl.id = 'searchNoResultsMsg';
+                emptyEl.style.padding = '25px';
+                emptyEl.style.textAlign = 'center';
+                emptyEl.style.color = '#736b5e';
+                emptyEl.style.fontSize = '14px';
+                emptyEl.textContent = message;
+                container.appendChild(emptyEl);
+            } else if (emptyEl) {
+                emptyEl.textContent = message;
+                emptyEl.style.display = 'block';
+            }
+        } else if (emptyEl) {
+            emptyEl.style.display = 'none';
+        }
+    }
+
+    // Expose globally
+    window.applyDriveFilters = applyDriveFilters;
+
+    if (categoryChips && categoryChips.length > 0) {
+        categoryChips.forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                e.preventDefault();
+                categoryChips.forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+                activeCategory = chip.dataset.category || 'all';
+                applyDriveFilters();
+            });
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', applyDriveFilters);
+    }
+
+    // ─── Global Sidebar Storage Refresher ───
+    window.refreshSidebarStorage = async function() {
+        try {
+            const res = await fetch('/api/user/storage');
+            const data = await res.json();
+            if (!res.ok || !data.success) return;
+
+            const storage = data.storage || data;
+            const percent = storage.percent || 0;
+            const bp = storage.breakdownPercent || {};
+            const bf = storage.breakdownFormatted || {};
+
+            const percentLabel = document.querySelector('.storage-percent-label');
+            if (percentLabel) percentLabel.textContent = `${percent}%`;
+
+            const textSummary = document.querySelector('.storage-used-quota-text');
+            if (textSummary) textSummary.textContent = `${storage.formattedUsed || '0 B'} / ${storage.formattedQuota || '10 GB'}`;
+
+            const popoverTotal = document.querySelector('.popover-total');
+            if (popoverTotal) popoverTotal.textContent = `${storage.formattedUsed || '0 B'}`;
+
+            const docVal = document.querySelector('.doc-val');
+            if (docVal && bf.document) docVal.textContent = bf.document;
+
+            const imgVal = document.querySelector('.img-val');
+            if (imgVal && bf.image) imgVal.textContent = bf.image;
+
+            const archiveVal = document.querySelector('.archive-val');
+            if (archiveVal && bf.archive) archiveVal.textContent = bf.archive;
+
+            const otherVal = document.querySelector('.other-val');
+            if (otherVal && bf.other) otherVal.textContent = bf.other;
+
+            const freeVal = document.querySelector('.free-val');
+            if (freeVal && storage.formattedFree) freeVal.textContent = storage.formattedFree;
+
+            const segDoc = document.querySelector('.storage-seg.seg-doc');
+            if (segDoc) segDoc.style.width = `${bp.document || 0}%`;
+
+            const segImg = document.querySelector('.storage-seg.seg-img');
+            if (segImg) segImg.style.width = `${bp.image || 0}%`;
+
+            const segArchive = document.querySelector('.storage-seg.seg-archive');
+            if (segArchive) segArchive.style.width = `${bp.archive || 0}%`;
+
+            const segOther = document.querySelector('.storage-seg.seg-other');
+            if (segOther) segOther.style.width = `${(bp.other || 0) + (bp.video || 0) + (bp.audio || 0)}%`;
+        } catch (e) {
+            console.warn('Failed to refresh storage breakdown:', e);
+        }
+    };
+
+    // Toggle popover on mobile/touch click
+    const storageSection = document.getElementById('sidebarStorageSection');
+    if (storageSection) {
+        storageSection.addEventListener('click', (e) => {
+            // If clicking directly on storage, toggle open state
+            storageSection.classList.toggle('popover-open');
         });
     }
 });

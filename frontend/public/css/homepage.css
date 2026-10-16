@@ -631,3 +631,88 @@ body {
     border: 1px solid rgba(206, 147, 216, 0.35);
     color: #F3E5F5;
 }
+
+/* ─── Category Filter Chips ─────────────────────────────── */
+.category-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.category-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 16px;
+    border-radius: 20px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #44362A;
+    background-color: rgba(255, 255, 255, 0.45);
+    border: 1px solid rgba(68, 54, 42, 0.15);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.category-chip i {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.category-chip:hover {
+    background-color: rgba(255, 255, 255, 0.75);
+    transform: translateY(-1px);
+}
+
+.category-chip.active {
+    background-color: #44362A;
+    color: #E8E2D6;
+    border-color: #44362A;
+    box-shadow: 0 2px 6px rgba(68, 54, 42, 0.25);
+}
+
+.category-chip.active i {
+    opacity: 1;
+    color: #C4A070;
+}
+
+/* ─── Tag Badges in File Rows ────────────────────────────── */
+.file-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.file-name-text {
+    font-weight: 500;
+    color: #2D251E;
+}
+
+.file-tags-wrapper {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.file-tag-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 10.5px;
+    font-weight: 500;
+    background-color: rgba(68, 54, 42, 0.08);
+    color: #554433;
+    border: 1px solid rgba(68, 54, 42, 0.12);
+    letter-spacing: 0.2px;
+    transition: background 0.15s;
+}
+
+.file-tag-badge:hover {
+    background-color: rgba(68, 54, 42, 0.15);
+}
+

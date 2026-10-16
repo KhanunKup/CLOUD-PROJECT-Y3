@@ -3,6 +3,12 @@
     <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
     <button class="option-item download-action" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
     <button class="option-item open-rename-modal" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"><i class="fas fa-pencil-alt"></i> Rename</button>
+    <button class="option-item open-tags-modal" 
+            data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" 
+            data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"
+            data-tags="<%= typeof file !== 'undefined' && file.tags ? (Array.isArray(file.tags) ? file.tags.join(',') : file.tags) : '' %>">
+        <i class="fas fa-tags"></i> Edit Tags
+    </button>
     <button class="option-item copy-link-action" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
     <% if (typeof file !== 'undefined' && file.isShared) { %>
         <button class="option-item open-share-modal" 

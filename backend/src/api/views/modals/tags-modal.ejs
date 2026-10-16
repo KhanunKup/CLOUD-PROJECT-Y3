@@ -1,0 +1,43 @@
+<!-- views/modals/tags-modal.ejs -->
+<link rel="stylesheet" href="/css/tags-modal.css">
+
+<div class="tags-modal-overlay" id="tagsModal" style="display: none;">
+    <div class="tags-modal-card">
+        <div class="tags-modal-header">
+            <div class="tags-modal-title-wrap">
+                <i class="fas fa-tags" style="color: #846145; font-size: 18px;"></i>
+                <h2 class="tags-modal-title">Edit File Tags</h2>
+            </div>
+            <button type="button" class="tags-modal-close" id="tagsModalCloseBtn" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="tags-modal-body">
+            <div class="tags-file-info">
+                <span class="tags-file-label">File:</span>
+                <span class="tags-file-name" id="tagsModalFilename">filename.pdf</span>
+            </div>
+
+            <div class="tags-section-label">Current Tags</div>
+            <div class="tags-chips-container" id="tagsChipsContainer">
+                <!-- Tag chips injected here dynamically -->
+            </div>
+
+            <div class="tags-add-form">
+                <input type="text" class="tags-input" id="tagsNewTagInput" placeholder="Add a custom tag (press Enter)..." autocomplete="off">
+                <button type="button" class="tags-btn-add" id="tagsAddBtn">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+            <p class="tags-hint"><i class="fas fa-info-circle"></i> Initial tags are auto-generated from file extension (e.g. document, image, pdf). Custom tags allow custom grouping and search filtering.</p>
+        </div>
+
+        <div class="tags-modal-footer">
+            <button type="button" class="tags-btn-cancel" id="tagsCancelBtn">Cancel</button>
+            <button type="button" class="tags-btn-save" id="tagsSaveBtn">
+                <i class="fas fa-check"></i> Save Tags
+            </button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/tags-modal.js"></script>
