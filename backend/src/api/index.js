@@ -246,6 +246,13 @@ app.get('/trash', (req, res) => {
   });
 });
 
+app.post('/trash/empty', (req, res) => {
+  if (IS_MOCK_MODE) {
+    mockFiles = mockFiles.filter(f => f.status !== 'trash');
+  }
+  res.redirect('/trash');
+});
+
 app.get('/management', (req, res) => {
   res.render('pages/usermanagement');
 });
@@ -298,6 +305,44 @@ app.get('/api/files', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('List files error:', err);
     res.status(500).json({ error: 'Failed to retrieve files' });
+  }
+});
+
+// 5.2.1 Create Folder
+app.post('/api/folders', authMiddleware, async (req, res) => {
+  const { folderName } = req.body;
+  if (!folderName) {
+    return res.status(400).json({ error: 'folderName is required' });
+  }
+
+  const fileId = `folder-${crypto.randomUUID()}`;
+  const newFolder = {
+    file_id: fileId,
+    owner_id: req.user.user_id,
+    filename: folderName,
+    size: 0,
+    category: 'folder',
+    tags: ['folder'],
+    s3_key: `folders/${req.user.user_id}/${fileId}/`,
+    status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  if (IS_MOCK_MODE) {
+    mockFiles.unshift(newFolder);
+    return res.json({ success: true, file: newFolder });
+  }
+
+  try {
+    await docClient.send(new PutCommand({
+      TableName: FILES_TABLE,
+      Item: newFolder
+    }));
+    res.json({ success: true, file: newFolder });
+  } catch (err) {
+    console.error('Create folder error:', err);
+    res.status(500).json({ error: 'Failed to create folder' });
   }
 });
 

@@ -136,19 +136,59 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Download
-        const downloadBtn = e.target.closest('.download-action, .download-text');
-        if (downloadBtn) {
+        const downloadActionEl = e.target.closest('.download-action');
+        if (downloadActionEl) {
             e.stopPropagation();
-            const textSpan = downloadBtn.classList.contains('download-text') 
-                ? downloadBtn 
-                : (downloadBtn.querySelector('.download-text') || downloadBtn);
-            if (textSpan) {
-                const originalText = textSpan.textContent;
-                textSpan.textContent = 'Downloaded!';
-                setTimeout(() => {
+            const textSpan = downloadActionEl.querySelector('.download-text') || downloadActionEl;
+            const originalText = textSpan.textContent;
+            textSpan.textContent = 'Downloading...';
+
+            const targetId = downloadActionEl.dataset.id;
+            const filename = downloadActionEl.dataset.filename || 'downloaded-file';
+
+            (async () => {
+                try {
+                    if (targetId) {
+                        const res = await fetch(`/api/files/${targetId}/download-url`);
+                        const data = await res.json();
+                        if (!res.ok || !data.success) {
+                            throw new Error(data.error || 'Failed to get download URL');
+                        }
+
+                        // Trigger download
+                        const a = document.createElement('a');
+                        a.href = data.downloadUrl;
+                        a.download = data.filename || filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+
+                        if (window.showToast) {
+                            window.showToast(`Downloading "${data.filename || filename}"`, 'info');
+                        }
+                    } else {
+                        // Fallback simulated download for items without ID
+                        const a = document.createElement('a');
+                        a.href = `/mock-download/${encodeURIComponent(filename)}`;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                    }
+
+                    textSpan.textContent = 'Downloaded!';
+                } catch (err) {
+                    console.error('Download error:', err);
                     textSpan.textContent = originalText;
-                }, 1000);
-            }
+                    if (window.showToast) {
+                        window.showToast(`Download failed: ${err.message}`, 'error');
+                    }
+                } finally {
+                    setTimeout(() => {
+                        textSpan.textContent = originalText;
+                    }, 1200);
+                }
+            })();
             return;
         }
     });

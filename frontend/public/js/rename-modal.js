@@ -60,29 +60,59 @@ document.addEventListener('DOMContentLoaded', () => {
         currentRenameBtn = null;
     };
 
-    const submitRename = () => {
+    const submitRename = async () => {
         const newName = renameInput ? renameInput.value.trim() : '';
-        if (newName && currentTargetRow) {
-            const nameEl = currentTargetRow.querySelector('.file-name, .col-name');
-            if (nameEl) {
-                const icon = nameEl.querySelector('svg, i');
-                nameEl.innerHTML = '';
-                if (icon) {
-                    nameEl.appendChild(icon);
-                    nameEl.append(' ');
+        const targetId = currentRenameBtn ? currentRenameBtn.dataset.id : null;
+        const rowToUpdate = currentTargetRow;
+        const btnToUpdate = currentRenameBtn;
+
+        if (!newName) {
+            closeRenameModal();
+            return;
+        }
+
+        closeRenameModal();
+
+        try {
+            if (targetId) {
+                const res = await fetch(`/api/files/${targetId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: newName })
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Failed to rename file');
                 }
-                nameEl.append(newName);
             }
-            if (currentRenameBtn) {
-                currentRenameBtn.dataset.filename = newName;
+
+            if (rowToUpdate) {
+                const nameEl = rowToUpdate.querySelector('.file-name, .col-name');
+                if (nameEl) {
+                    const icon = nameEl.querySelector('svg, i');
+                    nameEl.innerHTML = '';
+                    if (icon) {
+                        nameEl.appendChild(icon);
+                        nameEl.append(' ');
+                    }
+                    nameEl.append(newName);
+                }
+                if (btnToUpdate) {
+                    btnToUpdate.dataset.filename = newName;
+                }
+                const allMenuBtns = rowToUpdate.querySelectorAll('[data-filename]');
+                allMenuBtns.forEach(btn => btn.dataset.filename = newName);
             }
-            // อัปเดต data-filename ให้กับปุ่ม move to trash ด้วย
-            const trashBtn = currentTargetRow.querySelector('.move-to-trash-action, .open-delete-modal');
-            if (trashBtn) {
-                trashBtn.dataset.filename = newName;
+
+            if (window.showToast) {
+                window.showToast(`Renamed to "${newName}" successfully!`, 'success');
+            }
+        } catch (err) {
+            console.error('Rename error:', err);
+            if (window.showToast) {
+                window.showToast(`Failed to rename: ${err.message}`, 'error');
             }
         }
-        closeRenameModal();
     };
 
     if (cancelBtn) {

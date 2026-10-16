@@ -185,11 +185,19 @@
                     messageHtml: `Are you sure to move <span class="confirm-highlight">"${filename}"</span> to trash?`,
                     confirmText: 'Move to Trash',
                     confirmType: 'danger',
-                    onConfirm: () => {
-                        if (targetId) {
-                            fetch(`/files/trash/${targetId}`).catch(() => {});
+                    onConfirm: async () => {
+                        try {
+                            if (targetId) {
+                                const res = await fetch(`/api/files/${targetId}`, { method: 'DELETE' });
+                                const data = await res.json();
+                                if (!res.ok || !data.success) throw new Error(data.error || 'Failed to move to trash');
+                            }
+                            window.animateRowRemoval(targetRow, 'No files found.');
+                            if (window.showToast) window.showToast(`Moved "${filename}" to trash`, 'success');
+                        } catch (err) {
+                            console.error('Move to trash error:', err);
+                            if (window.showToast) window.showToast(`Failed: ${err.message}`, 'error');
                         }
-                        window.animateRowRemoval(targetRow, 'No files found.');
                     }
                 });
                 return;
@@ -211,11 +219,19 @@
                     messageHtml: `Are you sure to restore <span class="confirm-highlight">"${filename}"</span>?`,
                     confirmText: 'Restore',
                     confirmType: 'success',
-                    onConfirm: () => {
-                        if (targetId) {
-                            fetch(`/trash/restore/${targetId}`).catch(() => {});
+                    onConfirm: async () => {
+                        try {
+                            if (targetId) {
+                                const res = await fetch(`/api/files/${targetId}/restore`, { method: 'POST' });
+                                const data = await res.json();
+                                if (!res.ok || !data.success) throw new Error(data.error || 'Failed to restore file');
+                            }
+                            window.animateRowRemoval(targetRow, 'Trash is empty.', '.trash-table, .file-table-container');
+                            if (window.showToast) window.showToast(`Restored "${filename}" successfully!`, 'success');
+                        } catch (err) {
+                            console.error('Restore error:', err);
+                            if (window.showToast) window.showToast(`Failed: ${err.message}`, 'error');
                         }
-                        window.animateRowRemoval(targetRow, 'Trash is empty.', '.trash-table, .file-table-container');
                     }
                 });
                 return;
@@ -238,11 +254,19 @@
                     warning: 'This action cannot be undone.',
                     confirmText: 'Delete Forever',
                     confirmType: 'danger',
-                    onConfirm: () => {
-                        if (targetId) {
-                            fetch(`/trash/delete/${targetId}`).catch(() => {});
+                    onConfirm: async () => {
+                        try {
+                            if (targetId) {
+                                const res = await fetch(`/api/files/${targetId}?permanent=true`, { method: 'DELETE' });
+                                const data = await res.json();
+                                if (!res.ok || !data.success) throw new Error(data.error || 'Failed to delete file');
+                            }
+                            window.animateRowRemoval(targetRow, 'Trash is empty.', '.trash-table, .file-table-container');
+                            if (window.showToast) window.showToast(`Permanently deleted "${filename}"`, 'success');
+                        } catch (err) {
+                            console.error('Permanent delete error:', err);
+                            if (window.showToast) window.showToast(`Failed: ${err.message}`, 'error');
                         }
-                        window.animateRowRemoval(targetRow, 'Trash is empty.', '.trash-table, .file-table-container');
                     }
                 });
                 return;

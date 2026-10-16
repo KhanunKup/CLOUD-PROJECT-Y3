@@ -359,94 +359,163 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // เมื่อกดปุ่ม Upload (บันทึกลงตารางหลัก)
+    // เมื่อกดปุ่ม Upload (ส่งไฟล์ขึ้น S3 / Mock Storage และบันทึกลงฐานข้อมูล)
     if (uploadSubmitBtn) {
-        uploadSubmitBtn.addEventListener('click', () => {
+        uploadSubmitBtn.addEventListener('click', async () => {
             if (selectedFiles.length === 0) {
-                alert('Please select or drag at least one file or folder to upload.');
+                if (window.showToast) {
+                    window.showToast('Please select at least one file or folder to upload.', 'warning');
+                } else {
+                    alert('Please select at least one file or folder to upload.');
+                }
                 return;
             }
 
+            const originalBtnText = uploadSubmitBtn.innerHTML;
+            uploadSubmitBtn.disabled = true;
+            uploadSubmitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+
             const fileContainer = document.querySelector('.file-table-container, .file-container');
-            if (fileContainer) {
-                // ลบข้อความ empty state ถ้ามี
-                const emptyNotice = fileContainer.querySelector('.empty-state, p');
-                if (emptyNotice) {
-                    emptyNotice.remove();
+            const tableHeader = fileContainer ? fileContainer.querySelector('.file-table-header, .file-header-divider') : null;
+
+            let successCount = 0;
+
+            try {
+                for (const item of selectedFiles) {
+                    const isFolder = item.type === 'folder';
+                    let fileId = `file-${Date.now()}`;
+
+                    if (isFolder) {
+                        // 1. กรณีเป็น Folder ให้ยิงสร้าง Folder API
+                        const res = await fetch('/api/folders', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ folderName: item.name })
+                        });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create folder');
+                        fileId = data.file.file_id;
+                    } else {
+                        // 2. กรณีเป็นไฟล์: ขอ Presigned Upload URL
+                        const fileSize = item.file ? item.file.size : 1024;
+                        const contentType = item.file ? (item.file.type || 'application/octet-stream') : 'application/octet-stream';
+
+                        const urlRes = await fetch('/api/files/upload-url', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                filename: item.name,
+                                size: fileSize,
+                                contentType: contentType
+                            })
+                        });
+
+                        const urlData = await urlRes.json();
+                        if (!urlRes.ok || !urlData.success) throw new Error(urlData.error || 'Failed to get upload URL');
+
+                        fileId = urlData.file_id;
+                        const uploadUrl = urlData.uploadUrl;
+
+                        // 3. PUT binary data ไปยัง S3 / Mock Storage
+                        const uploadBody = item.file || new Blob(['EasyDrive Mock File Content'], { type: contentType });
+                        const putRes = await fetch(uploadUrl, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': contentType },
+                            body: uploadBody
+                        });
+
+                        if (!putRes.ok) throw new Error('Failed to upload file content to storage');
+                    }
+
+                    successCount++;
+
+                    // 4. แทรกแถวลงในหน้าจอ (Realtime DOM Update)
+                    if (fileContainer) {
+                        const emptyNotice = fileContainer.querySelector('.empty-state, p');
+                        if (emptyNotice) emptyNotice.remove();
+
+                        const safeName = item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                        const iconSvg = isFolder
+                            ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                   <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                               </svg>`
+                            : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                   <polyline points="14 2 14 8 20 8"/>
+                               </svg>`;
+
+                        const menuContent = isFolder
+                            ? `<div class="options-dropdown folder-options">
+                                   <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
+                                   <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
+                                   <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
+                                   <button class="option-item open-share-modal" data-access="[]"><i class="fas fa-share"></i> Share</button>
+                                   <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
+                                   <button class="option-item open-delete-modal move-to-trash-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
+                               </div>`
+                            : `<div class="options-dropdown file-options">
+                                   <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
+                                   <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
+                                   <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
+                                   <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
+                                   <button class="option-item open-share-modal" data-access="[]"><i class="fas fa-share"></i> Share</button>
+                                   <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
+                                   <button class="option-item open-delete-modal move-to-trash-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
+                               </div>`;
+
+                        const newRow = document.createElement('div');
+                        newRow.className = 'file-row';
+                        newRow.innerHTML = `
+                            <div class="file-name">
+                                ${iconSvg}
+                                ${safeName}
+                            </div>
+                            <div class="file-owner">
+                                <div class="owner-avatar">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                        <circle cx="12" cy="7" r="4"/>
+                                    </svg>
+                                </div>
+                                me
+                            </div>
+                            <div class="file-date">Just now</div>
+                            <div class="options-wrapper">
+                                <button class="options-btn toggle-options" aria-label="Options">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                ${menuContent}
+                            </div>
+                        `;
+
+                        if (tableHeader && tableHeader.nextSibling) {
+                            fileContainer.insertBefore(newRow, tableHeader.nextSibling);
+                        } else {
+                            fileContainer.appendChild(newRow);
+                        }
+                    }
                 }
 
-                const tableHeader = fileContainer.querySelector('.file-table-header, .file-header-divider');
+                if (window.showToast) {
+                    window.showToast(`Uploaded ${successCount} item(s) successfully!`, 'success');
+                }
 
-                selectedFiles.forEach(item => {
-                    const isFolder = item.type === 'folder';
-                    const newRow = document.createElement('div');
-                    newRow.className = 'file-row';
-
-                    const safeName = item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-                    const iconSvg = isFolder
-                        ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                           </svg>`
-                        : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                               <polyline points="14 2 14 8 20 8"/>
-                           </svg>`;
-
-                    const menuContent = isFolder
-                        ? `<div class="options-dropdown folder-options">
-                               <button class="option-item download-action"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
-                               <button class="option-item open-rename-modal" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
-                               <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
-                               <button class="option-item open-share-modal" data-access="[]"><i class="fas fa-share"></i> Share</button>
-                               <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
-                               <button class="option-item open-delete-modal move-to-trash-action" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
-                           </div>`
-                        : `<div class="options-dropdown file-options">
-                               <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
-                               <button class="option-item download-action"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
-                               <button class="option-item open-rename-modal" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
-                               <button class="option-item copy-link-action"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
-                               <button class="option-item open-share-modal" data-access="[]"><i class="fas fa-share"></i> Share</button>
-                               <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
-                               <button class="option-item open-delete-modal move-to-trash-action" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
-                           </div>`;
-
-                    newRow.innerHTML = `
-                        <div class="file-name">
-                            ${iconSvg}
-                            ${safeName}
-                        </div>
-                        <div class="file-owner">
-                            <div class="owner-avatar">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                                    <circle cx="12" cy="7" r="4"/>
-                                </svg>
-                            </div>
-                            me
-                        </div>
-                        <div class="file-date">Just now</div>
-                        <div class="options-wrapper">
-                            <button class="options-btn toggle-options" aria-label="Options">
-                                <i class="fas fa-ellipsis-v"></i>
-                            </button>
-                            ${menuContent}
-                        </div>
-                    `;
-
-                    if (tableHeader && tableHeader.nextSibling) {
-                        fileContainer.insertBefore(newRow, tableHeader.nextSibling);
-                    } else {
-                        fileContainer.appendChild(newRow);
-                    }
-                });
+                // ล้างคิวและปิด Modal
+                selectedFiles = [];
+                renderQueue();
+                closeUploadModal();
+            } catch (err) {
+                console.error('Upload error:', err);
+                if (window.showToast) {
+                    window.showToast(`Upload failed: ${err.message}`, 'error');
+                } else {
+                    alert(`Upload failed: ${err.message}`);
+                }
+            } finally {
+                uploadSubmitBtn.disabled = false;
+                uploadSubmitBtn.innerHTML = originalBtnText;
             }
-
-            // ล้างคิวและปิด Modal
-            selectedFiles = [];
-            renderQueue();
-            closeUploadModal();
         });
     }
 

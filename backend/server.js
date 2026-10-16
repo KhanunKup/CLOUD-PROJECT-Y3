@@ -17,8 +17,11 @@ app.use(express.static(path.join(__dirname, '../frontend/public')));
 
 // Mock upload endpoint for local testing
 app.put('/mock-upload', (req, res) => {
-  console.log('[Mock Upload] Received binary file upload via Mock Presigned URL');
-  res.status(200).send('Upload simulated successfully');
+  req.on('data', () => {});
+  req.on('end', () => {
+    console.log('[Mock Upload] Received binary file upload via Mock Presigned URL');
+    res.status(200).send('Upload simulated successfully');
+  });
 });
 
 // Mock download endpoint for local testing
