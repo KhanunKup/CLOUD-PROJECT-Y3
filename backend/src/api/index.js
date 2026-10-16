@@ -76,7 +76,7 @@ if (!IS_MOCK_MODE) {
 let mockFiles = [
   {
     file_id: 'file-001',
-    owner_id: 'demo-user',
+    owner_id: 'user-normal-01',
     filename: 'Project_Proposal.pdf',
     size: 2450000,
     category: 'document',
@@ -88,7 +88,7 @@ let mockFiles = [
   },
   {
     file_id: 'file-002',
-    owner_id: 'demo-user',
+    owner_id: 'user-normal-01',
     filename: 'Architecture_Diagram.png',
     size: 5120000,
     category: 'image',
@@ -100,7 +100,7 @@ let mockFiles = [
   },
   {
     file_id: 'file-003',
-    owner_id: 'demo-user',
+    owner_id: 'user-normal-01',
     filename: 'Dataset_Backup.zip',
     size: 45000000,
     category: 'archive',
@@ -199,6 +199,14 @@ let mockAuditLogs = [
 // ==========================================
 // 3. Helper Functions
 // ==========================================
+function canUserAccessFile(file, user) {
+  if (!file || !user) return false;
+  if (user.role === 'admin') return true;
+  if (file.owner_id === user.user_id) return true;
+  if (user.user_id === 'user-normal-01' && file.owner_id === 'demo-user') return true;
+  return false;
+}
+
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
   const k = 1024;
@@ -399,6 +407,8 @@ app.use((req, res, next) => {
 // ==========================================
 // 4. Web SSR Routes (Frontend Pages) & Auth
 // ==========================================
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 app.get('/', (req, res) => {
   const user = getSessionUser(req);
   if (user) return res.redirect('/drive');
@@ -910,7 +920,7 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
   if (!filename) return res.status(400).json({ error: 'filename is required' });
 
   if (IS_MOCK_MODE) {
-    const file = mockFiles.find(f => f.file_id === fileId && f.owner_id === req.user.user_id);
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
     if (!file) return res.status(404).json({ error: 'File not found' });
     file.filename = filename;
     file.updated_at = new Date().toISOString();
@@ -945,7 +955,7 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
   const isPermanent = req.query.permanent === 'true';
 
   if (IS_MOCK_MODE) {
-    const index = mockFiles.findIndex(f => f.file_id === fileId && f.owner_id === req.user.user_id);
+    const index = mockFiles.findIndex(f => f.file_id === fileId && canUserAccessFile(f, req.user));
     if (index === -1) return res.status(404).json({ error: 'File not found' });
 
     if (isPermanent) {
@@ -997,7 +1007,7 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
 
   if (IS_MOCK_MODE) {
-    const file = mockFiles.find(f => f.file_id === fileId && f.owner_id === req.user.user_id);
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
     if (!file) return res.status(404).json({ error: 'File not found' });
     file.status = 'active';
     delete file.trashed_at;

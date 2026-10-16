@@ -225,4 +225,46 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
     });
+
+    // ─── Real-time Search Filtering (Drive, Shared, Trash) ───
+    const searchInput = document.querySelector('.search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase().trim();
+            const fileRows = document.querySelectorAll('.file-row');
+            let visibleCount = 0;
+
+            fileRows.forEach(row => {
+                const nameEl = row.querySelector('.file-name');
+                const name = nameEl ? nameEl.textContent.toLowerCase() : '';
+                if (!query || name.includes(query)) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+
+            // Handle empty state display if no items match
+            const container = document.querySelector('.file-table-container');
+            let emptyEl = document.getElementById('searchNoResultsMsg');
+            if (visibleCount === 0 && query) {
+                if (!emptyEl && container) {
+                    emptyEl = document.createElement('div');
+                    emptyEl.id = 'searchNoResultsMsg';
+                    emptyEl.style.padding = '25px';
+                    emptyEl.style.textAlign = 'center';
+                    emptyEl.style.color = '#736b5e';
+                    emptyEl.style.fontSize = '14px';
+                    emptyEl.textContent = `No items found matching "${query}"`;
+                    container.appendChild(emptyEl);
+                } else if (emptyEl) {
+                    emptyEl.textContent = `No items found matching "${query}"`;
+                    emptyEl.style.display = 'block';
+                }
+            } else if (emptyEl) {
+                emptyEl.style.display = 'none';
+            }
+        });
+    }
 });
