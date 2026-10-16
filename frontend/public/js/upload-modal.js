@@ -384,6 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 for (const item of selectedFiles) {
                     const isFolder = item.type === 'folder';
                     let fileId = `file-${Date.now()}`;
+                    let uploadedFileRecord = null;
 
                     if (isFolder) {
                         // 1. กรณีเป็น Folder ให้ยิงสร้าง Folder API
@@ -395,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const data = await res.json();
                         if (!res.ok || !data.success) throw new Error(data.error || 'Failed to create folder');
                         fileId = data.file.file_id;
+                        uploadedFileRecord = data.file;
                     } else {
                         // 2. กรณีเป็นไฟล์: ขอ Presigned Upload URL
                         const fileSize = item.file ? item.file.size : 1024;
@@ -414,6 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!urlRes.ok || !urlData.success) throw new Error(urlData.error || 'Failed to get upload URL');
 
                         fileId = urlData.file_id;
+                        uploadedFileRecord = urlData.file;
                         const uploadUrl = urlData.uploadUrl;
 
                         // 3. PUT binary data ไปยัง S3 / Mock Storage
@@ -445,8 +448,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                    <polyline points="14 2 14 8 20 8"/>
                                </svg>`;
 
-                        const fileCat = isFolder ? 'folder' : ((data.file && data.file.category) || 'other');
-                        const fileTags = isFolder ? ['folder'] : ((data.file && Array.isArray(data.file.tags)) ? data.file.tags : [fileCat]);
+                        const ext = item.name.split('.').pop().toLowerCase();
+                        const fileCat = isFolder ? 'folder' : ((uploadedFileRecord && uploadedFileRecord.category) || 'other');
+                        const fileTags = isFolder ? ['folder'] : ((uploadedFileRecord && Array.isArray(uploadedFileRecord.tags)) ? uploadedFileRecord.tags : [fileCat, ext]);
                         const tagsJoined = fileTags.join(',');
 
                         const menuContent = isFolder
