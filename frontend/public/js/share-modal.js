@@ -7,6 +7,17 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
     // เคลียร์ข้อมูลเก่าก่อน
     container.innerHTML = '';
 
+    const shareModeInput = document.getElementById('shareModeInput');
+    const shareIdInput = document.getElementById('shareIdInput');
+    const shareModalTitle = document.getElementById('shareModalTitle');
+    const shareStatusBadge = document.getElementById('shareStatusBadge');
+    const createShareLinkText = document.getElementById('createShareLinkText');
+    const modalStopShareBtn = document.getElementById('modalStopShareBtn');
+    const pwNotice = document.getElementById('sharePasswordCurrentNotice');
+    const removePwCheckbox = document.getElementById('shareRemovePasswordCheckbox');
+    const resultBox = document.getElementById('shareLinkResultBox');
+    const linkA = document.getElementById('shareGeneratedLink');
+
     // ถ้าเปิดจากปุ่มไฟล์ใหม่ (triggerBtn ส่งมา)
     if (triggerBtn) {
         window.activeShareFileBtn = triggerBtn;
@@ -17,15 +28,72 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
             fileNameEl.textContent = 'File: ' + (triggerBtn.dataset.filename || 'Selected File');
         }
 
-        // รีเซ็ตค่า Security Settings กลับเป็นค่าเริ่มต้น
+        const mode = triggerBtn.dataset.mode || 'create';
+        const isEdit = mode === 'edit';
+
+        if (shareModeInput) shareModeInput.value = isEdit ? 'edit' : 'create';
+        if (shareIdInput) shareIdInput.value = triggerBtn.dataset.shareId || '';
+
+        if (shareModalTitle) {
+            shareModalTitle.textContent = isEdit ? 'Edit Share Settings' : 'Share this';
+        }
+
+        if (shareStatusBadge) {
+            shareStatusBadge.innerHTML = isEdit
+                ? '<span style="background: rgba(46, 125, 50, 0.25); border: 1px solid rgba(129, 199, 132, 0.4); padding: 2px 8px; border-radius: 12px; color: #a5d6a7;"><i class="fas fa-circle-check"></i> Active Share</span>'
+                : '';
+        }
+
+        // Expiration (TTL)
         const expireSelect = document.getElementById('shareExpireHours');
-        if (expireSelect) expireSelect.value = '24';
+        if (expireSelect) {
+            expireSelect.value = isEdit && triggerBtn.dataset.expireHours ? triggerBtn.dataset.expireHours : '24';
+        }
+
+        // Download Limit
         const maxDownSelect = document.getElementById('shareMaxDownloads');
-        if (maxDownSelect) maxDownSelect.value = '0';
+        if (maxDownSelect) {
+            maxDownSelect.value = isEdit && triggerBtn.dataset.maxDownloads !== undefined ? triggerBtn.dataset.maxDownloads : '0';
+        }
+
+        // Passcode Protection
         const passInput = document.getElementById('sharePassword');
-        if (passInput) passInput.value = '';
-        const resultBox = document.getElementById('shareLinkResultBox');
-        if (resultBox) resultBox.style.display = 'none';
+        if (passInput) {
+            passInput.value = '';
+            if (isEdit && triggerBtn.dataset.hasPassword === 'true') {
+                passInput.placeholder = 'Leave blank to keep current password';
+            } else {
+                passInput.placeholder = 'Leave empty for public link';
+            }
+        }
+
+        if (pwNotice) {
+            pwNotice.style.display = (isEdit && triggerBtn.dataset.hasPassword === 'true') ? 'flex' : 'none';
+        }
+        if (removePwCheckbox) {
+            removePwCheckbox.checked = false;
+        }
+
+        // Action Buttons
+        if (createShareLinkText) {
+            createShareLinkText.textContent = isEdit ? 'Update Share Settings' : 'Create & Copy Share Link';
+        }
+
+        if (modalStopShareBtn) {
+            modalStopShareBtn.style.display = isEdit ? 'inline-flex' : 'none';
+        }
+
+        // Share Link display
+        if (isEdit && triggerBtn.dataset.shareUrl) {
+            const fullUrl = window.location.origin + triggerBtn.dataset.shareUrl;
+            if (resultBox && linkA) {
+                linkA.href = fullUrl;
+                linkA.textContent = fullUrl;
+                resultBox.style.display = 'block';
+            }
+        } else {
+            if (resultBox) resultBox.style.display = 'none';
+        }
 
         const serverAnyone = accessList.find(acc => acc.name && (acc.name.toLowerCase() === 'anyone' || acc.name.toLowerCase() === 'everyone'));
         if (serverAnyone) {
@@ -112,6 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelShareBtn = document.getElementById('cancelShareBtn');
     const copyLinkBtn = document.getElementById('copyLinkBtn');
     const copyLinkText = document.getElementById('copyLinkText');
+    const modalStopShareBtn = document.getElementById('modalStopShareBtn');
 
     const closeModal = () => {
         if (shareModal) {
@@ -123,79 +192,134 @@ document.addEventListener('DOMContentLoaded', () => {
     const createShareLinkText = document.getElementById('createShareLinkText');
 
     async function handleCreateShareLink() {
+        const isEdit = document.getElementById('shareModeInput') && document.getElementById('shareModeInput').value === 'edit';
+        const shareId = document.getElementById('shareIdInput') ? document.getElementById('shareIdInput').value : null;
         const fileId = window.activeShareFileBtn ? window.activeShareFileBtn.dataset.id : null;
-        if (!fileId) {
+
+        if (!isEdit && !fileId) {
             if (window.showToast) window.showToast('Please select a file to share first', 'warning');
+            return;
+        }
+        if (isEdit && !shareId) {
+            if (window.showToast) window.showToast('Missing share link ID', 'error');
             return;
         }
 
         const expireHours = document.getElementById('shareExpireHours') ? document.getElementById('shareExpireHours').value : 24;
         const maxDownloads = document.getElementById('shareMaxDownloads') ? document.getElementById('shareMaxDownloads').value : 0;
         const password = document.getElementById('sharePassword') ? document.getElementById('sharePassword').value.trim() : '';
+        const removePassword = document.getElementById('shareRemovePasswordCheckbox') ? document.getElementById('shareRemovePasswordCheckbox').checked : false;
 
-        const origBtnText = createShareLinkText ? createShareLinkText.textContent : 'Create & Copy Share Link';
+        const origBtnText = isEdit ? 'Update Share Settings' : 'Create & Copy Share Link';
         if (createShareLinkBtn) createShareLinkBtn.disabled = true;
-        if (createShareLinkText) createShareLinkText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+        if (createShareLinkText) createShareLinkText.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${isEdit ? 'Updating...' : 'Generating...'}`;
 
         try {
-            const res = await fetch('/api/shares', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    file_id: fileId,
+            if (isEdit) {
+                const payload = {
                     expireHours: Number(expireHours),
-                    maxDownloads: Number(maxDownloads),
-                    password: password || undefined
-                })
-            });
-
-            const data = await res.json();
-            if (!res.ok || !data.success) {
-                throw new Error(data.error || 'Failed to generate share link');
-            }
-
-            const fullUrl = window.location.origin + data.shareUrl;
-
-            // Copy to clipboard
-            try {
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    await navigator.clipboard.writeText(fullUrl);
-                } else {
-                    const tempInput = document.createElement('input');
-                    tempInput.value = fullUrl;
-                    document.body.appendChild(tempInput);
-                    tempInput.select();
-                    document.execCommand('copy');
-                    tempInput.remove();
+                    maxDownloads: Number(maxDownloads)
+                };
+                if (removePassword) {
+                    payload.removePassword = true;
+                } else if (password) {
+                    payload.password = password;
                 }
-            } catch (clipErr) {
-                console.warn('Clipboard write failed, link displayed in modal', clipErr);
+
+                const res = await fetch(`/api/shares/${shareId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Failed to update share settings');
+                }
+
+                if (window.activeShareFileBtn) {
+                    window.activeShareFileBtn.dataset.expireHours = expireHours;
+                    window.activeShareFileBtn.dataset.maxDownloads = maxDownloads;
+                    if (removePassword) {
+                        window.activeShareFileBtn.dataset.hasPassword = 'false';
+                    } else if (password) {
+                        window.activeShareFileBtn.dataset.hasPassword = 'true';
+                    }
+                }
+
+                if (window.showToast) {
+                    window.showToast('Share settings updated successfully!', 'success');
+                }
+                if (createShareLinkText) createShareLinkText.innerHTML = '<i class="fas fa-check"></i> Updated!';
+
+                setTimeout(() => {
+                    closeModal();
+                    window.location.reload();
+                }, 600);
+                return;
+            } else {
+                // Mode Create
+                const res = await fetch('/api/shares', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        file_id: fileId,
+                        expireHours: Number(expireHours),
+                        maxDownloads: Number(maxDownloads),
+                        password: password || undefined
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Failed to generate share link');
+                }
+
+                const fullUrl = window.location.origin + data.shareUrl;
+
+                // Copy to clipboard
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(fullUrl);
+                    } else {
+                        const tempInput = document.createElement('input');
+                        tempInput.value = fullUrl;
+                        document.body.appendChild(tempInput);
+                        tempInput.select();
+                        document.execCommand('copy');
+                        tempInput.remove();
+                    }
+                } catch (clipErr) {
+                    console.warn('Clipboard write failed, link displayed in modal', clipErr);
+                }
+
+                // Display in result box
+                const resultBox = document.getElementById('shareLinkResultBox');
+                const linkA = document.getElementById('shareGeneratedLink');
+                if (resultBox && linkA) {
+                    linkA.href = fullUrl;
+                    linkA.textContent = fullUrl;
+                    resultBox.style.display = 'block';
+                }
+
+                if (window.showToast) {
+                    window.showToast('Share link created & copied to clipboard!', 'success');
+                }
+
+                if (createShareLinkText) createShareLinkText.innerHTML = '<i class="fas fa-check"></i> Link Copied!';
+                if (copyLinkText) copyLinkText.textContent = 'Copied!';
+
+                setTimeout(() => {
+                    if (createShareLinkBtn) createShareLinkBtn.disabled = false;
+                    if (createShareLinkText) createShareLinkText.textContent = origBtnText;
+                    if (copyLinkText) copyLinkText.textContent = 'copy link';
+                    if (window.location.pathname.includes('/drive') || window.location.pathname === '/') {
+                        window.location.reload();
+                    }
+                }, 1200);
             }
-
-            // Display in result box
-            const resultBox = document.getElementById('shareLinkResultBox');
-            const linkA = document.getElementById('shareGeneratedLink');
-            if (resultBox && linkA) {
-                linkA.href = fullUrl;
-                linkA.textContent = fullUrl;
-                resultBox.style.display = 'block';
-            }
-
-            if (window.showToast) {
-                window.showToast('Share link created & copied to clipboard!', 'success');
-            }
-
-            if (createShareLinkText) createShareLinkText.innerHTML = '<i class="fas fa-check"></i> Link Copied!';
-            if (copyLinkText) copyLinkText.textContent = 'Copied!';
-
-            setTimeout(() => {
-                if (createShareLinkBtn) createShareLinkBtn.disabled = false;
-                if (createShareLinkText) createShareLinkText.textContent = origBtnText;
-                if (copyLinkText) copyLinkText.textContent = 'copy link';
-            }, 2500);
-
         } catch (err) {
-            console.error('Share generation error:', err);
+            console.error('Share action error:', err);
             if (window.showToast) {
                 window.showToast(`Error: ${err.message}`, 'error');
             }
@@ -209,7 +333,74 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (copyLinkBtn) {
-        copyLinkBtn.addEventListener('click', handleCreateShareLink);
+        copyLinkBtn.addEventListener('click', async () => {
+            const isEdit = document.getElementById('shareModeInput') && document.getElementById('shareModeInput').value === 'edit';
+            if (isEdit && window.activeShareFileBtn && window.activeShareFileBtn.dataset.shareUrl) {
+                const fullUrl = window.location.origin + window.activeShareFileBtn.dataset.shareUrl;
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(fullUrl);
+                    } else {
+                        const tempInput = document.createElement('input');
+                        tempInput.value = fullUrl;
+                        document.body.appendChild(tempInput);
+                        tempInput.select();
+                        document.execCommand('copy');
+                        tempInput.remove();
+                    }
+                    if (window.showToast) window.showToast('Share link copied to clipboard!', 'success');
+                    if (copyLinkText) copyLinkText.textContent = 'Copied!';
+                    setTimeout(() => { if (copyLinkText) copyLinkText.textContent = 'copy link'; }, 1500);
+                } catch (err) {
+                    console.warn('Copy link error:', err);
+                }
+                return;
+            }
+            handleCreateShareLink();
+        });
+    }
+
+    if (modalStopShareBtn) {
+        modalStopShareBtn.addEventListener('click', () => {
+            const shareId = document.getElementById('shareIdInput') ? document.getElementById('shareIdInput').value : null;
+            if (!shareId) return;
+
+            const filename = (window.activeShareFileBtn && window.activeShareFileBtn.dataset.filename) || 'this file';
+
+            if (window.showConfirmModal) {
+                closeModal();
+                window.showConfirmModal({
+                    title: 'Stop Sharing',
+                    messageHtml: `Are you sure you want to stop sharing <span class="confirm-highlight">"${filename}"</span>?<br><br>The public link will be deactivated immediately and anyone with the link will lose access.`,
+                    warning: 'This will revoke the shared link immediately.',
+                    confirmText: 'Stop Sharing',
+                    confirmType: 'danger',
+                    onConfirm: async () => {
+                        try {
+                            const res = await fetch(`/api/shares/${shareId}`, { method: 'DELETE' });
+                            const data = await res.json();
+                            if (!res.ok || !data.success) throw new Error(data.error || 'Failed to revoke share');
+
+                            if (window.showToast) window.showToast(`Stopped sharing "${filename}"`, 'success');
+
+                            const targetRow = document.getElementById(`row-share-${shareId}`) || (window.activeShareFileBtn ? window.activeShareFileBtn.closest('.file-row') : null);
+                            if (targetRow && window.location.pathname.includes('/shared')) {
+                                if (window.animateRowRemoval) {
+                                    window.animateRowRemoval(targetRow, 'You haven\'t shared any files yet. Share files from My Drive to see them here.', '#sharedByMeTable');
+                                } else {
+                                    targetRow.remove();
+                                }
+                            } else {
+                                setTimeout(() => window.location.reload(), 600);
+                            }
+                        } catch (err) {
+                            console.error('Stop share error:', err);
+                            if (window.showToast) window.showToast(`Failed: ${err.message}`, 'error');
+                        }
+                    }
+                });
+            }
+        });
     }
 
     const inviteInput = document.getElementById('invite-input');

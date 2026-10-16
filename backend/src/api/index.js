@@ -546,34 +546,56 @@ app.get('/drive', requireAuthWeb, (req, res) => {
   res.render('pages/homepage', {
     user: req.user,
     storage,
-    files: activeFiles.map(f => ({
-      id: f.file_id,
-      name: f.filename,
-      type: f.category === 'folder' ? 'folder' : 'file',
-      owner: f.owner_id === req.user.user_id ? 'me' : (f.owner_id === 'demo-user' ? 'me' : f.owner_id),
-      uploadDate: new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      accessList: []
-    }))
+    files: activeFiles.map(f => {
+      const share = mockShares.find(s => s.file_id === f.file_id);
+      const remainingDownloads = share && share.max_downloads > 0 ? Math.max(0, share.max_downloads - share.download_count) : 'Unlimited';
+      const remainingHours = share && share.expires_at ? Math.max(0, Math.round((share.expires_at - Math.floor(Date.now() / 1000)) / 3600)) : null;
+
+      return {
+        id: f.file_id,
+        name: f.filename,
+        type: f.category === 'folder' ? 'folder' : 'file',
+        owner: f.owner_id === req.user.user_id ? 'me' : (f.owner_id === 'demo-user' ? 'me' : f.owner_id),
+        uploadDate: new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        accessList: [],
+        isShared: Boolean(share),
+        shareId: share ? share.share_id : null,
+        shareUrl: share ? `/share/${share.share_id}` : null,
+        shareMaxDownloads: share ? share.max_downloads : 0,
+        shareDownloadsLeft: remainingDownloads,
+        shareExpireHours: share && share.expires_at ? Math.max(1, Math.round((share.expires_at - Math.floor(new Date(share.created_at).getTime() / 1000)) / 3600)) : 24,
+        shareRemainingHours: remainingHours,
+        hasPassword: share ? Boolean(share.has_password) : false
+      };
+    })
   });
 });
 
 // 4.4 Shared Page (Protected)
 app.get('/shared', requireAuthWeb, (req, res) => {
   // Map active shares
-  const activeShares = mockShares.map(s => {
+  const allShares = mockShares.map(s => {
     const f = mockFiles.find(file => file.file_id === s.file_id) || {};
-    const remainingDownloads = s.max_downloads > 0 ? (s.max_downloads - s.download_count) : 'Unlimited';
+    const remainingDownloads = s.max_downloads > 0 ? Math.max(0, s.max_downloads - s.download_count) : 'Unlimited';
     const remainingHours = s.expires_at ? Math.max(0, Math.round((s.expires_at - Math.floor(Date.now() / 1000)) / 3600)) : null;
+    const isOwner = s.owner_id === req.user.user_id;
+
     return {
       id: s.file_id,
+      shareId: s.share_id,
       name: s.filename || f.filename || 'Shared File',
       type: 'file',
-      owner: s.owner_email || s.owner_id || 'Shared Link',
+      owner: isOwner ? 'me' : (s.owner_email || s.owner_id || 'Shared Link'),
+      ownerId: s.owner_id,
+      isOwner,
       uploadDate: new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       shareUrl: `/share/${s.share_id}`,
       maxDownloads: s.max_downloads,
+      downloadsLeft: remainingDownloads,
       downloadCount: s.download_count,
-      hasPassword: s.has_password,
+      expireHours: s.expires_at ? Math.max(1, Math.round((s.expires_at - Math.floor(new Date(s.created_at).getTime() / 1000)) / 3600)) : 24,
+      remainingHours,
+      hasPassword: Boolean(s.has_password),
       accessList: [{
         name: s.has_password ? 'Protected (PW)' : 'Anyone with link',
         permission: s.max_downloads > 0 ? `Limit: ${remainingDownloads}` : 'can view',
@@ -582,22 +604,40 @@ app.get('/shared', requireAuthWeb, (req, res) => {
     };
   });
 
-  const defaultShared = [
+  const defaultSharedWithMe = [
     {
       id: 'demo-shared-doc',
+      shareId: 'demo-share-doc',
       name: 'Shared_Document.pdf',
       type: 'file',
       owner: 'Passakorn',
+      ownerId: 'demo-passakorn',
+      isOwner: false,
       uploadDate: '10 Oct. 2026',
+      shareUrl: '/share/demo-share-doc',
+      maxDownloads: 0,
+      downloadsLeft: 'Unlimited',
+      downloadCount: 0,
+      hasPassword: false,
+      remainingHours: 120,
       accessList: [{ name: 'Anan', permission: 'can view', timeRemaining: '5 days' }]
     }
+  ];
+
+  // Divide into Shared By Me and Shared With Me
+  const sharedByMe = allShares.filter(s => s.isOwner);
+  const sharedWithMe = [
+    ...defaultSharedWithMe,
+    ...allShares.filter(s => !s.isOwner)
   ];
 
   const storage = getUserStorage(req.user.user_id);
   res.render('pages/shared', {
     user: req.user,
     storage,
-    files: [...defaultShared, ...activeShares]
+    sharedByMe,
+    sharedWithMe,
+    files: [...sharedWithMe, ...sharedByMe] // backward compatible fallback
   });
 });
 
@@ -1088,6 +1128,7 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
     return res.json({
       success: true,
       share_id: shareId,
+      shareId: shareId,
       shareUrl: `/share/${shareId}`,
       filename: shareRecord.filename,
       size: shareRecord.size,
@@ -1113,6 +1154,7 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
     res.json({
       success: true,
       share_id: shareId,
+      shareId: shareId,
       shareUrl: `/share/${shareId}`,
       hasPassword: Boolean(password),
       maxDownloads: downloadLimit,
@@ -1122,6 +1164,130 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
     console.error('Create share error:', err);
     res.status(500).json({ error: 'Failed to create share link' });
   }
+});
+
+// 5.8.1 Get Share By File ID
+app.get('/api/shares/by-file/:file_id', authMiddleware, async (req, res) => {
+  const fileId = req.params.file_id;
+  const share = mockShares.find(s => s.file_id === fileId);
+  if (!share) {
+    return res.json({ success: true, isShared: false, share: null });
+  }
+  const remainingDownloads = share.max_downloads > 0 ? Math.max(0, share.max_downloads - share.download_count) : 'Unlimited';
+  const remainingHours = share.expires_at ? Math.max(0, Math.round((share.expires_at - Math.floor(Date.now() / 1000)) / 3600)) : null;
+
+  res.json({
+    success: true,
+    isShared: true,
+    share: {
+      share_id: share.share_id,
+      shareUrl: `/share/${share.share_id}`,
+      filename: share.filename,
+      maxDownloads: share.max_downloads,
+      downloadsLeft: remainingDownloads,
+      downloadCount: share.download_count,
+      expireHours: share.expires_at ? Math.max(1, Math.round((share.expires_at - Math.floor(new Date(share.created_at).getTime() / 1000)) / 3600)) : 24,
+      remainingHours,
+      hasPassword: Boolean(share.has_password),
+      createdAt: share.created_at
+    }
+  });
+});
+
+// 5.8.2 Edit Share Settings (PATCH /api/shares/:id)
+app.patch('/api/shares/:id', authMiddleware, async (req, res) => {
+  const targetId = req.params.id;
+  const { expireHours, maxDownloads, password, removePassword } = req.body;
+
+  let share = null;
+  if (IS_MOCK_MODE) {
+    share = mockShares.find(s => s.share_id === targetId || s.file_id === targetId);
+  }
+
+  if (!share) {
+    return res.status(404).json({ error: 'Share link not found' });
+  }
+
+  // Permission check: owner or admin
+  if (share.owner_id !== req.user.user_id && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: You do not have permission to edit this share' });
+  }
+
+  if (expireHours !== undefined) {
+    const hours = Number(expireHours) || 24;
+    share.expires_at = Math.floor(Date.now() / 1000) + (hours * 3600);
+  }
+
+  if (maxDownloads !== undefined) {
+    share.max_downloads = Number(maxDownloads);
+  }
+
+  if (removePassword === true || removePassword === 'true') {
+    share.has_password = false;
+    share.password_hash = null;
+  } else if (password && typeof password === 'string' && password.trim().length > 0) {
+    share.password_hash = await bcrypt.hash(password.trim(), 10);
+    share.has_password = true;
+  }
+
+  share.updated_at = new Date().toISOString();
+
+  recordAuditLog({
+    user: req.user,
+    action: 'UPDATE_SHARE',
+    level: 'info',
+    details: `Updated share settings for "${share.filename}" (${share.share_id}): TTL=${expireHours || 'unchanged'}h, MaxDL=${share.max_downloads}, PasswordProtected=${share.has_password}`
+  });
+
+  const remainingDownloads = share.max_downloads > 0 ? Math.max(0, share.max_downloads - share.download_count) : 'Unlimited';
+  const remainingHours = share.expires_at ? Math.max(0, Math.round((share.expires_at - Math.floor(Date.now() / 1000)) / 3600)) : null;
+
+  res.json({
+    success: true,
+    message: 'Share settings updated successfully',
+    share: {
+      share_id: share.share_id,
+      shareUrl: `/share/${share.share_id}`,
+      filename: share.filename,
+      maxDownloads: share.max_downloads,
+      downloadsLeft: remainingDownloads,
+      downloadCount: share.download_count,
+      remainingHours,
+      hasPassword: Boolean(share.has_password)
+    }
+  });
+});
+
+// 5.8.3 Revoke / Stop Sharing (DELETE /api/shares/:id)
+app.delete('/api/shares/:id', authMiddleware, async (req, res) => {
+  const targetId = req.params.id;
+
+  let share = null;
+  if (IS_MOCK_MODE) {
+    share = mockShares.find(s => s.share_id === targetId || s.file_id === targetId);
+    if (!share) {
+      return res.status(404).json({ error: 'Share link not found' });
+    }
+
+    if (share.owner_id !== req.user.user_id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to revoke this share' });
+    }
+
+    mockShares = mockShares.filter(s => s.share_id !== share.share_id);
+  }
+
+  recordAuditLog({
+    user: req.user,
+    action: 'REVOKE_SHARE',
+    level: 'warning',
+    details: `Revoked share link (${share ? share.share_id : targetId}) for "${share ? share.filename : targetId}"`
+  });
+
+  res.json({
+    success: true,
+    message: 'Share link revoked successfully',
+    share_id: share ? share.share_id : targetId
+  });
 });
 
 // 5.9 Verify Password & Download Shared File (Burn-After-Read Check & SNS Alert)

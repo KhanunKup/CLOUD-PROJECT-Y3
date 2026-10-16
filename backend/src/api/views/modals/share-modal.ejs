@@ -4,11 +4,13 @@
 <!-- Share Modal Overlay (ซ่อนไว้ก่อนด้วย style="display: none;" ถ้าจะให้แสดงเลยก็ลบออกครับ) -->
 <div class="share-modal-overlay" id="shareModal" style="display: none;">
     <div class="share-modal">
+        <input type="hidden" id="shareModeInput" value="create">
+        <input type="hidden" id="shareIdInput" value="">
         
         <!-- Header -->
         <div class="share-modal-header">
             <div>
-                <h2>Share this</h2>
+                <h2 id="shareModalTitle">Share this</h2>
                 <div id="shareModalFileName" style="font-size: 13px; color: #e8e2d6; margin-top: 4px; font-weight: 500;"></div>
             </div>
             <div class="header-actions">
@@ -62,15 +64,24 @@
                     <i class="fas fa-lock"></i> Passcode Protection (Optional)
                 </label>
                 <input type="password" id="sharePassword" placeholder="Leave empty for public link" style="width: 100%; background: #e2e2e2; border: none; border-radius: 6px; padding: 8px 12px; font-size: 14px; color: #333; outline: none; box-sizing: border-box;">
+                <div id="sharePasswordCurrentNotice" style="display: none; font-size: 12px; color: #e8f0fe; margin-top: 6px; align-items: center; gap: 8px;">
+                    <span>🔒 Current link is password-protected.</span>
+                    <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px; color: #ffb4b4; font-weight: 600;">
+                        <input type="checkbox" id="shareRemovePasswordCheckbox"> Remove password
+                    </label>
+                </div>
             </div>
 
             <div style="display: flex; gap: 10px; align-items: center; margin-top: 8px;">
                 <button type="button" id="createShareLinkBtn" style="flex: 1; background: #555e46; color: white; border: none; border-radius: 8px; padding: 10px; font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.2s;">
-                    <i class="fas fa-link"></i> <span id="createShareLinkText">Create &amp; Copy Share Link</span>
+                    <i class="fas fa-link" id="createShareLinkIcon"></i> <span id="createShareLinkText">Create &amp; Copy Share Link</span>
+                </button>
+                <button type="button" id="modalStopShareBtn" style="display: none; background: #a83232; color: white; border: none; border-radius: 8px; padding: 10px 14px; font-weight: 700; font-size: 14px; cursor: pointer; align-items: center; justify-content: center; gap: 6px; transition: background 0.2s;" title="Stop sharing and revoke link">
+                    <i class="fas fa-link-slash"></i> <span>Stop Sharing</span>
                 </button>
             </div>
             <div id="shareLinkResultBox" style="display: none; margin-top: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #fff; word-break: break-all;">
-                <span style="color: #d1d5c9;">Generated URL: </span><a id="shareGeneratedLink" href="#" target="_blank" style="color: #fff; font-weight: 600; text-decoration: underline;"></a>
+                <span style="color: #d1d5c9;">Share URL: </span><a id="shareGeneratedLink" href="#" target="_blank" style="color: #fff; font-weight: 600; text-decoration: underline;"></a>
             </div>
         </div>
 

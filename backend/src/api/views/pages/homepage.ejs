@@ -71,6 +71,21 @@
                             </svg>
                         <% } %>
                         <%= file.name %>
+                        <% if (file.isShared) { %>
+                            <span class="shared-badge-inline open-share-modal" 
+                                  title="Click to edit share settings"
+                                  data-id="<%= file.id %>" 
+                                  data-share-id="<%= file.shareId %>" 
+                                  data-filename="<%= file.name %>" 
+                                  data-mode="edit"
+                                  data-expire-hours="<%= file.shareExpireHours || '24' %>"
+                                  data-max-downloads="<%= file.shareMaxDownloads !== undefined ? file.shareMaxDownloads : '0' %>"
+                                  data-has-password="<%= file.hasPassword ? 'true' : 'false' %>"
+                                  data-share-url="<%= file.shareUrl || '' %>"
+                                  data-access="<%= encodeURIComponent(JSON.stringify(file.accessList || [])) %>">
+                                <i class="fas fa-link"></i> Shared
+                            </span>
+                        <% } %>
                     </div>
                     <div class="file-owner">
                         <div class="owner-avatar">

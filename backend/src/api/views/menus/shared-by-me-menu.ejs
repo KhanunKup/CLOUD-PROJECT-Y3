@@ -1,0 +1,24 @@
+<!-- views/menus/shared-by-me-menu.ejs -->
+<div class="options-dropdown file-options">
+    <button class="option-item copy-share-link-btn" data-url="<%= typeof file !== 'undefined' && file.shareUrl ? file.shareUrl : '' %>"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
+    <button class="option-item open-share-modal" 
+            data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" 
+            data-share-id="<%= typeof file !== 'undefined' && file.shareId ? file.shareId : '' %>"
+            data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>" 
+            data-mode="edit"
+            data-expire-hours="<%= typeof file !== 'undefined' && file.expireHours ? file.expireHours : '24' %>"
+            data-max-downloads="<%= typeof file !== 'undefined' && file.maxDownloads !== undefined ? file.maxDownloads : '0' %>"
+            data-has-password="<%= typeof file !== 'undefined' && file.hasPassword ? 'true' : 'false' %>"
+            data-share-url="<%= typeof file !== 'undefined' && file.shareUrl ? file.shareUrl : '' %>"
+            data-access="<%= encodeURIComponent(JSON.stringify(typeof file !== 'undefined' && file.accessList ? file.accessList : [])) %>">
+        <i class="fas fa-sliders-h"></i> Edit Share
+    </button>
+    <button class="option-item download-action" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
+    <button class="option-item stop-sharing-action text-danger" 
+            style="color: #d32f2f;"
+            data-share-id="<%= typeof file !== 'undefined' && file.shareId ? file.shareId : '' %>" 
+            data-file-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" 
+            data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>">
+        <i class="fas fa-link-slash"></i> Stop Sharing
+    </button>
+</div>

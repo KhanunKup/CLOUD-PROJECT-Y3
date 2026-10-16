@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // หากคลิกปุ่ม copy link หรือ download ใน dropdown อย่าเพิ่งปิด dropdown ทันที เพื่อให้ผู้ใช้เห็นข้อความ Copied! / Downloaded!
-        if (e.target.closest('.copy-link-action, .download-action, .download-text')) {
+        if (e.target.closest('.copy-link-action, .copy-share-link-btn, .download-action, .download-text')) {
             return;
         }
 
@@ -224,7 +224,112 @@ document.addEventListener('DOMContentLoaded', () => {
             })();
             return;
         }
+
+        // Copy Share Link (from Shared By Me menu)
+        const copyShareBtn = e.target.closest('.copy-share-link-btn');
+        if (copyShareBtn) {
+            e.stopPropagation();
+            const textSpan = copyShareBtn.querySelector('.copy-link-text') || copyShareBtn;
+            const originalText = textSpan.textContent;
+            const shareUrl = copyShareBtn.dataset.url;
+            if (shareUrl) {
+                const fullUrl = window.location.origin + shareUrl;
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(fullUrl);
+                    } else {
+                        const tempInput = document.createElement('input');
+                        tempInput.value = fullUrl;
+                        document.body.appendChild(tempInput);
+                        tempInput.select();
+                        document.execCommand('copy');
+                        tempInput.remove();
+                    }
+                    if (window.showToast) {
+                        window.showToast('Share link copied to clipboard!', 'success');
+                    }
+                    textSpan.textContent = 'Copied!';
+                } catch (clipErr) {
+                    console.warn('Copy share link error:', clipErr);
+                } finally {
+                    setTimeout(() => {
+                        textSpan.textContent = originalText;
+                    }, 1500);
+                }
+            }
+            return;
+        }
+
+        // Stop Sharing action (from Drive menu or Shared By Me menu)
+        const stopShareBtn = e.target.closest('.stop-sharing-action');
+        if (stopShareBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeAllDropdowns();
+
+            const shareId = stopShareBtn.dataset.shareId;
+            const filename = stopShareBtn.dataset.filename || 'this file';
+
+            if (!shareId) {
+                if (window.showToast) window.showToast('Share link ID not found', 'error');
+                return;
+            }
+
+            if (window.showConfirmModal) {
+                window.showConfirmModal({
+                    title: 'Stop Sharing',
+                    messageHtml: `Are you sure you want to stop sharing <span class="confirm-highlight">"${filename}"</span>?<br><br>The public link will be deactivated immediately and anyone with the link will lose access.`,
+                    warning: 'This will revoke the shared link immediately.',
+                    confirmText: 'Stop Sharing',
+                    confirmType: 'danger',
+                    onConfirm: async () => {
+                        try {
+                            const res = await fetch(`/api/shares/${shareId}`, { method: 'DELETE' });
+                            const data = await res.json();
+                            if (!res.ok || !data.success) throw new Error(data.error || 'Failed to revoke share');
+
+                            if (window.showToast) window.showToast(`Stopped sharing "${filename}"`, 'success');
+
+                            const targetRow = stopShareBtn.closest('.file-row');
+                            if (window.location.pathname.includes('/shared') && targetRow) {
+                                if (window.animateRowRemoval) {
+                                    window.animateRowRemoval(targetRow, 'You haven\'t shared any files yet. Share files from My Drive to see them here.', '#sharedByMeTable');
+                                } else {
+                                    targetRow.remove();
+                                }
+                            } else {
+                                setTimeout(() => window.location.reload(), 600);
+                            }
+                        } catch (err) {
+                            console.error('Stop share error:', err);
+                            if (window.showToast) window.showToast(`Failed: ${err.message}`, 'error');
+                        }
+                    }
+                });
+            }
+            return;
+        }
     });
+
+    // ─── Shared Page Tabs Switching ───
+    const tabBtns = document.querySelectorAll('.shared-tab-btn');
+    if (tabBtns.length > 0) {
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.dataset.target;
+                tabBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                document.querySelectorAll('.shared-table-panel').forEach(panel => {
+                    if (panel.id === targetId) {
+                        panel.style.display = 'flex';
+                    } else {
+                        panel.style.display = 'none';
+                    }
+                });
+            });
+        });
+    }
 
     // ─── Real-time Search Filtering (Drive, Shared, Trash) ───
     const searchInput = document.querySelector('.search-input');
