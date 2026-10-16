@@ -25,6 +25,7 @@ const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Configure EJS View Engine
 app.set('view engine', 'ejs');
@@ -126,6 +127,29 @@ let mockUserStorage = {
   }
 };
 
+let mockUsers = [
+  {
+    user_id: 'user-admin-01',
+    name: 'Admin Rick',
+    username: 'admin',
+    email: 'admin@kmitl.ac.th',
+    password: 'admin123',
+    role: 'admin',
+    quota: 10737418240,
+    created_at: new Date().toISOString()
+  },
+  {
+    user_id: 'user-normal-01',
+    name: 'Morty Smith',
+    username: 'user',
+    email: 'user@kmitl.ac.th',
+    password: 'user123',
+    role: 'user',
+    quota: 10737418240,
+    created_at: new Date().toISOString()
+  }
+];
+
 // ==========================================
 // 3. Helper Functions
 // ==========================================
@@ -145,84 +169,266 @@ function getCategoryFromExtension(filename) {
   return 'other';
 }
 
-// Authentication Middleware (Mock friendly)
-function authMiddleware(req, res, next) {
+// Helper to parse cookies without extra dependencies
+function parseCookies(req) {
+  const list = {};
+  const rc = req.headers.cookie;
+  if (rc) {
+    rc.split(';').forEach(cookie => {
+      const parts = cookie.split('=');
+      list[parts.shift().trim()] = decodeURIComponent(parts.join('='));
+    });
+  }
+  return list;
+}
+
+// Helper to extract session user from Cookie or Authorization header
+function getSessionUser(req) {
+  const cookies = parseCookies(req);
+  if (cookies.easydrive_session) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cookies.easydrive_session, 'base64').toString('utf-8'));
+      if (decoded && decoded.user_id) return decoded;
+    } catch (e) {}
+  }
+
   const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1];
+      const payloadBase64 = token.split('.')[1] || token;
+      const decoded = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf-8'));
+      if (decoded && (decoded.user_id || decoded.sub)) {
+        return {
+          user_id: decoded.user_id || decoded.sub || decoded['cognito:username'],
+          email: decoded.email,
+          name: decoded.name || decoded['cognito:username'] || 'User',
+          role: (decoded['cognito:groups'] && decoded['cognito:groups'].includes('Admin')) ? 'admin' : (decoded.role || 'user')
+        };
+      }
+    } catch (e) {}
+  }
+
+  return null;
+}
+
+// Authentication Middleware (API Endpoints)
+function authMiddleware(req, res, next) {
+  const user = getSessionUser(req);
+  if (user) {
+    req.user = user;
+    return next();
+  }
+
   if (IS_MOCK_MODE) {
-    // Local mock mode: auto-assign demo-user
+    // Check if x-user-id header is provided (e.g. testing)
+    if (req.headers['x-user-id']) {
+      req.user = {
+        user_id: req.headers['x-user-id'],
+        email: 'demo@kmitl.ac.th',
+        name: 'Demo User',
+        role: req.headers['x-user-role'] || 'user'
+      };
+      return next();
+    }
+    // Default fallback to first preset user for headless API calls
     req.user = {
-      user_id: req.headers['x-user-id'] || 'demo-user',
-      email: 'demo@kmitl.ac.th',
-      role: req.headers['x-user-role'] || 'user'
+      user_id: mockUsers[0].user_id,
+      email: mockUsers[0].email,
+      name: mockUsers[0].name,
+      role: mockUsers[0].role
     };
     return next();
   }
 
-  // AWS Cloud Mode: Decode Cognito JWT payload
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
-  }
+  return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+}
 
-  try {
-    const token = authHeader.split(' ')[1];
-    const payloadBase64 = token.split('.')[1];
-    const decoded = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf-8'));
-    req.user = {
-      user_id: decoded.sub || decoded['cognito:username'],
-      email: decoded.email,
-      role: (decoded['cognito:groups'] && decoded['cognito:groups'].includes('Admin')) ? 'admin' : 'user'
-    };
-    next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Unauthorized: Invalid JWT token' });
+// Authentication Guards for Web SSR routes
+function requireAuthWeb(req, res, next) {
+  const user = getSessionUser(req);
+  if (!user) {
+    return res.redirect('/signin');
   }
+  req.user = user;
+  res.locals.user = user;
+  next();
+}
+
+function requireAdminWeb(req, res, next) {
+  const user = getSessionUser(req);
+  if (!user) {
+    return res.redirect('/signin');
+  }
+  if (user.role !== 'admin') {
+    return res.redirect('/drive');
+  }
+  req.user = user;
+  res.locals.user = user;
+  next();
 }
 
 // Middleware สำหรับจำลองข้อมูลผู้ใช้ปัจจุบันสำหรับหน้า EJS
 app.use((req, res, next) => {
+  const user = getSessionUser(req);
   const roleParam = req.query.role;
-  res.locals.user = {
-    name: 'Rick and Morty',
-    role: roleParam ? roleParam.toLowerCase() : 'admin',
-    avatar: null
-  };
+  if (user) {
+    res.locals.user = user;
+  } else if (roleParam) {
+    res.locals.user = {
+      name: 'Rick and Morty',
+      role: roleParam.toLowerCase(),
+      avatar: null
+    };
+  } else {
+    res.locals.user = null;
+  }
   next();
 });
 
 // ==========================================
-// 4. Web SSR Routes (Frontend Pages)
+// 4. Web SSR Routes (Frontend Pages) & Auth
 // ==========================================
 app.get('/', (req, res) => {
+  const user = getSessionUser(req);
+  if (user) return res.redirect('/drive');
   res.redirect('/signin');
 });
 
 app.get('/signin', (req, res) => {
-  res.render('pages/login');
+  const user = getSessionUser(req);
+  if (user) return res.redirect('/drive');
+  res.render('pages/login', { error: null });
 });
 
 app.get('/signup', (req, res) => {
-  res.render('pages/signup');
+  const user = getSessionUser(req);
+  if (user) return res.redirect('/drive');
+  res.render('pages/signup', { error: null });
 });
 
 app.get('/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'easydrive_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
   res.redirect('/signin');
 });
 
-app.get('/drive', (req, res) => {
-  const activeFiles = mockFiles.filter(f => f.status === 'active');
+// 4.1 Login Handler (Supports JSON & HTML Form)
+app.post(['/api/auth/login', '/signin'], async (req, res) => {
+  const { username, email, password } = req.body;
+  const identifier = (username || email || '').trim().toLowerCase();
+
+  if (!identifier || !password) {
+    if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+      return res.render('pages/login', { error: 'Please enter username/email and password' });
+    }
+    return res.status(400).json({ error: 'Username/Email and password are required' });
+  }
+
+  const user = mockUsers.find(u => 
+    u.email.toLowerCase() === identifier || 
+    u.username.toLowerCase() === identifier
+  );
+
+  if (!user || user.password !== password) {
+    if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+      return res.render('pages/login', { error: 'Invalid username/email or password' });
+    }
+    return res.status(401).json({ error: 'Invalid username/email or password' });
+  }
+
+  const sessionUser = {
+    user_id: user.user_id,
+    name: user.name,
+    email: user.email,
+    role: user.role
+  };
+  const sessionToken = Buffer.from(JSON.stringify(sessionUser)).toString('base64');
+  res.setHeader('Set-Cookie', `easydrive_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+
+  if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+    return res.redirect('/drive');
+  }
+  return res.json({ success: true, message: 'Logged in successfully', user: sessionUser });
+});
+
+// 4.2 Signup Handler (Supports JSON & HTML Form)
+app.post(['/api/auth/signup', '/signup'], async (req, res) => {
+  const { username, email, password, confirmPassword } = req.body;
+
+  if (!username || !email || !password) {
+    if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+      return res.render('pages/signup', { error: 'Please fill in all required fields' });
+    }
+    return res.status(400).json({ error: 'Please fill in all required fields' });
+  }
+
+  if (confirmPassword && password !== confirmPassword) {
+    if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+      return res.render('pages/signup', { error: 'Passwords do not match' });
+    }
+    return res.status(400).json({ error: 'Passwords do not match' });
+  }
+
+  const existing = mockUsers.find(u => 
+    u.email.toLowerCase() === email.trim().toLowerCase() ||
+    u.username.toLowerCase() === username.trim().toLowerCase()
+  );
+
+  if (existing) {
+    if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+      return res.render('pages/signup', { error: 'Username or email already exists' });
+    }
+    return res.status(409).json({ error: 'Username or email already exists' });
+  }
+
+  const newUser = {
+    user_id: `user-${crypto.randomUUID().slice(0, 8)}`,
+    name: username.trim(),
+    username: username.trim().toLowerCase(),
+    email: email.trim().toLowerCase(),
+    password: password,
+    role: 'user',
+    quota: 10737418240,
+    created_at: new Date().toISOString()
+  };
+  mockUsers.push(newUser);
+
+  const sessionUser = {
+    user_id: newUser.user_id,
+    name: newUser.name,
+    email: newUser.email,
+    role: newUser.role
+  };
+  const sessionToken = Buffer.from(JSON.stringify(sessionUser)).toString('base64');
+  res.setHeader('Set-Cookie', `easydrive_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+
+  if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+    return res.redirect('/drive');
+  }
+  return res.json({ success: true, message: 'Account created successfully', user: sessionUser });
+});
+
+// 4.3 Drive Page (Protected)
+app.get('/drive', requireAuthWeb, (req, res) => {
+  const activeFiles = mockFiles.filter(f => {
+    if (f.status !== 'active') return false;
+    if (req.user.role === 'admin') return true;
+    return f.owner_id === req.user.user_id || f.owner_id === 'demo-user';
+  });
   res.render('pages/homepage', {
     files: activeFiles.map(f => ({
       id: f.file_id,
       name: f.filename,
       type: f.category === 'folder' ? 'folder' : 'file',
-      owner: f.owner_id === 'demo-user' ? 'me' : f.owner_id,
+      owner: f.owner_id === req.user.user_id ? 'me' : (f.owner_id === 'demo-user' ? 'me' : f.owner_id),
       uploadDate: new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       accessList: []
     }))
   });
 });
 
-app.get('/shared', (req, res) => {
+// 4.4 Shared Page (Protected)
+app.get('/shared', requireAuthWeb, (req, res) => {
   res.render('pages/shared', {
     files: [
       {
@@ -233,8 +439,13 @@ app.get('/shared', (req, res) => {
   });
 });
 
-app.get('/trash', (req, res) => {
-  const trashedFiles = mockFiles.filter(f => f.status === 'trash');
+// 4.5 Trash Page (Protected)
+app.get('/trash', requireAuthWeb, (req, res) => {
+  const trashedFiles = mockFiles.filter(f => {
+    if (f.status !== 'trash') return false;
+    if (req.user.role === 'admin') return true;
+    return f.owner_id === req.user.user_id || f.owner_id === 'demo-user';
+  });
   res.render('pages/trash', {
     files: trashedFiles.map(f => ({
       id: f.file_id,
@@ -246,18 +457,19 @@ app.get('/trash', (req, res) => {
   });
 });
 
-app.post('/trash/empty', (req, res) => {
+app.post('/trash/empty', requireAuthWeb, (req, res) => {
   if (IS_MOCK_MODE) {
     mockFiles = mockFiles.filter(f => f.status !== 'trash');
   }
   res.redirect('/trash');
 });
 
-app.get('/management', (req, res) => {
+// 4.6 Admin Pages (Admin-Only Guard)
+app.get('/management', requireAdminWeb, (req, res) => {
   res.render('pages/usermanagement');
 });
 
-app.get('/audit', (req, res) => {
+app.get('/audit', requireAdminWeb, (req, res) => {
   res.render('pages/audit');
 });
 
@@ -280,7 +492,11 @@ app.get('/api/files', authMiddleware, async (req, res) => {
   const categoryFilter = req.query.category;
 
   if (IS_MOCK_MODE) {
-    let files = mockFiles.filter(f => f.owner_id === req.user.user_id && f.status === statusFilter);
+    let files = mockFiles.filter(f => {
+      if (f.status !== statusFilter) return false;
+      if (req.user.role === 'admin') return true;
+      return f.owner_id === req.user.user_id || f.owner_id === 'demo-user';
+    });
     if (categoryFilter) files = files.filter(f => f.category === categoryFilter);
     return res.json({ success: true, count: files.length, files });
   }

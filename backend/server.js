@@ -29,13 +29,24 @@ app.get('/mock-download/:filename', (req, res) => {
   res.send(`Mock Download Content for file: ${req.params.filename}`);
 });
 
-app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(`🚀 EasyDrive Server running at http://localhost:${PORT}`);
-  console.log(`📡 REST API Base URL:       http://localhost:${PORT}/api`);
-  console.log(`📁 Static Assets Directory:  frontend/public`);
-  console.log(`📄 EJS Views Directory:      backend/src/api/views`);
-  console.log(`=======================================================`);
-});
+let serverInstance = null;
 
-module.exports = { app };
+function startServer(port = PORT) {
+  if (!serverInstance) {
+    serverInstance = app.listen(port, () => {
+      console.log(`=======================================================`);
+      console.log(`🚀 EasyDrive Server running at http://localhost:${port}`);
+      console.log(`📡 REST API Base URL:       http://localhost:${port}/api`);
+      console.log(`📁 Static Assets Directory:  frontend/public`);
+      console.log(`📄 EJS Views Directory:      backend/src/api/views`);
+      console.log(`=======================================================`);
+    });
+  }
+  return serverInstance;
+}
+
+if (!process.env.TEST_MODE) {
+  startServer();
+}
+
+module.exports = { app, startServer };
