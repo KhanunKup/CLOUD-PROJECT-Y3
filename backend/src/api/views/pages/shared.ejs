@@ -40,10 +40,10 @@
       <h1 class="page-title">SHARED</h1>
       <div class="shared-tabs">
         <button type="button" class="shared-tab-btn active" id="tabBtnSharedWithMe" data-target="sharedWithMeTable">
-          <i class="fas fa-inbox"></i> Shared with me (<%= typeof sharedWithMe !== 'undefined' ? sharedWithMe.length : 0 %>)
+          <i class="fas fa-inbox"></i> Shared with me (<span id="sharedWithMeCount"><%= typeof sharedWithMe !== 'undefined' ? sharedWithMe.length : 0 %></span>)
         </button>
         <button type="button" class="shared-tab-btn" id="tabBtnSharedByMe" data-target="sharedByMeTable">
-          <i class="fas fa-paper-plane"></i> Shared by me (<%= typeof sharedByMe !== 'undefined' ? sharedByMe.length : 0 %>)
+          <i class="fas fa-paper-plane"></i> Shared by me (<span id="sharedByMeCount"><%= typeof sharedByMe !== 'undefined' ? sharedByMe.length : 0 %></span>)
         </button>
       </div>
     </div>

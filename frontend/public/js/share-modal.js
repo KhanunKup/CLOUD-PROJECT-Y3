@@ -254,7 +254,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 setTimeout(() => {
                     closeModal();
-                    window.location.reload();
+                    if (window.location.pathname.includes('/shared')) {
+                        try {
+                            localStorage.setItem('shared_active_tab', 'sharedByMeTable');
+                        } catch (e) {}
+                        window.location.hash = '#shared-by-me';
+                        window.location.reload();
+                    } else {
+                        window.location.reload();
+                    }
                 }, 600);
                 return;
             } else {
@@ -385,11 +393,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             const targetRow = document.getElementById(`row-share-${shareId}`) || (window.activeShareFileBtn ? window.activeShareFileBtn.closest('.file-row') : null);
                             if (targetRow && window.location.pathname.includes('/shared')) {
+                                // Decrement counter immediately
+                                const countEl = document.getElementById('sharedByMeCount');
+                                if (countEl) {
+                                    const curr = parseInt(countEl.textContent, 10) || 0;
+                                    countEl.textContent = Math.max(0, curr - 1);
+                                }
+
                                 if (window.animateRowRemoval) {
                                     window.animateRowRemoval(targetRow, 'You haven\'t shared any files yet. Share files from My Drive to see them here.', '#sharedByMeTable');
                                 } else {
                                     targetRow.remove();
                                 }
+
+                                setTimeout(() => {
+                                    if (window.updateSharedTabCounts) window.updateSharedTabCounts();
+                                }, 350);
                             } else {
                                 setTimeout(() => window.location.reload(), 600);
                             }

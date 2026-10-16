@@ -292,11 +292,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             const targetRow = stopShareBtn.closest('.file-row');
                             if (window.location.pathname.includes('/shared') && targetRow) {
+                                // Decrement counter immediately
+                                const countEl = document.getElementById('sharedByMeCount');
+                                if (countEl) {
+                                    const curr = parseInt(countEl.textContent, 10) || 0;
+                                    countEl.textContent = Math.max(0, curr - 1);
+                                }
+
                                 if (window.animateRowRemoval) {
                                     window.animateRowRemoval(targetRow, 'You haven\'t shared any files yet. Share files from My Drive to see them here.', '#sharedByMeTable');
                                 } else {
                                     targetRow.remove();
                                 }
+
+                                setTimeout(() => {
+                                    if (window.updateSharedTabCounts) window.updateSharedTabCounts();
+                                }, 350);
                             } else {
                                 setTimeout(() => window.location.reload(), 600);
                             }
@@ -311,24 +322,103 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ─── Shared Page Tabs Switching ───
+    // ─── Shared Page Real-Time Tab Counts Helper ───
+    window.updateSharedTabCounts = function() {
+        const byMeTable = document.getElementById('sharedByMeTable');
+        const byMeCountEl = document.getElementById('sharedByMeCount');
+        if (byMeTable && byMeCountEl) {
+            const rows = byMeTable.querySelectorAll('.file-row');
+            byMeCountEl.textContent = rows.length;
+            if (rows.length === 0 && !byMeTable.querySelector('.empty-state')) {
+                const emptyEl = document.createElement('div');
+                emptyEl.className = 'empty-state';
+                emptyEl.textContent = "You haven't shared any files yet. Share files from My Drive to see them here.";
+                byMeTable.appendChild(emptyEl);
+            }
+        }
+
+        const withMeTable = document.getElementById('sharedWithMeTable');
+        const withMeCountEl = document.getElementById('sharedWithMeCount');
+        if (withMeTable && withMeCountEl) {
+            const rows = withMeTable.querySelectorAll('.file-row');
+            withMeCountEl.textContent = rows.length;
+            if (rows.length === 0 && !withMeTable.querySelector('.empty-state')) {
+                const emptyEl = document.createElement('div');
+                emptyEl.className = 'empty-state';
+                emptyEl.textContent = "No files have been shared with you yet.";
+                withMeTable.appendChild(emptyEl);
+            }
+        }
+    };
+
+    // ─── Shared Page Tabs Switching & State Persistence ───
+    function switchSharedTab(targetId, updateHash = true) {
+        const tabBtns = document.querySelectorAll('.shared-tab-btn');
+        const panels = document.querySelectorAll('.shared-table-panel');
+        if (!tabBtns.length) return;
+
+        tabBtns.forEach(b => {
+            if (b.dataset.target === targetId) {
+                b.classList.add('active');
+            } else {
+                b.classList.remove('active');
+            }
+        });
+
+        panels.forEach(panel => {
+            if (panel.id === targetId) {
+                panel.style.display = 'flex';
+            } else {
+                panel.style.display = 'none';
+            }
+        });
+
+        try {
+            localStorage.setItem('shared_active_tab', targetId);
+        } catch (e) {}
+
+        if (updateHash) {
+            const targetHash = targetId === 'sharedByMeTable' ? '#shared-by-me' : '#shared-with-me';
+            if (window.location.hash !== targetHash) {
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', targetHash);
+                } else {
+                    window.location.hash = targetHash;
+                }
+            }
+        }
+    }
+    window.switchSharedTab = switchSharedTab;
+
     const tabBtns = document.querySelectorAll('.shared-tab-btn');
     if (tabBtns.length > 0) {
         tabBtns.forEach(btn => {
             btn.addEventListener('click', () => {
-                const targetId = btn.dataset.target;
-                tabBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-
-                document.querySelectorAll('.shared-table-panel').forEach(panel => {
-                    if (panel.id === targetId) {
-                        panel.style.display = 'flex';
-                    } else {
-                        panel.style.display = 'none';
-                    }
-                });
+                switchSharedTab(btn.dataset.target, true);
             });
         });
+
+        // Initialize active tab from URL Hash or localStorage
+        function initSharedTabState() {
+            const currentHash = (window.location.hash || '').toLowerCase();
+            let savedTab = null;
+            try {
+                savedTab = localStorage.getItem('shared_active_tab');
+            } catch (e) {}
+
+            if (currentHash === '#shared-by-me' || currentHash === '#by-me') {
+                switchSharedTab('sharedByMeTable', false);
+            } else if (currentHash === '#shared-with-me' || currentHash === '#with-me') {
+                switchSharedTab('sharedWithMeTable', false);
+            } else if (savedTab === 'sharedByMeTable') {
+                switchSharedTab('sharedByMeTable', true);
+            } else {
+                switchSharedTab('sharedWithMeTable', false);
+            }
+        }
+
+        initSharedTabState();
+        window.addEventListener('hashchange', initSharedTabState);
     }
 
     // ─── Real-time Search Filtering (Drive, Shared, Trash) ───
