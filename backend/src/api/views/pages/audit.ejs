@@ -24,7 +24,7 @@
         /* ─── Main Container & Card ─── */
         .main-container {
             flex: 1;
-            padding: 30px;
+            padding: 40px;
             display: flex;
             justify-content: center;
         }
@@ -48,17 +48,14 @@
         }
         .page-title h1 {
             font-size: 2.2rem;
-            color: #111;
+            color: #222;
             margin-bottom: 5px;
-            font-family: 'Outfit', 'Kanit', sans-serif;
-            font-weight: 700;
         }
         .page-title p {
-            color: #333;
+            color: #555;
             font-size: 1rem;
-            font-weight: 500;
         }
-        .header-icon svg { width: 55px; height: 55px; fill: #111; }
+        .header-icon svg { width: 50px; height: 50px; fill: #333; }
 
         /* ─── Toolbar (Search, Filters, Stats) ─── */
         .toolbar {
@@ -66,39 +63,46 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 20px;
         }
         .filter-section {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            width: 100%;
-            max-width: 350px;
+            gap: 10px;
+            width: 40%;
         }
         .filter-section input {
-            padding: 10px 20px;
-            border-radius: 20px;
+            padding: 12px 20px;
+            border-radius: 10px;
             border: 1px solid #d1bdae;
             background-color: #fff;
             width: 100%;
-            font-size: 0.95rem;
+            font-size: 1rem;
+            box-sizing: border-box;
             outline: none;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .filter-section input:focus {
+            border-color: #7d5534;
+            box-shadow: 0 0 0 2px rgba(125, 85, 52, 0.2);
         }
         .filter-buttons { display: flex; gap: 10px; }
-        .filter-buttons button {
-            padding: 6px 16px;
+        .filter-dropdown {
+            padding: 8px 16px;
             border-radius: 20px;
-            border: 1px solid #ccc;
+            border: 1px solid #d1bdae;
             background-color: #fff;
             cursor: pointer;
-            font-size: 0.8rem;
-            color: #555;
+            font-size: 0.85rem;
+            color: #444;
             font-weight: 600;
-            display: flex;
-            align-items: center;
+            font-family: inherit;
+            outline: none;
             box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .filter-dropdown:focus {
+            border-color: #7d5534;
+            box-shadow: 0 0 0 2px rgba(125, 85, 52, 0.2);
         }
 
         .stats-section {
@@ -253,10 +257,29 @@
             <!-- Toolbar & Stats -->
             <div class="toolbar">
                 <div class="filter-section">
-                    <input type="text" placeholder="ค้นหาผู้ใช้งาน...">
+                    <input type="text" id="auditSearchInput" placeholder="ค้นหาบันทึกกิจกรรม...">
                     <div class="filter-buttons">
-                        <button>ACTION ▼</button>
-                        <button>LEVEL ▼</button>
+                        <select id="actionFilter" class="filter-dropdown">
+                            <option value="All">ACTION: ทั้งหมด</option>
+                            <option value="LOGIN">ACTION: LOGIN</option>
+                            <option value="SIGNUP">ACTION: SIGNUP</option>
+                            <option value="UPLOAD">ACTION: UPLOAD</option>
+                            <option value="CREATE_FOLDER">ACTION: CREATE_FOLDER</option>
+                            <option value="RENAME">ACTION: RENAME</option>
+                            <option value="MOVE_TO_TRASH">ACTION: MOVE_TO_TRASH</option>
+                            <option value="RESTORE">ACTION: RESTORE</option>
+                            <option value="PERMANENT_DELETE">ACTION: PERMANENT_DELETE</option>
+                            <option value="CREATE_SHARE">ACTION: CREATE_SHARE</option>
+                            <option value="DOWNLOAD_SHARE">ACTION: DOWNLOAD_SHARE</option>
+                            <option value="ROLE_CHANGE">ACTION: ROLE_CHANGE</option>
+                            <option value="DELETE_USER">ACTION: DELETE_USER</option>
+                        </select>
+                        <select id="levelFilter" class="filter-dropdown">
+                            <option value="All">LEVEL: ทั้งหมด</option>
+                            <option value="info">LEVEL: Info</option>
+                            <option value="warning">LEVEL: Warning</option>
+                            <option value="critical">LEVEL: Critical</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -375,23 +398,15 @@
     <!-- Scripts: Search, Filter, Modal -->
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const searchInput = document.querySelector('.filter-section input');
-        const filterBtns = document.querySelectorAll('.filter-buttons button');
+        const searchInput = document.getElementById('auditSearchInput') || document.querySelector('.filter-section input');
+        const actionSelect = document.getElementById('actionFilter');
+        const levelSelect = document.getElementById('levelFilter');
         const auditRows = document.querySelectorAll('.audit-row');
-
-        const actionBtn = filterBtns[0];
-        const levelBtn = filterBtns[1];
-
-        const actions = ['All', 'LOGIN', 'SIGNUP', 'UPLOAD', 'CREATE_FOLDER', 'RENAME', 'MOVE_TO_TRASH', 'RESTORE', 'PERMANENT_DELETE', 'CREATE_SHARE', 'DOWNLOAD_SHARE', 'ROLE_CHANGE', 'DELETE_USER'];
-        const levels = ['All', 'info', 'warning', 'critical'];
-
-        let actionIdx = 0;
-        let levelIdx = 0;
 
         function applyFilters() {
             const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-            const selectedAction = actions[actionIdx];
-            const selectedLevel = levels[levelIdx];
+            const selectedAction = actionSelect ? actionSelect.value : 'All';
+            const selectedLevel = levelSelect ? levelSelect.value : 'All';
 
             let visibleCount = 0;
 
@@ -419,22 +434,8 @@
         }
 
         if (searchInput) searchInput.addEventListener('input', applyFilters);
-
-        if (actionBtn) {
-            actionBtn.addEventListener('click', () => {
-                actionIdx = (actionIdx + 1) % actions.length;
-                actionBtn.textContent = `ACTION: ${actions[actionIdx]} ▼`;
-                applyFilters();
-            });
-        }
-
-        if (levelBtn) {
-            levelBtn.addEventListener('click', () => {
-                levelIdx = (levelIdx + 1) % levels.length;
-                levelBtn.textContent = `LEVEL: ${levels[levelIdx]} ▼`;
-                applyFilters();
-            });
-        }
+        if (actionSelect) actionSelect.addEventListener('change', applyFilters);
+        if (levelSelect) levelSelect.addEventListener('change', applyFilters);
 
         // Log Detail Modal
         const modal = document.getElementById('logDetailModal');

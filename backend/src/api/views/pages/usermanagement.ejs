@@ -88,17 +88,40 @@
             display: flex;
             gap: 10px;
         }
-        .filter-buttons button {
-            padding: 6px 15px;
+        .filter-dropdown {
+            padding: 8px 16px;
             border-radius: 20px;
-            border: 1px solid #ccc;
+            border: 1px solid #d1bdae;
             background-color: #fff;
             cursor: pointer;
             font-size: 0.85rem;
-            color: #555;
-            display: flex;
-            align-items: center;
-            gap: 5px;
+            color: #444;
+            font-weight: 600;
+            font-family: inherit;
+            outline: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .filter-dropdown:focus {
+            border-color: #7d5534;
+            box-shadow: 0 0 0 2px rgba(125, 85, 52, 0.2);
+        }
+        .badge-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            display: inline-block;
+        }
+        .status-active {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+        .status-inactive {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
         }
 
         .stats-section {
@@ -247,10 +270,18 @@
             <!-- แถบเครื่องมือและสถิติ -->
             <div class="toolbar">
                 <div class="filter-section">
-                    <input type="text" placeholder="ค้นหาผู้ใช้งาน...">
+                    <input type="text" id="userSearchInput" placeholder="ค้นหาผู้ใช้งาน...">
                     <div class="filter-buttons">
-                        <button>ROLE ▼</button>
-                        <button>Status ▼</button>
+                        <select id="roleFilter" class="filter-dropdown">
+                            <option value="all">ROLE: ทั้งหมด</option>
+                            <option value="admin">ROLE: Admin</option>
+                            <option value="user">ROLE: User</option>
+                        </select>
+                        <select id="statusFilter" class="filter-dropdown">
+                            <option value="all">STATUS: ทั้งหมด</option>
+                            <option value="active">STATUS: Active</option>
+                            <option value="inactive">STATUS: Inactive</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -286,6 +317,7 @@
                         <tr>
                             <th>ผู้ใช้</th>
                             <th>ROLE</th>
+                            <th>สถานะ</th>
                             <th>สร้างเมื่อ</th>
                             <th>พื้นที่ใช้งาน</th>
                             <th>จัดการ</th>
@@ -294,7 +326,7 @@
                     <tbody id="userTableBody">
                         <% if (typeof users !== 'undefined' && users && users.length > 0) { %>
                             <% users.forEach(function(u) { %>
-                                <tr class="user-row" data-id="<%= u.user_id %>" data-name="<%= (u.name || '').toLowerCase() %>" data-email="<%= (u.email || '').toLowerCase() %>" data-role="<%= u.role %>">
+                                <tr class="user-row" data-id="<%= u.user_id %>" data-name="<%= (u.name || '').toLowerCase() %>" data-email="<%= (u.email || '').toLowerCase() %>" data-role="<%= u.role %>" data-status="<%= u.status || 'active' %>">
                                     <td>
                                         <div class="user-cell">
                                             <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
@@ -307,6 +339,11 @@
                                     <td>
                                         <span class="badge <%= u.role === 'admin' ? 'badge-admin' : 'badge-user' %>"><%= u.role === 'admin' ? 'Admin' : 'User' %></span>
                                     </td>
+                                    <td>
+                                        <span class="badge-status <%= (u.status || 'active') === 'active' ? 'status-active' : 'status-inactive' %>">
+                                            <%= (u.status || 'active') === 'active' ? 'Active' : 'Inactive' %>
+                                        </span>
+                                    </td>
                                     <td class="date-text"><%= new Date(u.created_at).toLocaleDateString('en-GB') %></td>
                                     <td class="date-text"><%= u.storageFormatted || '0 B' %></td>
                                     <td>
@@ -315,6 +352,7 @@
                                                     data-id="<%= u.user_id %>" 
                                                     data-name="<%= u.name %>" 
                                                     data-role="<%= u.role %>" 
+                                                    data-status="<%= u.status || 'active' %>"
                                                     data-quota="<%= u.quota %>">แก้ไข</button>
                                             <% if (typeof user !== 'undefined' && user && user.user_id === u.user_id) { %>
                                                 <button type="button" class="btn-delete" style="opacity: 0.4; cursor: not-allowed;" title="ไม่สามารถลบบัญชีตัวเองได้" disabled>ลบ</button>
@@ -327,7 +365,7 @@
                             <% }); %>
                         <% } else { %>
                             <tr>
-                                <td colspan="5" style="text-align: center; padding: 30px; color: #888;">ไม่พบข้อมูลผู้ใช้งาน</td>
+                                <td colspan="6" style="text-align: center; padding: 30px; color: #888;">ไม่พบข้อมูลผู้ใช้งาน</td>
                             </tr>
                         <% } %>
                     </tbody>
@@ -371,6 +409,14 @@
                     </select>
                 </div>
 
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 0.85rem; font-weight: bold; color: #555; margin-bottom: 6px;">Status (สถานะบัญชี):</label>
+                    <select id="editUserStatus" style="width: 100%; padding: 10px 14px; border: 1.5px solid #d1bdae; border-radius: 8px; box-sizing: border-box; font-size: 0.95rem; outline: none;">
+                        <option value="active">Active (ใช้งานปกติ)</option>
+                        <option value="inactive">Inactive (ระงับการใช้งาน)</option>
+                    </select>
+                </div>
+
                 <div style="margin-bottom: 24px;">
                     <label style="display: block; font-size: 0.85rem; font-weight: bold; color: #555; margin-bottom: 6px;">Storage Quota (โควตาพื้นที่):</label>
                     <select id="editUserQuota" style="width: 100%; padding: 10px 14px; border: 1.5px solid #d1bdae; border-radius: 8px; box-sizing: border-box; font-size: 0.95rem; outline: none;">
@@ -393,26 +439,29 @@
     <script src="/js/toast.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // 1. Search Filter
-        const searchInput = document.querySelector('.filter-section input');
-        const roleButtons = document.querySelectorAll('.filter-buttons button');
+        // 1. Search & Dropdown Filters
+        const searchInput = document.getElementById('userSearchInput') || document.querySelector('.filter-section input');
+        const roleSelect = document.getElementById('roleFilter');
+        const statusSelect = document.getElementById('statusFilter');
         const userRows = document.querySelectorAll('.user-row');
-
-        let currentRoleFilter = 'all';
 
         function filterUsers() {
             const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+            const selectedRole = roleSelect ? roleSelect.value : 'all';
+            const selectedStatus = statusSelect ? statusSelect.value : 'all';
             let visibleCount = 0;
 
             userRows.forEach(row => {
                 const name = row.dataset.name || '';
                 const email = row.dataset.email || '';
                 const role = row.dataset.role || '';
+                const status = row.dataset.status || 'active';
 
                 const matchesQuery = !query || name.includes(query) || email.includes(query);
-                const matchesRole = currentRoleFilter === 'all' || role === currentRoleFilter;
+                const matchesRole = selectedRole === 'all' || role === selectedRole;
+                const matchesStatus = selectedStatus === 'all' || status === selectedStatus;
 
-                if (matchesQuery && matchesRole) {
+                if (matchesQuery && matchesRole && matchesStatus) {
                     row.style.display = '';
                     visibleCount++;
                 } else {
@@ -424,34 +473,17 @@
             if (countEl) countEl.textContent = `แสดง ${visibleCount} ผู้ใช้`;
         }
 
-        if (searchInput) {
-            searchInput.addEventListener('input', filterUsers);
-        }
+        if (searchInput) searchInput.addEventListener('input', filterUsers);
+        if (roleSelect) roleSelect.addEventListener('change', filterUsers);
+        if (statusSelect) statusSelect.addEventListener('change', filterUsers);
 
-        // 2. Role Toggle Filter (Cycle through All -> Admin -> User -> All)
-        const roleBtn = roleButtons[0];
-        if (roleBtn) {
-            roleBtn.addEventListener('click', () => {
-                if (currentRoleFilter === 'all') {
-                    currentRoleFilter = 'admin';
-                    roleBtn.textContent = 'ROLE: Admin ▼';
-                } else if (currentRoleFilter === 'admin') {
-                    currentRoleFilter = 'user';
-                    roleBtn.textContent = 'ROLE: User ▼';
-                } else {
-                    currentRoleFilter = 'all';
-                    roleBtn.textContent = 'ROLE: All ▼';
-                }
-                filterUsers();
-            });
-        }
-
-        // 3. Edit User Modal Logic
+        // 2. Edit User Modal Logic
         const editModal = document.getElementById('editUserModal');
         const editForm = document.getElementById('editUserForm');
         const editUserId = document.getElementById('editUserId');
         const editUserName = document.getElementById('editUserName');
         const editUserRole = document.getElementById('editUserRole');
+        const editUserStatus = document.getElementById('editUserStatus');
         const editUserQuota = document.getElementById('editUserQuota');
         const closeEditBtn = document.getElementById('closeEditModalBtn');
         const cancelEditBtn = document.getElementById('cancelEditBtn');
@@ -466,11 +498,13 @@
                 const userId = btn.dataset.id;
                 const name = btn.dataset.name;
                 const role = btn.dataset.role;
+                const status = btn.dataset.status || 'active';
                 const quota = btn.dataset.quota;
 
                 editUserId.value = userId;
                 editUserName.value = name;
                 editUserRole.value = role;
+                if (editUserStatus) editUserStatus.value = status;
                 if (editUserQuota && quota) editUserQuota.value = quota;
 
                 if (editModal) editModal.style.display = 'flex';
@@ -485,6 +519,7 @@
                 e.preventDefault();
                 const userId = editUserId.value;
                 const newRole = editUserRole.value;
+                const newStatus = editUserStatus ? editUserStatus.value : 'active';
                 const newQuota = editUserQuota.value;
 
                 saveEditBtn.disabled = true;
@@ -494,7 +529,7 @@
                     const res = await fetch(`/api/admin/users/${userId}`, {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ role: newRole, quota: Number(newQuota) })
+                        body: JSON.stringify({ role: newRole, status: newStatus, quota: Number(newQuota) })
                     });
                     const data = await res.json();
                     if (!res.ok || !data.success) {
@@ -505,15 +540,28 @@
                     const row = document.querySelector(`.user-row[data-id="${userId}"]`);
                     if (row) {
                         row.dataset.role = newRole;
-                        const badge = row.querySelector('.badge');
-                        if (badge) {
-                            badge.className = `badge ${newRole === 'admin' ? 'badge-admin' : 'badge-user'}`;
-                            badge.textContent = newRole === 'admin' ? 'Admin' : 'User';
+                        row.dataset.status = newStatus;
+                        const roleBadge = row.querySelector('.badge');
+                        if (roleBadge) {
+                            roleBadge.className = `badge ${newRole === 'admin' ? 'badge-admin' : 'badge-user'}`;
+                            roleBadge.textContent = newRole === 'admin' ? 'Admin' : 'User';
+                        }
+                        const statusBadge = row.querySelector('.badge-status');
+                        if (statusBadge) {
+                            statusBadge.className = `badge-status ${newStatus === 'active' ? 'status-active' : 'status-inactive'}`;
+                            statusBadge.textContent = newStatus === 'active' ? 'Active' : 'Inactive';
+                        }
+                        const editBtn = row.querySelector('.open-edit-user-btn');
+                        if (editBtn) {
+                            editBtn.dataset.role = newRole;
+                            editBtn.dataset.status = newStatus;
+                            editBtn.dataset.quota = newQuota;
                         }
                     }
 
                     if (window.showToast) window.showToast(`Updated "${editUserName.value}" successfully!`, 'success');
                     closeEditModal();
+                    filterUsers();
                 } catch (err) {
                     console.error('Update user error:', err);
                     if (window.showToast) window.showToast(`Error: ${err.message}`, 'error');

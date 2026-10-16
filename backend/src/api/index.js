@@ -135,6 +135,7 @@ let mockUsers = [
     email: 'admin@kmitl.ac.th',
     password: 'admin123',
     role: 'admin',
+    status: 'active',
     quota: 10737418240, // 10 GB
     created_at: new Date(Date.now() - 86400000 * 30).toISOString()
   },
@@ -145,6 +146,7 @@ let mockUsers = [
     email: 'user@kmitl.ac.th',
     password: 'user123',
     role: 'user',
+    status: 'active',
     quota: 10737418240, // 10 GB
     created_at: new Date(Date.now() - 86400000 * 15).toISOString()
   },
@@ -155,6 +157,7 @@ let mockUsers = [
     email: 'summer@kmitl.ac.th',
     password: 'summer123',
     role: 'user',
+    status: 'active',
     quota: 5368709120, // 5 GB
     created_at: new Date(Date.now() - 86400000 * 5).toISOString()
   }
@@ -1283,7 +1286,7 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
   }
 
   const targetUserId = req.params.id;
-  const { role, quota, storageQuota } = req.body;
+  const { role, status, quota, storageQuota } = req.body;
   const user = mockUsers.find(u => u.user_id === targetUserId);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
@@ -1291,6 +1294,9 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
 
   if (role && (role === 'admin' || role === 'user')) {
     user.role = role;
+  }
+  if (status && (status === 'active' || status === 'inactive')) {
+    user.status = status;
   }
   const targetQuota = quota || storageQuota;
   if (targetQuota && Number(targetQuota) > 0) {
@@ -1303,7 +1309,7 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
     user: req.user,
     action: 'ROLE_CHANGE',
     level: 'warning',
-    details: `Admin updated user "${user.name}" (${user.email}): Role=${user.role}, Quota=${formatBytes(user.quota)}`
+    details: `Admin updated user "${user.name}" (${user.email}): Role=${user.role}, Status=${user.status || 'active'}, Quota=${formatBytes(user.quota)}`
   });
 
   res.json({ success: true, message: 'User updated successfully', user });
