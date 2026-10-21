@@ -27,6 +27,7 @@ function getCategoryAndTags(filename) {
     image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'],
     document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'],
     archive: ['zip', 'rar', '7z', 'tar', 'gz'],
+    code: ['py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'json', 'sh', 'bash', 'sql', 'java', 'c', 'cpp', 'cs', 'php', 'rb', 'go', 'rs', 'yaml', 'yml', 'xml', 'env'],
     video: ['mp4', 'mov', 'avi', 'mkv'],
     audio: ['mp3', 'wav', 'aac']
   };

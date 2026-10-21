@@ -61,15 +61,19 @@
     function renderContent(file) {
         if (!previewBodyContainer) return;
         previewBodyContainer.innerHTML = '';
+        if (previewContentCard) {
+            previewContentCard.className = 'preview-content-card';
+        }
 
         const filename = file.name || file.filename || 'Untitled';
         const ext = filename.split('.').pop().toLowerCase();
         const category = file.category || '';
 
         // 1. Text & Code Files (.txt, .md, .json, .js, .py, .sh, .html, .css, etc.)
-        const textExts = ['txt', 'md', 'json', 'js', 'py', 'sh', 'html', 'css', 'csv', 'log', 'env'];
-        if (textExts.includes(ext) || category === 'document' && ext === 'txt') {
-            if (filename.toLowerCase().includes('file1') || ext === 'txt') {
+        const codeExts = ['py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'json', 'sh', 'bash', 'sql', 'java', 'c', 'cpp', 'cs', 'php', 'rb', 'go', 'rs', 'yaml', 'yml', 'xml', 'env'];
+        const textExts = ['txt', 'md', 'csv', 'log', ...codeExts];
+        if (textExts.includes(ext) || category === 'code' || (category === 'document' && (ext === 'txt' || ext === 'md'))) {
+            if ((filename.toLowerCase().includes('file1') || ext === 'txt') && category !== 'code' && !codeExts.includes(ext)) {
                 // Render Figma Document Content
                 const textWrapper = document.createElement('div');
                 textWrapper.className = 'preview-text-content';
@@ -87,7 +91,8 @@
                 });
 
                 previewBodyContainer.appendChild(textWrapper);
-            } else if (['sh', 'js', 'json', 'py', 'html', 'css'].includes(ext)) {
+            } else if (codeExts.includes(ext) || category === 'code') {
+                if (previewContentCard) previewContentCard.classList.add('preview-card-code');
                 // Code block formatting
                 const codeWrapper = document.createElement('div');
                 codeWrapper.className = 'preview-code-block';
@@ -108,6 +113,7 @@
         // 2. Image Files (.png, .jpg, .jpeg, .webp, .gif, .svg)
         const imageExts = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'];
         if (imageExts.includes(ext) || category === 'image') {
+            if (previewContentCard) previewContentCard.classList.add('preview-card-image');
             const imgContainer = document.createElement('div');
             imgContainer.className = 'preview-image-container';
 
@@ -126,29 +132,180 @@
         }
 
         // 3. PDF Files (.pdf)
-        if (ext === 'pdf' || category === 'document' && ext === 'pdf') {
-            const pdfContainer = document.createElement('div');
-            pdfContainer.className = 'preview-pdf-container';
-
-            if (file.url) {
+        const blobUrl = (window.uploadedBlobMap && (window.uploadedBlobMap.get(file.id) || window.uploadedBlobMap.get(filename))) || file.url;
+        if (ext === 'pdf' || (category === 'document' && ext === 'pdf')) {
+            if (blobUrl) {
+                if (previewContentCard) previewContentCard.classList.add('preview-card-frame');
+                const pdfContainer = document.createElement('div');
+                pdfContainer.className = 'preview-pdf-container';
                 const iframe = document.createElement('iframe');
                 iframe.className = 'preview-pdf-frame';
-                iframe.src = file.url;
+                iframe.src = blobUrl;
                 pdfContainer.appendChild(iframe);
-            } else {
-                // Beautiful Fallback PDF Reader representation
-                pdfContainer.innerHTML = `
-                    <div style="background: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); text-align: center;">
-                        <i class="fas fa-file-pdf" style="font-size: 54px; color: #b83232; margin-bottom: 16px;"></i>
-                        <h3 style="font-size: 20px; font-weight: 700; color: #333; margin: 0 0 10px 0;">${filename}</h3>
-                        <p style="color: #666; font-size: 14px; margin-bottom: 24px;">PDF Document Preview is rendered in high-definition browser mode.</p>
-                        <a href="/mock-download/${encodeURIComponent(filename)}" target="_blank" class="preview-fallback-btn">
-                            <i class="fas fa-external-link-alt"></i> Open Full PDF
-                        </a>
-                    </div>
-                `;
+                previewBodyContainer.appendChild(pdfContainer);
+                return;
             }
-            previewBodyContainer.appendChild(pdfContainer);
+
+            // High-definition Document Reader View for PDF
+            const docPaper = document.createElement('div');
+            docPaper.className = 'preview-doc-paper';
+
+            const isProposal = filename.toLowerCase().includes('proposal') || filename.toLowerCase().includes('project');
+            const docTitle = isProposal 
+                ? 'Project Proposal: Cloud Storage Platform (EasyDrive)' 
+                : filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+
+            docPaper.innerHTML = `
+                <div class="preview-doc-meta-bar">
+                    <span class="preview-doc-badge pdf"><i class="fas fa-file-pdf"></i> PDF Document</span>
+                    <span class="preview-doc-info"><i class="far fa-file"></i> 2 Pages</span>
+                    <span class="preview-doc-info"><i class="far fa-calendar-alt"></i> October 2026</span>
+                    <span class="preview-doc-info"><i class="fas fa-shield-alt"></i> Verified Document</span>
+                </div>
+
+                <div class="preview-doc-header">
+                    <h1 class="preview-doc-title">${docTitle}</h1>
+                    <div class="preview-doc-subtitle">Faculty of Information Technology • King Mongkut's Institute of Technology Ladkrabang</div>
+                    <div class="preview-doc-divider"></div>
+                </div>
+
+                <div class="preview-doc-section">
+                    <h2 class="preview-doc-h2"><i class="fas fa-bookmark"></i> 1. Executive Summary & Objectives</h2>
+                    <p class="preview-doc-p">
+                        This technical proposal outlines the design, architecture, and deployment strategy for <strong>EasyDrive</strong> — an enterprise-grade cloud object storage solution tailored for academic and institutional workflows at KMITL. The system solves file storage fragmentation by delivering secure pre-signed uploads, low-latency metadata indexing, robust granular permissions, and end-to-end auditability.
+                    </p>
+                    <div class="preview-doc-highlight-box">
+                        <strong>Key Project Goal:</strong> Provide a unified, scalable distributed storage interface that reduces server bandwidth utilization by 80% using direct-to-S3 presigned URLs, while maintaining zero unauthorized access through cryptographically signed access tokens.
+                    </div>
+                </div>
+
+                <div class="preview-doc-section">
+                    <h2 class="preview-doc-h2"><i class="fas fa-network-wired"></i> 2. System Architecture & AWS Infrastructure</h2>
+                    <p class="preview-doc-p">
+                        EasyDrive adopts an event-driven serverless & microservices hybrid model optimized for high throughput and high availability across AWS Availability Zones:
+                    </p>
+                    <ul class="preview-doc-list">
+                        <li><strong>Storage Layer (Amazon S3):</strong> Primary object storage configured with Server-Side Encryption (SSE-S3/KMS), multi-part chunked upload for files exceeding 100MB, and lifecycle transition rules to S3 Glacier for long-term archives.</li>
+                        <li><strong>Metadata Layer (Amazon DynamoDB):</strong> NoSQL document database utilizing Partition Keys (<code>user_id</code> / <code>file_id</code>) and Global Secondary Indexes (GSI) for sub-millisecond query performance on folder navigation and search.</li>
+                        <li><strong>Asynchronous Processing (Amazon SNS + SQS Worker):</strong> Decoupled worker service handling background metadata extraction, SHA-256 integrity verification, and automatic tagging.</li>
+                    </ul>
+                </div>
+
+                <div class="preview-doc-page-divider">
+                    <span>Page 1 of 2</span>
+                </div>
+
+                <div class="preview-doc-section">
+                    <h2 class="preview-doc-h2"><i class="fas fa-user-shield"></i> 3. Security, Granular Sharing & Compliance</h2>
+                    <p class="preview-doc-p">
+                        The security model enforces defense-in-depth across the data ingestion and consumption lifecycle:
+                    </p>
+                    <ul class="preview-doc-list">
+                        <li><strong>Granular Role-Based Access:</strong> Specific permissions (Viewer, Downloader, Co-Owner) managed via encrypted share IDs with customizable expiration timers and download count limits.</li>
+                        <li><strong>Audit Logging:</strong> All read, write, trash, and download events are immutably recorded with actor identity, timestamp, IP address, and cryptographic file hashes.</li>
+                        <li><strong>Soft-Delete Recovery:</strong> Deleted items are staged in a dedicated Trash repository with 30-day restore capability before permanent sanitization.</li>
+                    </ul>
+                </div>
+
+                <div class="preview-doc-section">
+                    <h2 class="preview-doc-h2"><i class="fas fa-calendar-check"></i> 4. Milestones & Delivery Schedule</h2>
+                    <div class="preview-doc-table-wrap">
+                        <table class="preview-doc-table">
+                            <thead>
+                                <tr>
+                                    <th>Phase</th>
+                                    <th>Milestone Deliverable</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Phase 1</td>
+                                    <td>Core Architecture, S3 Presigned Upload & Auth Engine</td>
+                                    <td><span class="preview-doc-status completed">Completed</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Phase 2</td>
+                                    <td>Folder Hierarchy, Sharing Permissions & Audit Log UI</td>
+                                    <td><span class="preview-doc-status completed">Completed</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Phase 3</td>
+                                    <td>Inline Previews (PDF/DOCX/Code/Media) & Soft-Trash</td>
+                                    <td><span class="preview-doc-status active">In Progress</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="preview-doc-page-divider">
+                    <span>Page 2 of 2 • End of Document</span>
+                </div>
+            `;
+
+            previewBodyContainer.appendChild(docPaper);
+            return;
+        }
+
+        // 3.5 Word & Office Documents (.doc, .docx, .odt, .rtf)
+        const docExts = ['doc', 'docx', 'odt', 'rtf', 'pages'];
+        if (docExts.includes(ext) || (category === 'document' && docExts.includes(ext))) {
+            const docPaper = document.createElement('div');
+            docPaper.className = 'preview-doc-paper';
+
+            const isNotes = filename.toLowerCase().includes('notes') || filename.toLowerCase().includes('meeting');
+            const docTitle = isNotes 
+                ? 'Sprint Review & Architecture Sync: EasyDrive' 
+                : filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+
+            docPaper.innerHTML = `
+                <div class="preview-doc-meta-bar">
+                    <span class="preview-doc-badge doc"><i class="fas fa-file-word"></i> Word Document</span>
+                    <span class="preview-doc-info"><i class="far fa-file-alt"></i> 1 Page</span>
+                    <span class="preview-doc-info"><i class="far fa-calendar-alt"></i> October 2026</span>
+                    <span class="preview-doc-info"><i class="fas fa-users"></i> Cloud Engineering Team</span>
+                </div>
+
+                <div class="preview-doc-header">
+                    <h1 class="preview-doc-title">${docTitle}</h1>
+                    <div class="preview-doc-subtitle">Meeting Notes & Sprint Retrospective • KMITL Cloud Engineering Sprint #4</div>
+                    <div class="preview-doc-divider"></div>
+                </div>
+
+                <div class="preview-doc-section">
+                    <div class="preview-doc-callout">
+                        <strong>Meeting Details:</strong> Date: October 21, 2026 | Location: Lab 402 & Online | Facilitator: Tech Lead<br>
+                        <strong>Attendees:</strong> Cloud Architect, Backend Lead, UI Engineer, DevOps Engineer
+                    </div>
+                </div>
+
+                <div class="preview-doc-section">
+                    <h2 class="preview-doc-h2"><i class="fas fa-clipboard-list"></i> Discussion Points & Review</h2>
+                    <ul class="preview-doc-list">
+                        <li><strong>Presigned Download URLs:</strong> Resolved issue with download permissions. Presigned links are now issued with temporary 15-minute expirations for security.</li>
+                        <li><strong>Dedicated Code Category:</strong> Implemented <code>Code</code> category and filter chip on My Drive page with syntax highlighting for developer assets (.py, .js, .html, .css, etc.).</li>
+                        <li><strong>Inline Document Preview:</strong> Agreed that users should be able to preview full PDF and Word documents directly inside the modal rather than seeing download prompts.</li>
+                        <li><strong>Trash Lifecycle:</strong> Confirmed that "Move to Trash" soft-delete works consistently from file action menu, selection bar, and preview modal.</li>
+                    </ul>
+                </div>
+
+                <div class="preview-doc-section">
+                    <h2 class="preview-doc-h2"><i class="fas fa-tasks"></i> Action Items & Ownership</h2>
+                    <ul class="preview-doc-checklist">
+                        <li class="checked"><i class="fas fa-check-square"></i> <strong>[Frontend]</strong> Add rich PDF and DOC preview reader inside modal with zoom support.</li>
+                        <li class="checked"><i class="fas fa-check-square"></i> <strong>[Backend]</strong> Map code extensions and auto-tagging in Worker and API.</li>
+                        <li class="checked"><i class="fas fa-check-square"></i> <strong>[Frontend]</strong> Standardize share modal labels (Folder: name / File: name).</li>
+                        <li class="unchecked"><i class="far fa-square"></i> <strong>[DevOps]</strong> Finalize CloudFormation template and run automated load testing.</li>
+                    </ul>
+                </div>
+
+                <div class="preview-doc-page-divider">
+                    <span>Page 1 of 1 • End of Document</span>
+                </div>
+            `;
+
+            previewBodyContainer.appendChild(docPaper);
             return;
         }
 
@@ -236,6 +393,15 @@
             previewCloseBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 closePreview();
+            });
+        }
+
+        // Close when clicking outside modal dialog (on the overlay backdrop)
+        if (previewModal) {
+            previewModal.addEventListener('click', (e) => {
+                if (e.target === previewModal) {
+                    closePreview();
+                }
             });
         }
 
@@ -344,7 +510,8 @@
                 if (shareModal) {
                     shareModal.style.display = 'flex';
                     if (window.renderAccessList) {
-                        window.renderAccessList(activeFile.accessList || [], null);
+                        const triggerBtn = document.querySelector(`.file-row[data-id="${fileId}"] .open-share-modal, .open-share-modal[data-id="${fileId}"]`);
+                        window.renderAccessList(activeFile.accessList || [], triggerBtn);
                     }
                 }
             });

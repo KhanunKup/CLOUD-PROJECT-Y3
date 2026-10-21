@@ -2,41 +2,43 @@
 <link rel="stylesheet" href="/css/preview-modal.css">
 
 <div class="preview-modal-overlay" id="previewModal" style="display: none;">
-    <!-- Top Bar Header -->
-    <header class="preview-modal-header">
-        <div class="preview-header-left">
-            <button type="button" class="preview-close-btn" id="previewCloseBtn" title="Close Preview">
-                <i class="fas fa-times"></i>
-            </button>
-            <h2 class="preview-filename-title" id="previewFilename">File1.txt</h2>
-        </div>
-        <div class="preview-header-right">
-            <button type="button" class="preview-action-btn preview-btn-delete" id="previewDeleteBtn">
-                <i class="fas fa-trash-alt"></i> Delete
-            </button>
-            <button type="button" class="preview-action-btn preview-btn-download" id="previewDownloadBtn">
-                <i class="fas fa-download"></i> Download
-            </button>
-            <button type="button" class="preview-action-btn preview-btn-share" id="previewShareBtn">
-                <i class="fas fa-share"></i> Share
-            </button>
-        </div>
-    </header>
+    <div class="preview-modal-container" id="previewModalContainer">
+        <!-- Top Bar Header -->
+        <header class="preview-modal-header">
+            <div class="preview-header-left">
+                <button type="button" class="preview-close-btn" id="previewCloseBtn" title="Close Preview">
+                    <i class="fas fa-times"></i>
+                </button>
+                <h2 class="preview-filename-title" id="previewFilename">File1.txt</h2>
+            </div>
+            <div class="preview-header-right">
+                <button type="button" class="preview-action-btn preview-btn-delete" id="previewDeleteBtn">
+                    <i class="fas fa-trash-alt"></i> Delete
+                </button>
+                <button type="button" class="preview-action-btn preview-btn-download" id="previewDownloadBtn">
+                    <i class="fas fa-download"></i> Download
+                </button>
+                <button type="button" class="preview-action-btn preview-btn-share" id="previewShareBtn">
+                    <i class="fas fa-share"></i> Share
+                </button>
+            </div>
+        </header>
 
-    <!-- Main Preview Body Area -->
-    <main class="preview-modal-viewport" id="previewViewport">
-        <div class="preview-content-card" id="previewContentCard">
-            <!-- Dynamic Content Injected by preview-modal.js -->
-            <div class="preview-body-container" id="previewBodyContainer"></div>
-        </div>
+        <!-- Main Preview Body Area -->
+        <main class="preview-modal-viewport" id="previewViewport">
+            <div class="preview-content-card" id="previewContentCard">
+                <!-- Dynamic Content Injected by preview-modal.js -->
+                <div class="preview-body-container" id="previewBodyContainer"></div>
+            </div>
 
-        <!-- Floating Bottom Zoom Bar -->
-        <div class="preview-floating-zoom" id="previewZoomBar">
-            <button type="button" class="preview-zoom-btn" id="previewZoomOutBtn" title="Zoom Out">−</button>
-            <span class="preview-zoom-level" id="previewZoomLevel" title="Click to Reset 100%">100 %</span>
-            <button type="button" class="preview-zoom-btn" id="previewZoomInBtn" title="Zoom In">+</button>
-        </div>
-    </main>
+            <!-- Floating Bottom Zoom Bar -->
+            <div class="preview-floating-zoom" id="previewZoomBar">
+                <button type="button" class="preview-zoom-btn" id="previewZoomOutBtn" title="Zoom Out">−</button>
+                <span class="preview-zoom-level" id="previewZoomLevel" title="Click to Reset 100%">100 %</span>
+                <button type="button" class="preview-zoom-btn" id="previewZoomInBtn" title="Zoom In">+</button>
+            </div>
+        </main>
+    </div>
 </div>
 
 <script src="/js/preview-modal.js"></script>
