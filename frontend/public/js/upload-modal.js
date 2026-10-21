@@ -468,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                    <button class="option-item open-delete-modal move-to-trash-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
                                </div>`
                             : `<div class="options-dropdown file-options">
-                                   <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
+                                   <button class="option-item open-preview-modal" data-id="${fileId}" data-filename="${safeName}" data-category="${category}"><i class="fas fa-eye"></i> Preview</button>
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item open-tags-modal" data-id="${fileId}" data-filename="${safeName}" data-tags="${tagsJoined}"><i class="fas fa-tags"></i> Edit Tags</button>

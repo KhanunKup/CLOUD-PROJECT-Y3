@@ -1,6 +1,11 @@
 <!-- views/menus/file-menu.ejs -->
 <div class="options-dropdown file-options">
-    <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
+    <button class="option-item open-preview-modal" 
+            data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" 
+            data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"
+            data-category="<%= typeof file !== 'undefined' && file.category ? file.category : '' %>">
+        <i class="fas fa-eye"></i> Preview
+    </button>
     <button class="option-item download-action" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
     <button class="option-item open-rename-modal" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"><i class="fas fa-pencil-alt"></i> Rename</button>
     <button class="option-item open-tags-modal" 
