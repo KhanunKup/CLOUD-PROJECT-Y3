@@ -194,14 +194,18 @@
     margin-bottom: 15px;
 }
 
-.access-item { cursor: pointer; transition: background 0.2s;
+.access-item {
+    cursor: pointer;
+    transition: background 0.2s;
     background-color: rgba(121, 130, 109, 0.5);
     border-radius: 8px;
-    padding: 12px 20px;
+    padding: 12px 18px;
     display: flex;
-    justify-content: space-between; cursor: pointer;
+    justify-content: space-between;
     align-items: center;
+    gap: 12px;
     margin-bottom: 10px;
+    min-width: 0;
 }
 
 .user-info {
@@ -212,6 +216,19 @@
     font-weight: 700;
     color: #3a3a3a;
     font-size: 16px;
+    min-width: 0;
+    flex: 1;
+}
+
+.user-info span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}
+
+.user-info svg {
+    flex-shrink: 0;
 }
 
 #ma-user-dropdown-list::-webkit-scrollbar { width: 6px; }
@@ -222,17 +239,22 @@
 .access-details {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: 12px;
+    flex-shrink: 0;
 }
 
 .time-remaining {
     color: rgba(255, 255, 255, 0.6);
-    font-size: 14px;
+    font-size: 13px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .permission-dropdown {
     background-color: rgba(138, 148, 126, 0.8);
     color: white;
+    white-space: nowrap;
+    flex-shrink: 0;
     border: none;
     border-radius: 6px;
     padding: 6px 15px;

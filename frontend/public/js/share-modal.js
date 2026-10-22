@@ -117,7 +117,7 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
         <div class="access-item" data-names='["Anyone"]'>
             <div class="user-info">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                <span>Anyone</span>
+                <span title="Anyone">Anyone</span>
             </div>
             <div class="access-details">
                 <span class="time-remaining">Time remaining: ${window.anyoneAccess.timeRemaining || 'Unlimited'}</span>
@@ -127,49 +127,26 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
     `;
     container.insertAdjacentHTML('beforeend', anyoneHtml);
 
-    // 2. จัดกลุ่มรายชื่อที่มีสิทธิ์ (permission) และเวลา (timeRemaining) เหมือนกันเป๊ะๆ
-    const grouped = {};
-    accessList.forEach(acc => {
-        // ข้าม Anyone ถ้าบังเอิญมีส่งมาจาก Backend เพื่อไม่ให้ซ้ำกับ Default
-        if (acc.name && acc.name.toLowerCase() === 'anyone') return;
-
-        const key = acc.permission + '|' + (acc.timeRemaining || '');
-        if (!grouped[key]) {
-            grouped[key] = {
-                names: [],
-                permission: acc.permission,
-                timeRemaining: acc.timeRemaining
-            };
-        }
-        grouped[key].names.push(acc.name);
+    // 2. วนลูปสร้าง HTML สำหรับผู้ใช้แต่ละคนแบบรายบุคคล (Individual Collaborators)
+    const specificCollaborators = accessList.filter(acc => {
+        const n = (acc.name || acc.email || '').toLowerCase();
+        return n !== 'anyone' && n !== 'everyone';
     });
 
-    // 3. วนลูปสร้าง HTML จากกลุ่มที่จัดแล้ว
-    Object.values(grouped).forEach(group => {
-        // จัดการข้อความเวลา
-        const timeRemainingText = group.timeRemaining ? `Time remaining: ${group.timeRemaining}` : 'Time remaining: Unlimited';
-        
-        // จัดการแสดงผลชื่อ ถ้าเกิน 2 คนให้แสดง ... and X others
-        let displayName = '';
-        if (group.names.length === 1) {
-            displayName = group.names[0];
-        } else if (group.names.length === 2) {
-            displayName = group.names[0] + ' and ' + group.names[1];
-        } else {
-            // เช่น anan and 4 others
-            displayName = group.names[0] + ' and ' + (group.names.length - 1) + ' others';
-        }
+    specificCollaborators.forEach(collab => {
+        const userEmail = (collab.email || collab.name || '').trim();
+        const timeRemainingText = collab.timeRemaining ? `Time remaining: ${collab.timeRemaining}` : 'Time remaining: Unlimited';
 
         const html = `
-            <div class="access-item" data-names='${JSON.stringify(group.names).replace(/'/g, "&apos;")}'>
+            <div class="access-item" data-email="${userEmail}" data-names='${JSON.stringify([userEmail]).replace(/'/g, "&apos;")}'>
                 <div class="user-info">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    <span>${displayName}</span>
+                    <span title="${userEmail}">${userEmail}</span>
                 </div>
                 <div class="access-details">
                     <span class="time-remaining">${timeRemainingText}</span>
-                    <button class="permission-dropdown">${group.permission}</button>
-                    <button type="button" class="remove-access-btn" title="Remove collaborator" style="background: none; border: none; color: #ffb4b4; cursor: pointer; padding: 4px 6px; font-size: 15px; margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;"><i class="fas fa-times"></i></button>
+                    <button class="permission-dropdown">${collab.permission || 'can view'}</button>
+                    <button type="button" class="remove-access-btn" data-email="${userEmail}" title="Remove collaborator" style="background: none; border: none; color: #ffb4b4; cursor: pointer; padding: 4px 6px; font-size: 15px; margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;"><i class="fas fa-times"></i></button>
                 </div>
             </div>
         `;

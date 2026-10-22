@@ -736,7 +736,7 @@ app.get('/drive', requireAuthWeb, (req, res) => {
         tags: Array.isArray(f.tags) ? f.tags : (f.category ? [f.category] : []),
         owner: f.owner_id === req.user.user_id ? 'me' : (f.owner_id === 'demo-user' ? 'me' : f.owner_id),
         uploadDate: new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        accessList: [],
+        accessList: f.access_list || [],
         isShared: Boolean(share),
         shareId: share ? share.share_id : null,
         shareUrl: share ? `/share/${share.share_id}` : null,
@@ -1695,8 +1695,10 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
     .map(item => ({
       email: (item.email || item.name).trim().toLowerCase(),
       name: (item.name || item.email).trim(),
-      permission: item.permission === 'can edit' ? 'can edit' : 'can view',
+      permission: item.permission || 'can view',
       timeRemaining: item.timeRemaining || null,
+      hasPassword: Boolean(item.hasPassword),
+      password: item.password || '',
       added_at: item.added_at || new Date().toISOString(),
       added_by: req.user.user_id
     }));
