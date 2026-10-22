@@ -260,6 +260,7 @@ function getUserStorage(userId) {
   const breakdown = {
     document: 0,
     image: 0,
+    code: 0,
     archive: 0,
     video: 0,
     audio: 0,
@@ -1587,7 +1588,7 @@ app.get('/api/user/storage', authMiddleware, async (req, res) => {
       email: req.user.email,
       totalUsed: 0,
       quota: 10737418240, // 10 GB default
-      breakdown: { image: 0, document: 0, archive: 0, other: 0 }
+      breakdown: { image: 0, document: 0, code: 0, archive: 0, other: 0 }
     };
 
     res.json({ success: true, ...storage, storage });
@@ -1718,3 +1719,4 @@ app.get('/api/admin/audit', authMiddleware, (req, res) => {
 // Export Lambda handler
 module.exports.handler = serverless(app);
 module.exports.app = app; // Export app for local runner
+

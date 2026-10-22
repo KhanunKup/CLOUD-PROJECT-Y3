@@ -632,6 +632,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const imgVal = document.querySelector('.img-val');
             if (imgVal && bf.image) imgVal.textContent = bf.image;
 
+            const codeVal = document.querySelector('.code-val');
+            if (codeVal && bf.code) codeVal.textContent = bf.code;
+
             const archiveVal = document.querySelector('.archive-val');
             if (archiveVal && bf.archive) archiveVal.textContent = bf.archive;
 
@@ -646,6 +649,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const segImg = document.querySelector('.storage-seg.seg-img');
             if (segImg) segImg.style.width = `${bp.image || 0}%`;
+
+            const segCode = document.querySelector('.storage-seg.seg-code');
+            if (segCode) segCode.style.width = `${bp.code || 0}%`;
 
             const segArchive = document.querySelector('.storage-seg.seg-archive');
             if (segArchive) segArchive.style.width = `${bp.archive || 0}%`;
