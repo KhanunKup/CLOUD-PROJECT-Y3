@@ -286,10 +286,34 @@ let mockAuditLogs = [
 // ==========================================
 // 3. Helper Functions
 // ==========================================
-function canUserAccessFile(file, user) {
-  if (!file || !user) return false;
+function canUserAccessFile(file, user, requiredPermission = 'view', visited = new Set()) {
+  if (!file || !user || visited.has(file.file_id)) return false;
+  visited.add(file.file_id);
+
+  // 1. Resource owner always has full access
   if (file.owner_id === user.user_id) return true;
   if (user.user_id === 'user-normal-01' && file.owner_id === 'demo-user') return true;
+
+  // 2. Direct collaborator check via access_list
+  const userEmail = (user.email || '').toLowerCase();
+  if (userEmail && Array.isArray(file.access_list)) {
+    const entry = file.access_list.find(a => ((a.email || a.name || '').toLowerCase() === userEmail));
+    if (entry) {
+      if (requiredPermission === 'edit') {
+        return entry.permission === 'can edit';
+      }
+      return true; // 'view' is granted
+    }
+  }
+
+  // 3. Recursive folder parent inheritance check
+  if (file.folder_id) {
+    const parentFolder = mockFiles.find(f => f.file_id === file.folder_id);
+    if (parentFolder && canUserAccessFile(parentFolder, user, requiredPermission, visited)) {
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -726,6 +750,110 @@ app.get('/drive', requireAuthWeb, (req, res) => {
   });
 });
 
+function getSharedWithMeForUser(user) {
+  const userEmail = (user.email || '').toLowerCase();
+  const defaultSharedWithMe = [
+    {
+      id: 'demo-shared-doc',
+      shareId: 'demo-share-doc',
+      name: 'Shared_Document.pdf',
+      size: 1840000,
+      category: 'document',
+      tags: ['document', 'shared'],
+      type: 'file',
+      owner: 'Passakorn',
+      ownerId: 'demo-passakorn',
+      isOwner: false,
+      uploadDate: '10 Oct. 2026',
+      shareUrl: '/share/demo-share-doc',
+      maxDownloads: 0,
+      downloadsLeft: 'Unlimited',
+      downloadCount: 0,
+      hasPassword: false,
+      remainingHours: 120,
+      accessList: [{ name: 'Anan', permission: 'can view', timeRemaining: '5 days' }]
+    }
+  ];
+
+  const invitedFiles = mockFiles.filter(f => {
+    if (f.status === 'trash') return false;
+    const isOwner = f.owner_id === user.user_id || (user.user_id === 'user-normal-01' && f.owner_id === 'demo-user');
+    if (isOwner) return false;
+
+    if (Array.isArray(f.dismissed_by) && (f.dismissed_by.includes(user.user_id) || f.dismissed_by.includes(userEmail))) {
+      return false;
+    }
+
+    return canUserAccessFile(f, user);
+  }).map(f => {
+    const ownerUser = mockUsers.find(u => u.user_id === f.owner_id);
+    const ownerName = ownerUser ? ownerUser.name : (f.owner_id || 'Shared Owner');
+    const directEntry = Array.isArray(f.access_list) ? f.access_list.find(a => ((a.email || a.name || '').toLowerCase() === userEmail)) : null;
+    const perm = directEntry ? directEntry.permission : 'can view';
+
+    return {
+      id: f.file_id,
+      shareId: `invite-${f.file_id}`,
+      name: f.filename,
+      size: f.size || 0,
+      category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+      tags: f.tags || [],
+      type: f.category === 'folder' ? 'folder' : 'file',
+      owner: ownerName,
+      ownerId: f.owner_id,
+      isOwner: false,
+      uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently',
+      shareUrl: null,
+      maxDownloads: 0,
+      downloadsLeft: 'Unlimited',
+      downloadCount: 0,
+      hasPassword: false,
+      remainingHours: null,
+      isDirectInvite: true,
+      permission: perm,
+      accessList: f.access_list || [{ name: user.name, permission: perm }]
+    };
+  });
+
+  const publicSharedWithMe = mockShares
+    .filter(s => s.owner_id !== user.user_id)
+    .map(s => {
+      const f = mockFiles.find(file => file.file_id === s.file_id) || {};
+      const remainingDownloads = s.max_downloads > 0 ? Math.max(0, s.max_downloads - s.download_count) : 'Unlimited';
+      const remainingHours = s.expires_at ? Math.max(0, Math.round((s.expires_at - Math.floor(Date.now() / 1000)) / 3600)) : null;
+      return {
+        id: s.file_id,
+        shareId: s.share_id,
+        name: s.filename || f.filename || 'Shared File',
+        size: f.size || 0,
+        category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+        tags: f.tags || [],
+        type: 'file',
+        owner: s.owner_email || s.owner_id || 'Shared Link',
+        ownerId: s.owner_id,
+        isOwner: false,
+        uploadDate: new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        shareUrl: `/share/${s.share_id}`,
+        maxDownloads: s.max_downloads,
+        downloadsLeft: remainingDownloads,
+        downloadCount: s.download_count,
+        hasPassword: Boolean(s.has_password),
+        remainingHours,
+        accessList: [{
+          name: s.has_password ? 'Protected (PW)' : 'Anyone with link',
+          permission: s.max_downloads > 0 ? `Limit: ${remainingDownloads}` : 'can view',
+          timeRemaining: remainingHours !== null ? `${remainingHours} hrs` : 'Unlimited'
+        }]
+      };
+    });
+
+  return [
+    ...defaultSharedWithMe.filter(d => !Array.isArray(d.dismissed_by) || (!d.dismissed_by.includes(user.user_id) && !d.dismissed_by.includes(userEmail))),
+    ...invitedFiles,
+    ...publicSharedWithMe
+  ];
+}
+
 // 4.4 Shared Page (Protected)
 app.get('/shared', requireAuthWeb, (req, res) => {
   // Map active shares
@@ -787,10 +915,7 @@ app.get('/shared', requireAuthWeb, (req, res) => {
 
   // Divide into Shared By Me and Shared With Me
   const sharedByMe = allShares.filter(s => s.isOwner);
-  const sharedWithMe = [
-    ...defaultSharedWithMe,
-    ...allShares.filter(s => !s.isOwner)
-  ];
+  const sharedWithMe = getSharedWithMeForUser(req.user);
 
   const storage = getUserStorage(req.user.user_id);
   res.render('pages/shared', {
@@ -1217,6 +1342,10 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'File not found' });
 
     const targetFile = mockFiles[index];
+    const isOwner = targetFile.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && targetFile.owner_id === 'demo-user');
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only the resource owner can delete this item' });
+    }
     const isFolder = targetFile.category === 'folder';
     const descendantIds = isFolder ? getFolderDescendantIds(fileId) : [];
 
@@ -1529,6 +1658,83 @@ app.delete('/api/shares/:id', authMiddleware, async (req, res) => {
     message: 'Share link revoked successfully',
     share_id: share ? share.share_id : targetId
   });
+});
+
+// 5.8.4 Direct Collaborator Access Control (GET & PUT /api/files/:id/access)
+app.get('/api/files/:id/access', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+  const file = mockFiles.find(f => f.file_id === fileId);
+  if (!file) {
+    return res.status(404).json({ error: 'File or folder not found' });
+  }
+  if (!canUserAccessFile(file, req.user) && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Access denied' });
+  }
+  res.json({ success: true, accessList: file.access_list || [] });
+});
+
+app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+  const file = mockFiles.find(f => f.file_id === fileId);
+  if (!file) {
+    return res.status(404).json({ error: 'File or folder not found' });
+  }
+
+  const isOwner = file.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && file.owner_id === 'demo-user');
+  if (!isOwner && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only the resource owner can modify access permissions' });
+  }
+
+  const { accessList } = req.body;
+  if (!Array.isArray(accessList)) {
+    return res.status(400).json({ error: 'accessList must be an array' });
+  }
+
+  const sanitized = accessList
+    .filter(item => item && (item.email || item.name))
+    .map(item => ({
+      email: (item.email || item.name).trim().toLowerCase(),
+      name: (item.name || item.email).trim(),
+      permission: item.permission === 'can edit' ? 'can edit' : 'can view',
+      timeRemaining: item.timeRemaining || null,
+      added_at: item.added_at || new Date().toISOString(),
+      added_by: req.user.user_id
+    }));
+
+  file.access_list = sanitized;
+  file.updated_at = new Date().toISOString();
+
+  recordAuditLog({
+    user: req.user,
+    action: 'SHARE_INVITE',
+    level: 'info',
+    details: `Updated collaborator access for "${file.filename}": ${sanitized.length} collaborators`
+  });
+
+  res.json({ success: true, message: 'Access list updated successfully', accessList: file.access_list });
+});
+
+// 5.8.5 Shared With Me Endpoints
+app.get('/api/shares/shared-with-me', authMiddleware, async (req, res) => {
+  const sharedWithMe = getSharedWithMeForUser(req.user);
+  res.json({ success: true, sharedWithMe });
+});
+
+app.delete('/api/shares/shared-with-me/:file_id', authMiddleware, async (req, res) => {
+  const fileId = req.params.file_id;
+  const userEmail = (req.user.email || '').toLowerCase();
+  const file = mockFiles.find(f => f.file_id === fileId);
+  if (file) {
+    file.dismissed_by = file.dismissed_by || [];
+    if (!file.dismissed_by.includes(req.user.user_id)) {
+      file.dismissed_by.push(req.user.user_id);
+    }
+    if (!file.dismissed_by.includes(userEmail)) {
+      file.dismissed_by.push(userEmail);
+    }
+    return res.json({ success: true, message: 'File dismissed from Shared with me' });
+  }
+  res.json({ success: true, message: 'Removed from Shared with me' });
 });
 
 // 5.9 Verify Password & Download Shared File (Burn-After-Read Check & SNS Alert)
