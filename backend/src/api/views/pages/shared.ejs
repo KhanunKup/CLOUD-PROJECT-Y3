@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="/css/menu.css">
   <!-- CSS โครงสร้างหลัก -->
   <link rel="stylesheet" href="/css/homepage.css">
+  <!-- CSS สำหรับ Information Drawer -->
+  <link rel="stylesheet" href="/css/info-drawer.css">
 </head>
 <body>
 <div class="page-layout">
@@ -59,7 +61,17 @@
 
       <% if (typeof sharedWithMe !== 'undefined' && sharedWithMe && sharedWithMe.length > 0) { %>
         <% sharedWithMe.forEach(function(file) { %>
-        <div class="file-row">
+        <div class="file-row"
+             data-id="<%= file.id %>"
+             data-name="<%= file.name %>"
+             data-type="<%= file.type || 'file' %>"
+             data-category="<%= file.category || 'other' %>"
+             data-size="<%= file.size || '' %>"
+             data-owner="<%= file.owner || 'unknown' %>"
+             data-is-owner="<%= file.isOwner ? 'true' : 'false' %>"
+             data-date="<%= file.uploadDate || '' %>"
+             data-tags="<%= (file.tags || []).join(',') %>"
+             data-share-url="<%= file.shareUrl || '' %>">
           <div class="file-name">
             <% if (file.type === 'folder') { %>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -108,7 +120,17 @@
 
       <% if (typeof sharedByMe !== 'undefined' && sharedByMe && sharedByMe.length > 0) { %>
         <% sharedByMe.forEach(function(file) { %>
-        <div class="file-row" id="row-share-<%= file.shareId %>">
+        <div class="file-row" id="row-share-<%= file.shareId %>"
+             data-id="<%= file.id %>"
+             data-name="<%= file.name %>"
+             data-type="<%= file.type || 'file' %>"
+             data-category="<%= file.category || 'other' %>"
+             data-size="<%= file.size || '' %>"
+             data-owner="me"
+             data-is-owner="true"
+             data-date="<%= file.uploadDate || '' %>"
+             data-tags="<%= (file.tags || []).join(',') %>"
+             data-share-url="<%= file.shareUrl || '' %>">
           <div class="file-name">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -168,9 +190,11 @@
 <%- include('../modals/upload-modal') %>
 <%- include('../modals/confirm-modal') %>
 <%- include('../modals/preview-modal') %>
+<%- include('../modals/info-drawer') %>
 
 <!-- เรียกใช้ JS ของ Menu Dropdown -->
 <script src="/js/toast.js"></script>
 <script src="/js/menu.js"></script>
+<script src="/js/info-drawer.js"></script>
 </body>
 </html>

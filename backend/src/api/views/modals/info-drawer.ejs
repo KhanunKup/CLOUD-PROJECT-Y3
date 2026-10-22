@@ -1,0 +1,124 @@
+<!-- backend/src/api/views/modals/info-drawer.ejs -->
+<div class="info-drawer-overlay" id="infoDrawerOverlay" style="display: none;"></div>
+<aside class="info-drawer" id="infoDrawer" aria-hidden="true" data-current-user-role="<%= typeof user !== 'undefined' && user && user.role ? user.role : 'user' %>">
+    <!-- Drawer Header -->
+    <div class="info-drawer-header">
+        <div class="info-drawer-title-group">
+            <span class="info-drawer-icon" id="infoDrawerIcon">
+                <i class="fas fa-file-alt"></i>
+            </span>
+            <div class="info-drawer-names">
+                <h3 class="info-drawer-filename" id="infoDrawerFilename">File Information</h3>
+                <span class="info-drawer-category" id="infoDrawerCategory">Document</span>
+            </div>
+        </div>
+        <button type="button" class="info-drawer-close-btn" id="infoDrawerCloseBtn" title="Close details">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+
+    <!-- Drawer Navigation Tabs -->
+    <div class="info-drawer-tabs">
+        <button type="button" class="info-tab-btn active" data-tab="details">
+            <i class="fas fa-info-circle"></i> Details
+        </button>
+        <button type="button" class="info-tab-btn" data-tab="activity">
+            <i class="fas fa-history"></i> Activity
+        </button>
+    </div>
+
+    <!-- Tab 1: Details Panel -->
+    <div class="info-tab-pane active" id="infoTabDetails">
+        <!-- Preview Banner Card -->
+        <div class="info-preview-card" id="infoPreviewCard">
+            <div class="info-preview-graphic" id="infoPreviewGraphic">
+                <i class="fas fa-file-pdf"></i>
+            </div>
+            <div class="info-preview-actions">
+                <button type="button" class="info-action-btn" id="infoQuickPreviewBtn" title="Open Preview">
+                    <i class="fas fa-eye"></i> Preview
+                </button>
+                <button type="button" class="info-action-btn" id="infoQuickDownloadBtn" title="Download File">
+                    <i class="fas fa-download"></i> Download
+                </button>
+            </div>
+        </div>
+
+        <!-- Section: Who has access -->
+        <div class="info-section">
+            <div class="info-section-header">
+                <h4 class="info-section-title"><i class="fas fa-users"></i> Who has access</h4>
+                <button type="button" class="info-section-action-btn" id="infoManageAccessBtn">Manage</button>
+            </div>
+            <div class="info-access-list" id="infoAccessList">
+                <div class="info-access-item">
+                    <div class="info-user-avatar" id="infoOwnerAvatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="info-user-info">
+                        <span class="info-user-name" id="infoOwnerName">Admin Rick</span>
+                        <span class="info-user-role" id="infoOwnerRole">Owner</span>
+                    </div>
+                </div>
+                <div class="info-access-status" id="infoAccessStatus">
+                    <i class="fas fa-lock"></i> <span id="infoAccessStatusText">Private (Only you have access)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: File/Folder Properties -->
+        <div class="info-section">
+            <h4 class="info-section-title"><i class="fas fa-list-ul"></i> File properties</h4>
+            <div class="info-props-table">
+                <div class="info-prop-row">
+                    <span class="info-prop-label">Type</span>
+                    <span class="info-prop-value" id="infoPropType">PDF Document (.pdf)</span>
+                </div>
+                <div class="info-prop-row">
+                    <span class="info-prop-label">Size</span>
+                    <span class="info-prop-value" id="infoPropSize">2.45 MB</span>
+                </div>
+                <div class="info-prop-row">
+                    <span class="info-prop-label">Storage used</span>
+                    <span class="info-prop-value" id="infoPropStorage">2.45 MB</span>
+                </div>
+                <div class="info-prop-row">
+                    <span class="info-prop-label">Location</span>
+                    <span class="info-prop-value" id="infoPropLocation">My Drive</span>
+                </div>
+                <div class="info-prop-row">
+                    <span class="info-prop-label">Owner</span>
+                    <span class="info-prop-value" id="infoPropOwner">Admin Rick</span>
+                </div>
+                <div class="info-prop-row">
+                    <span class="info-prop-label">Modified</span>
+                    <span class="info-prop-value" id="infoPropModified">Oct 20, 2026, 14:32</span>
+                </div>
+                <div class="info-prop-row">
+                    <span class="info-prop-label">Created</span>
+                    <span class="info-prop-value" id="infoPropCreated">Oct 19, 2026, 10:15</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Tags -->
+        <div class="info-section">
+            <div class="info-section-header">
+                <h4 class="info-section-title"><i class="fas fa-tags"></i> Tags</h4>
+                <button type="button" class="info-section-action-btn" id="infoEditTagsBtn">Edit</button>
+            </div>
+            <div class="info-tags-container" id="infoTagsContainer">
+                <span class="info-tag-chip">document</span>
+                <span class="info-tag-chip">pdf</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Tab 2: Activity Panel -->
+    <div class="info-tab-pane" id="infoTabActivity">
+        <div class="info-timeline" id="infoTimeline">
+            <!-- Dynamic Activity Entries -->
+        </div>
+    </div>
+</aside>

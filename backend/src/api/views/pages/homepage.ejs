@@ -14,6 +14,8 @@
     <link rel="stylesheet" href="/css/menu.css">
     <!-- CSS โครงสร้างหลัก -->
     <link rel="stylesheet" href="/css/homepage.css">
+    <!-- CSS สำหรับ Information Drawer -->
+    <link rel="stylesheet" href="/css/info-drawer.css">
 </head>
 
 <body>
@@ -33,6 +35,7 @@
                 </svg>
                 <input class="search-input" type="text" placeholder="Search in Drive" />
             </div>
+
             <div class="new-action-wrapper">
                 <button class="btn-new" id="btnNew">+ New</button>
                 <%- include('../menus/new-option-menu') %>
@@ -98,6 +101,9 @@
                      data-id="<%= file.id %>"
                      data-name="<%= file.name %>"
                      data-type="<%= file.type %>"
+                     data-size="<%= file.size || '' %>"
+                     data-hash="<%= file.file_hash || '' %>"
+                     data-owner="<%= file.owner || 'Admin Rick' %>"
                      data-folder-id="<%= file.folderId || '' %>"
                      data-category="<%= file.category || 'other' %>"
                      data-tags="<%= (file.tags || []).join(',') %>">
@@ -172,9 +178,11 @@
 <%- include('../modals/tags-modal') %>
 <%- include('../modals/confirm-modal') %>
 <%- include('../modals/preview-modal') %>
+<%- include('../modals/info-drawer') %>
 
 <!-- เรียกใช้ JS ของ Menu Dropdown -->
 <script src="/js/toast.js"></script>
 <script src="/js/menu.js"></script>
+<script src="/js/info-drawer.js"></script>
 </body>
 </html>
