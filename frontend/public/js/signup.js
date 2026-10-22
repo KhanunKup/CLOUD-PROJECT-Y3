@@ -27,3 +27,20 @@ passwordInput.addEventListener('input', function () {
         ruleNumSym.classList.remove('valid');
     }
 });
+
+function togglePasswordVisibility(button) {
+    // หาแท็ก <input> ที่อยู่ภายในกล่อง (.input-box) เดียวกับปุ่มที่ถูกกด
+    const input = button.parentElement.querySelector('input');
+    const eyeOpen = button.querySelector('.eye-open');
+    const eyeClosed = button.querySelector('.eye-closed');
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        eyeOpen.style.display = 'none';
+        eyeClosed.style.display = 'block';
+    } else {
+        input.type = 'password';
+        eyeOpen.style.display = 'block';
+        eyeClosed.style.display = 'none';
+    }
+}
