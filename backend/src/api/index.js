@@ -139,6 +139,58 @@ let mockFiles = [
     trashed_at: new Date().toISOString(),
     created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
     updated_at: new Date().toISOString()
+  },
+  {
+    file_id: 'folder-adm-01',
+    owner_id: 'user-admin-01',
+    folder_id: null,
+    filename: 'Admin_Policies',
+    size: 0,
+    category: 'folder',
+    tags: ['folder', 'admin'],
+    s3_key: 'folders/user-admin-01/folder-adm-01/',
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 4).toISOString()
+  },
+  {
+    file_id: 'file-adm-001',
+    owner_id: 'user-admin-01',
+    folder_id: null,
+    filename: 'Admin_Security_Policy.pdf',
+    size: 3200000,
+    category: 'document',
+    tags: ['document', 'policy', 'admin'],
+    file_hash: 'f1e2d3c4b5a67890123456789abcdef0123456789abcdef0123456789abcdef0',
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 3).toISOString()
+  },
+  {
+    file_id: 'file-adm-002',
+    owner_id: 'user-admin-01',
+    folder_id: null,
+    filename: 'System_Architecture.png',
+    size: 4800000,
+    category: 'image',
+    tags: ['image', 'architecture', 'diagram'],
+    file_hash: 'e2d3c4b5a6f17890123456789abcdef0123456789abcdef0123456789abcdef0',
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 2).toISOString()
+  },
+  {
+    file_id: 'file-adm-003',
+    owner_id: 'user-admin-01',
+    folder_id: 'folder-adm-01',
+    filename: 'Deployment_Config.yaml',
+    size: 45000,
+    category: 'code',
+    tags: ['code', 'yaml', 'deployment'],
+    file_hash: 'd3c4b5a6f1e27890123456789abcdef0123456789abcdef0123456789abcdef0',
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+    updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
   }
 ];
 
@@ -234,7 +286,6 @@ let mockAuditLogs = [
 // ==========================================
 function canUserAccessFile(file, user) {
   if (!file || !user) return false;
-  if (user.role === 'admin') return true;
   if (file.owner_id === user.user_id) return true;
   if (user.user_id === 'user-normal-01' && file.owner_id === 'demo-user') return true;
   return false;
@@ -595,8 +646,9 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
 
 // 4.3 Drive Page (Protected)
 app.get('/drive', requireAuthWeb, (req, res) => {
-  const currentFolderId = req.query.folder ? String(req.query.folder).trim() : null;
-  const currentFolder = currentFolderId ? mockFiles.find(f => f.file_id === currentFolderId && f.category === 'folder') : null;
+  const requestedFolderId = req.query.folder ? String(req.query.folder).trim() : null;
+  const currentFolder = requestedFolderId ? mockFiles.find(f => f.file_id === requestedFolderId && f.category === 'folder' && canUserAccessFile(f, req.user)) : null;
+  const currentFolderId = currentFolder ? currentFolder.file_id : null;
 
   // Build breadcrumb ancestry trail
   const breadcrumbs = [{ name: 'My Drive', id: null, url: '/drive' }];
@@ -622,7 +674,8 @@ app.get('/drive', requireAuthWeb, (req, res) => {
 
   const activeFiles = mockFiles.filter(f => {
     if (f.status !== 'active') return false;
-    if (req.user.role !== 'admin' && !(f.owner_id === req.user.user_id || f.owner_id === 'demo-user')) return false;
+    const isOwner = f.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && f.owner_id === 'demo-user');
+    if (!isOwner) return false;
 
     // Filter by folder hierarchy
     if (currentFolderId) {
@@ -751,8 +804,7 @@ app.get('/shared', requireAuthWeb, (req, res) => {
 app.get('/trash', requireAuthWeb, (req, res) => {
   const trashedFiles = mockFiles.filter(f => {
     if (f.status !== 'trash') return false;
-    if (req.user.role === 'admin') return true;
-    return f.owner_id === req.user.user_id || f.owner_id === 'demo-user';
+    return f.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && f.owner_id === 'demo-user');
   });
   const storage = getUserStorage(req.user.user_id);
   res.render('pages/trash', {
@@ -878,8 +930,7 @@ app.get('/api/files', authMiddleware, async (req, res) => {
   if (IS_MOCK_MODE) {
     let files = mockFiles.filter(f => {
       if (f.status !== statusFilter) return false;
-      if (req.user.role === 'admin') return true;
-      return f.owner_id === req.user.user_id || f.owner_id === 'demo-user';
+      return f.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && f.owner_id === 'demo-user');
     });
     if (categoryFilter) files = files.filter(f => f.category === categoryFilter);
     return res.json({ success: true, count: files.length, files });
@@ -1036,7 +1087,7 @@ app.get('/api/files/:id/download-url', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
 
   if (IS_MOCK_MODE) {
-    const file = mockFiles.find(f => f.file_id === fileId);
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
     if (!file) return res.status(404).json({ error: 'File not found' });
     return res.json({
       success: true,
@@ -1128,12 +1179,12 @@ app.patch('/api/files/:id/tags', authMiddleware, async (req, res) => {
     const result = await docClient.send(new UpdateCommand({
       TableName: FILES_TABLE,
       Key: { file_id: fileId },
-      ConditionExpression: req.user.role === 'admin' ? undefined : 'owner_id = :owner',
+      ConditionExpression: 'owner_id = :owner',
       UpdateExpression: 'SET tags = :tags, updated_at = :up',
       ExpressionAttributeValues: {
         ':tags': tags,
         ':up': new Date().toISOString(),
-        ...(req.user.role === 'admin' ? {} : { ':owner': req.user.user_id })
+        ':owner': req.user.user_id
       },
       ReturnValues: 'ALL_NEW'
     }));
