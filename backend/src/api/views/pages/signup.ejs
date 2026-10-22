@@ -76,6 +76,7 @@
                             <input
                                 type="password"
                                 name="password"
+                                id="passwordInput"
                                 placeholder="กรุณากรอกรหัสผ่าน"
                                 required
                             >
@@ -92,21 +93,22 @@
                             <input
                                 type="password"
                                 name="confirmPassword"
+                                id="passwordInput"
                                 placeholder="กรุณากรอกรหัสผ่านอีกครั้ง"
                                 required
                             >
                         </div>
 
                         <div class="password-rules">
-                            <div class="rule">
+                            <div class="rule" id="rule-length">
                                 <span class="check">✓</span>
                                 Password must contain at least 8 characters
                             </div>
-                            <div class="rule">
+                            <div class="rule" id="rule-case">
                                 <span class="check">✓</span>
                                 Password must contain an uppercase & lowercase letter
                             </div>
-                            <div class="rule">
+                            <div class="rule" id="rule-num-sym">
                                 <span class="check">✓</span>
                                 Password must contain a number & symbols
                             </div>
@@ -156,6 +158,6 @@
         </div>
 
     </div>
-
+<script src="/js/signup.js"></script>
 </body>
 </html>
