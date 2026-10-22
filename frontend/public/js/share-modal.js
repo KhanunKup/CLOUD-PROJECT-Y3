@@ -22,10 +22,13 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
     if (triggerBtn) {
         window.activeShareFileBtn = triggerBtn;
 
-        // แสดงชื่อไฟล์ที่กำลังแชร์
+        // ตรวจสอบว่าเป็นไฟล์หรือโฟลเดอร์
+        const isFolder = triggerBtn.dataset.type === 'folder' || triggerBtn.dataset.category === 'folder' || Boolean(triggerBtn.closest('.folder-options, .folder-row')) || triggerBtn.closest('.file-row')?.dataset?.type === 'folder';
+        const itemTypeLabel = isFolder ? 'Folder' : 'File';
+        const filename = triggerBtn.dataset.filename || (isFolder ? 'Selected Folder' : 'Selected File');
         const fileNameEl = document.getElementById('shareModalFileName');
         if (fileNameEl) {
-            fileNameEl.textContent = 'File: ' + (triggerBtn.dataset.filename || 'Selected File');
+            fileNameEl.textContent = `${itemTypeLabel}: ${filename}`;
         }
 
         const mode = triggerBtn.dataset.mode || 'create';

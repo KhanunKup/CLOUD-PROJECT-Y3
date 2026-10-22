@@ -321,6 +321,8 @@ body {
     font-weight: 500;
     font-size: 14px;
     color: #F6FAF2;
+    cursor: pointer;
+    user-select: none;
 }
 
 .file-row:last-child {
@@ -484,7 +486,8 @@ body {
 .delete-modal-overlay,
 .restore-modal-overlay,
 .delete-forever-modal-overlay,
-.confirm-modal-overlay {
+.confirm-modal-overlay,
+.preview-modal-overlay {
     z-index: 10000 !important;
 }
 

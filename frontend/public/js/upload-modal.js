@@ -42,17 +42,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return 'Folder';
         }
         const ext = item.name.split('.').pop().toLowerCase();
+        const codeExts = ['py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'json', 'sh', 'bash', 'sql', 'java', 'c', 'cpp', 'cs', 'php', 'rb', 'go', 'rs', 'yaml', 'yml', 'xml', 'env'];
+        if (codeExts.includes(ext)) return `Code / .${ext}`;
         if (ext === 'txt') return 'Text / .txt';
-        if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp') return `Image / .${ext}`;
+        if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp' || ext === 'gif' || ext === 'svg') return `Image / .${ext}`;
         if (ext === 'pdf') return 'PDF / .pdf';
         if (ext === 'doc' || ext === 'docx') return 'Doc / .docx';
         if (ext === 'xls' || ext === 'xlsx') return 'Spreadsheet / .xlsx';
-        if (ext === 'zip' || ext === 'rar') return 'Archive / .zip';
+        if (ext === 'zip' || ext === 'rar' || ext === '7z' || ext === 'tar' || ext === 'gz') return `Archive / .${ext}`;
         return `File / .${ext}`;
     };
 
     // เพิ่มรายการ (ไฟล์ หรือ โฟลเดอร์) เข้าสู่คิว
     const addItemToQueue = (name, type = 'file', fileObj = null) => {
+        if (fileObj) {
+            window.uploadedBlobMap = window.uploadedBlobMap || new Map();
+            try {
+                window.uploadedBlobMap.set(name, URL.createObjectURL(fileObj));
+            } catch (e) {}
+        }
         if (!name) return;
         // ป้องกันชื่อซ้ำในคิวเดียวกัน
         if (!selectedFiles.some(f => f.name === name)) {
@@ -435,6 +443,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     successCount++;
+                    if (item.file) {
+                        window.uploadedBlobMap = window.uploadedBlobMap || new Map();
+                        try {
+                            const bUrl = URL.createObjectURL(item.file);
+                            window.uploadedBlobMap.set(fileId, bUrl);
+                            window.uploadedBlobMap.set(item.name, bUrl);
+                        } catch (e) {}
+                    }
 
                     // 4. แทรกแถวลงในหน้าจอ (Realtime DOM Update)
                     if (fileContainer) {
@@ -464,17 +480,17 @@ document.addEventListener('DOMContentLoaded', () => {
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
                                    <button class="option-item open-share-modal" data-id="${fileId}" data-filename="${safeName}" data-access="[]"><i class="fas fa-share"></i> Share</button>
-                                   <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
+                                   <button class="option-item open-info-drawer" data-id="${fileId}" data-filename="${safeName}" data-type="${isFolder ? 'folder' : 'file'}" data-category="${fileCat}"><i class="fas fa-info-circle"></i> Information</button>
                                    <button class="option-item open-delete-modal move-to-trash-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
                                </div>`
                             : `<div class="options-dropdown file-options">
-                                   <button class="option-item"><i class="fas fa-eye"></i> Preview</button>
+                                   <button class="option-item open-preview-modal" data-id="${fileId}" data-filename="${safeName}" data-category="${fileCat}"><i class="fas fa-eye"></i> Preview</button>
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item open-tags-modal" data-id="${fileId}" data-filename="${safeName}" data-tags="${tagsJoined}"><i class="fas fa-tags"></i> Edit Tags</button>
                                    <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
                                    <button class="option-item open-share-modal" data-id="${fileId}" data-filename="${safeName}" data-access="[]"><i class="fas fa-share"></i> Share</button>
-                                   <button class="option-item"><i class="fas fa-info-circle"></i> Information</button>
+                                   <button class="option-item open-info-drawer" data-id="${fileId}" data-filename="${safeName}" data-type="${isFolder ? 'folder' : 'file'}" data-category="${fileCat}"><i class="fas fa-info-circle"></i> Information</button>
                                    <button class="option-item open-delete-modal move-to-trash-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
                                </div>`;
 

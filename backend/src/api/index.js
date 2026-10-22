@@ -152,6 +152,7 @@ let mockUserStorage = {
     document: 2450000,
     image: 5120000,
     archive: 45000000,
+    code: 0,
     other: 0
   }
 };
@@ -259,6 +260,7 @@ function getUserStorage(userId) {
   const breakdown = {
     document: 0,
     image: 0,
+    code: 0,
     archive: 0,
     video: 0,
     audio: 0,
@@ -335,6 +337,7 @@ function getCategoryFromExtension(filename) {
     image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'],
     document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'],
     archive: ['zip', 'rar', '7z', 'tar', 'gz'],
+    code: ['py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'json', 'sh', 'bash', 'sql', 'java', 'c', 'cpp', 'cs', 'php', 'rb', 'go', 'rs', 'yaml', 'yml', 'xml', 'env'],
     video: ['mp4', 'mov', 'avi', 'mkv'],
     audio: ['mp3', 'wav', 'aac']
   };
@@ -645,6 +648,10 @@ app.get('/drive', requireAuthWeb, (req, res) => {
         id: f.file_id,
         name: f.filename,
         type: f.category === 'folder' ? 'folder' : 'file',
+        size: f.size || 0,
+        file_hash: f.file_hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        createdAt: f.created_at,
+        updatedAt: f.updated_at,
         folderId: f.folder_id || null,
         category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
         tags: Array.isArray(f.tags) ? f.tags : (f.category ? [f.category] : []),
@@ -677,6 +684,9 @@ app.get('/shared', requireAuthWeb, (req, res) => {
       id: s.file_id,
       shareId: s.share_id,
       name: s.filename || f.filename || 'Shared File',
+      size: f.size || 0,
+      category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+      tags: f.tags || [],
       type: 'file',
       owner: isOwner ? 'me' : (s.owner_email || s.owner_id || 'Shared Link'),
       ownerId: s.owner_id,
@@ -702,6 +712,9 @@ app.get('/shared', requireAuthWeb, (req, res) => {
       id: 'demo-shared-doc',
       shareId: 'demo-share-doc',
       name: 'Shared_Document.pdf',
+      size: 1840000,
+      category: 'document',
+      tags: ['document', 'shared'],
       type: 'file',
       owner: 'Passakorn',
       ownerId: 'demo-passakorn',
@@ -1575,7 +1588,7 @@ app.get('/api/user/storage', authMiddleware, async (req, res) => {
       email: req.user.email,
       totalUsed: 0,
       quota: 10737418240, // 10 GB default
-      breakdown: { image: 0, document: 0, archive: 0, other: 0 }
+      breakdown: { image: 0, document: 0, code: 0, archive: 0, other: 0 }
     };
 
     res.json({ success: true, ...storage, storage });
@@ -1706,3 +1719,4 @@ app.get('/api/admin/audit', authMiddleware, (req, res) => {
 // Export Lambda handler
 module.exports.handler = serverless(app);
 module.exports.app = app; // Export app for local runner
+

@@ -136,6 +136,7 @@
   }
   .storage-seg.seg-doc { background-color: #5B9BD5; } /* Document Blue */
   .storage-seg.seg-img { background-color: #ED7D31; } /* Image Orange */
+  .storage-seg.seg-code { background-color: #70AD47; } /* Code Green */
   .storage-seg.seg-archive { background-color: #99738E; } /* Archive Purple */
   .storage-seg.seg-other { background-color: #A5A5A5; } /* Other Gray */
 
@@ -220,6 +221,7 @@
   }
   .popover-dot.dot-doc { background-color: #5B9BD5; }
   .popover-dot.dot-img { background-color: #ED7D31; }
+  .popover-dot.dot-code { background-color: #70AD47; }
   .popover-dot.dot-archive { background-color: #99738E; }
   .popover-dot.dot-other { background-color: #A5A5A5; }
 
@@ -400,6 +402,7 @@
         <% const bp = storage.breakdownPercent; %>
         <div class="storage-seg seg-doc" style="width: <%= bp.document || 0 %>%;" title="Documents: <%= storage.breakdownFormatted ? storage.breakdownFormatted.document : '' %>"></div>
         <div class="storage-seg seg-img" style="width: <%= bp.image || 0 %>%;" title="Images: <%= storage.breakdownFormatted ? storage.breakdownFormatted.image : '' %>"></div>
+        <div class="storage-seg seg-code" style="width: <%= bp.code || 0 %>%;" title="Code: <%= storage.breakdownFormatted ? storage.breakdownFormatted.code : '' %>"></div>
         <div class="storage-seg seg-archive" style="width: <%= bp.archive || 0 %>%;" title="Archives: <%= storage.breakdownFormatted ? storage.breakdownFormatted.archive : '' %>"></div>
         <div class="storage-seg seg-other" style="width: <%= (bp.other || 0) + (bp.video || 0) + (bp.audio || 0) %>%;" title="Other: <%= storage.breakdownFormatted ? storage.breakdownFormatted.other : '' %>"></div>
       <% } else { %>
@@ -426,6 +429,11 @@
           <span class="popover-dot dot-img"></span>
           <span class="popover-cat">Images</span>
           <span class="popover-val img-val"><%= (typeof storage !== 'undefined' && storage && storage.breakdownFormatted) ? storage.breakdownFormatted.image : '0 B' %></span>
+        </div>
+        <div class="popover-item">
+          <span class="popover-dot dot-code"></span>
+          <span class="popover-cat">Code</span>
+          <span class="popover-val code-val"><%= (typeof storage !== 'undefined' && storage && storage.breakdownFormatted) ? storage.breakdownFormatted.code : '0 B' %></span>
         </div>
         <div class="popover-item">
           <span class="popover-dot dot-archive"></span>
