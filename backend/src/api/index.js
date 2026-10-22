@@ -195,11 +195,13 @@ let mockFiles = [
 ];
 
 let mockShares = [];
+const DEFAULT_STORAGE_QUOTA = 53687091200; // 50 GB (3.3x more than Google Drive's 15 GB)
+
 let mockUserStorage = {
   user_id: 'demo-user',
   email: 'demo@kmitl.ac.th',
   totalUsed: 52570000,
-  quota: 10737418240, // 10 GB
+  quota: DEFAULT_STORAGE_QUOTA, // 50 GB
   breakdown: {
     document: 2450000,
     image: 5120000,
@@ -218,7 +220,7 @@ let mockUsers = [
     password: 'admin123',
     role: 'admin',
     status: 'active',
-    quota: 10737418240, // 10 GB
+    quota: DEFAULT_STORAGE_QUOTA, // 50 GB
     created_at: new Date(Date.now() - 86400000 * 30).toISOString()
   },
   {
@@ -229,7 +231,7 @@ let mockUsers = [
     password: 'user123',
     role: 'user',
     status: 'active',
-    quota: 10737418240, // 10 GB
+    quota: DEFAULT_STORAGE_QUOTA, // 50 GB
     created_at: new Date(Date.now() - 86400000 * 15).toISOString()
   },
   {
@@ -240,7 +242,7 @@ let mockUsers = [
     password: 'summer123',
     role: 'user',
     status: 'active',
-    quota: 5368709120, // 5 GB
+    quota: 26843545600, // 25 GB
     created_at: new Date(Date.now() - 86400000 * 5).toISOString()
   }
 ];
@@ -301,7 +303,7 @@ function formatBytes(bytes) {
 
 function getUserStorage(userId) {
   const user = mockUsers.find(u => u.user_id === userId) || {};
-  const quota = user.quota || 10737418240; // Default 10 GB
+  const quota = user.quota || DEFAULT_STORAGE_QUOTA; // Default 50 GB
 
   const userFiles = mockFiles.filter(f => {
     if (f.status === 'trash') return false;
@@ -622,7 +624,7 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
     email: email.trim().toLowerCase(),
     password: password,
     role: 'user',
-    quota: 10737418240,
+    quota: DEFAULT_STORAGE_QUOTA,
     created_at: new Date().toISOString()
   };
   mockUsers.push(newUser);
@@ -1008,6 +1010,15 @@ app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
   const parentFolderId = folder_id || parent_id || null;
   if (!filename || !size) {
     return res.status(400).json({ error: 'filename and size are required' });
+  }
+
+  // Quota Guard: Enforce storage quota limits
+  const currentStorage = getUserStorage(req.user.user_id);
+  const requestedBytes = Number(size);
+  if (currentStorage.totalUsed + requestedBytes > currentStorage.quota) {
+    return res.status(400).json({
+      error: `Storage quota exceeded. You have ${currentStorage.formattedFree} free space remaining out of ${currentStorage.formattedQuota}.`
+    });
   }
 
   const fileId = `file-${crypto.randomUUID()}`;
@@ -1638,7 +1649,7 @@ app.get('/api/user/storage', authMiddleware, async (req, res) => {
       user_id: req.user.user_id,
       email: req.user.email,
       totalUsed: 0,
-      quota: 10737418240, // 10 GB default
+      quota: DEFAULT_STORAGE_QUOTA, // 50 GB default
       breakdown: { image: 0, document: 0, code: 0, archive: 0, other: 0 }
     };
 
@@ -1698,6 +1709,9 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
   if (targetQuota && Number(targetQuota) > 0) {
     user.quota = Number(targetQuota);
     user.storage_quota = Number(targetQuota);
+    if (mockUserStorage && mockUserStorage[targetUserId]) {
+      mockUserStorage[targetUserId].quota = Number(targetQuota);
+    }
   }
   user.updated_at = new Date().toISOString();
 
