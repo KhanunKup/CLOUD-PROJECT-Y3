@@ -53,6 +53,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return `File / .${ext}`;
     };
 
+    // ฟังก์ชันแปลงขนาดไฟล์เป็นหน่วยที่อ่านง่าย (KB, MB, GB)
+    const formatBytes = (bytes) => {
+        if (!bytes || bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
     // เพิ่มรายการ (ไฟล์ หรือ โฟลเดอร์) เข้าสู่คิว
     const addItemToQueue = (name, type = 'file', fileObj = null) => {
         if (fileObj) {
@@ -392,6 +401,32 @@ document.addEventListener('DOMContentLoaded', () => {
             const currentFolderId = urlParams.get('folder') || null;
 
             try {
+                // Client-side Quota Pre-check: Calculate total upload payload and compare with free quota
+                const totalUploadBytes = selectedFiles.reduce((acc, item) => acc + (item.type === 'file' && item.file ? (Number(item.file.size) || 0) : 0), 0);
+                if (totalUploadBytes > 0) {
+                    try {
+                        const storageRes = await fetch('/api/user/storage');
+                        if (storageRes.ok) {
+                            const storageData = await storageRes.json();
+                            const freeBytes = storageData.freeBytes !== undefined
+                                ? storageData.freeBytes
+                                : Math.max(0, (storageData.quota || 0) - (storageData.totalUsed || 0));
+                            if (totalUploadBytes > freeBytes) {
+                                const freeFormatted = storageData.formattedFree || formatBytes(freeBytes);
+                                const neededFormatted = formatBytes(totalUploadBytes);
+                                if (window.showToast) {
+                                    window.showToast(`Storage quota exceeded! Free: ${freeFormatted}, Required: ${neededFormatted}`, 'error');
+                                } else {
+                                    alert(`Storage quota exceeded! Free: ${freeFormatted}, Required: ${neededFormatted}`);
+                                }
+                                return;
+                            }
+                        }
+                    } catch (quotaErr) {
+                        console.warn('Quota pre-check request failed, falling back to backend guard:', quotaErr);
+                    }
+                }
+
                 for (const item of selectedFiles) {
                     const isFolder = item.type === 'folder';
                     let fileId = `file-${Date.now()}`;
