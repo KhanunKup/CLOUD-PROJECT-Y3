@@ -696,7 +696,7 @@ app.get('/logout', (req, res) => {
 
 // 4.1 Login Handler (Supports JSON & HTML Form)
 app.post(['/api/auth/login', '/signin'], async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password, remember } = req.body;
   const identifier = (username || email || '').trim().toLowerCase();
 
   if (!identifier || !password) {
@@ -725,7 +725,8 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
     role: user.role
   };
   const sessionToken = Buffer.from(JSON.stringify(sessionUser)).toString('base64');
-  res.setHeader('Set-Cookie', `easydrive_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+  const cookieMaxAge = (remember === 'on' || remember === 'true' || remember === true) ? 2592000 : 86400; // 30 days or 1 day
+  res.setHeader('Set-Cookie', `easydrive_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${cookieMaxAge}`);
 
   recordAuditLog({ user: sessionUser, action: 'LOGIN', level: 'info', details: `User "${sessionUser.name}" logged in successfully`, req });
 
@@ -792,6 +793,132 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
     return res.redirect('/drive');
   }
   return res.json({ success: true, message: 'Account created successfully', user: sessionUser });
+});
+
+// =============================================
+// 4.2b Forgot Password & Reset Password Routes
+// =============================================
+
+// In-memory store for password-reset tokens (mock mode only; resets on server restart)
+const passwordResetTokens = new Map(); // token -> { userId, expiresAt }
+
+// GET /forgot-password - Show forgot-password page
+app.get('/forgot-password', (req, res) => {
+  const user = getSessionUser(req);
+  if (user) return res.redirect('/drive');
+  res.render('pages/forgot-password', { error: null, success: null });
+});
+
+// POST /forgot-password - Process email submission
+app.post('/forgot-password', (req, res) => {
+  const email = (req.body.email || '').trim().toLowerCase();
+  if (!email) {
+    return res.render('pages/forgot-password', { error: 'Please enter your email address.', success: null });
+  }
+
+  const foundUser = mockUsers.find(u => u.email.toLowerCase() === email);
+
+  // Always show the same success message to prevent user enumeration
+  const successMsg = 'If an account with that email exists, a reset link has been generated.';
+
+  if (foundUser) {
+    // Generate a secure random token (hex)
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes
+    passwordResetTokens.set(token, { userId: foundUser.user_id, expiresAt });
+
+    recordAuditLog({
+      user: { user_id: foundUser.user_id, name: foundUser.name, email: foundUser.email, role: foundUser.role },
+      action: 'FORGOT_PASSWORD',
+      level: 'warning',
+      details: `Password reset requested for "${foundUser.email}"`,
+      req
+    });
+
+    // In mock mode: expose the reset URL directly on the page so developers can test it
+    const resetUrl = `/reset-password?token=${token}`;
+    return res.render('pages/forgot-password', {
+      error: null,
+      success: successMsg,
+      mockResetUrl: IS_MOCK_MODE ? resetUrl : null
+    });
+  }
+
+  return res.render('pages/forgot-password', { error: null, success: successMsg, mockResetUrl: null });
+});
+
+// GET /reset-password - Show reset password form
+app.get('/reset-password', (req, res) => {
+  const token = (req.query.token || '').trim();
+  if (!token) return res.redirect('/forgot-password');
+
+  const entry = passwordResetTokens.get(token);
+  if (!entry || Date.now() > entry.expiresAt) {
+    return res.render('pages/reset-password', {
+      token: null,
+      error: 'This reset link has expired or is invalid. Please request a new one.',
+      success: null
+    });
+  }
+
+  res.render('pages/reset-password', { token, error: null, success: null });
+});
+
+// POST /reset-password - Process new password
+app.post('/reset-password', (req, res) => {
+  const { token, password, confirmPassword } = req.body;
+
+  if (!token) {
+    return res.render('pages/reset-password', { token: null, error: 'Invalid reset link.', success: null });
+  }
+
+  const entry = passwordResetTokens.get(token);
+  if (!entry || Date.now() > entry.expiresAt) {
+    return res.render('pages/reset-password', {
+      token: null,
+      error: 'This reset link has expired or is invalid. Please request a new one.',
+      success: null
+    });
+  }
+
+  if (!password || password.length < 6) {
+    return res.render('pages/reset-password', {
+      token,
+      error: 'Password must be at least 6 characters long.',
+      success: null
+    });
+  }
+
+  if (password !== confirmPassword) {
+    return res.render('pages/reset-password', {
+      token,
+      error: 'Passwords do not match.',
+      success: null
+    });
+  }
+
+  // Update the user's password in the mock store
+  const userToReset = mockUsers.find(u => u.user_id === entry.userId);
+  if (userToReset) {
+    userToReset.password = password;
+    passwordResetTokens.delete(token);
+
+    recordAuditLog({
+      user: { user_id: userToReset.user_id, name: userToReset.name, email: userToReset.email, role: userToReset.role },
+      action: 'RESET_PASSWORD',
+      level: 'warning',
+      details: `Password successfully reset for "${userToReset.email}"`,
+      req
+    });
+
+    return res.render('pages/reset-password', {
+      token: null,
+      error: null,
+      success: 'Your password has been updated! You can now sign in with your new password.'
+    });
+  }
+
+  return res.render('pages/reset-password', { token: null, error: 'User not found.', success: null });
 });
 
 // 4.3 Drive Page (Protected)

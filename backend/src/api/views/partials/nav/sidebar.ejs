@@ -3,7 +3,10 @@
 <style>
   .sidebar {
     width: 220px;
-    min-height: 100vh;
+    height: 100vh;
+    max-height: 100vh;
+    box-sizing: border-box;
+    overflow: hidden;
     background-color: #7b573b;
     background-image: linear-gradient(155deg, #a07a59 0%, #8b6749 28%, #7f5b3d 62%, #6b482f 100%);
     background-repeat: no-repeat;
@@ -11,7 +14,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 24px 0 14px;
+    padding: 16px 0 12px;
     position: fixed;
     top: 0;
     left: 0;
@@ -28,8 +31,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    margin-bottom: 26px;
-    padding: 38px 0 24px;
+    margin-bottom: 12px;
+    padding: 12px 0 12px;
     text-decoration: none;
     border-bottom: 1px solid rgba(255, 245, 228, .24);
     position: relative;
@@ -37,8 +40,8 @@
 
   .sidebar-logo-image {
     display: block;
-    width: min(100%, 230px);
-    max-width: 230px;
+    width: min(100%, 140px);
+    max-width: 140px;
     height: auto;
     max-height: none;
     object-fit: contain;
@@ -52,16 +55,20 @@
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 5px;
+    overflow-y: auto;
+    scrollbar-width: none;
     padding: 0 12px;
+    flex: 0 1 auto;
+    min-height: 0;
   }
 
   .sidebar-nav-item {
-    min-height: 50px;
+    min-height: 46px;
     display: flex;
     align-items: center;
     gap: 13px;
-    padding: 13px 15px;
+    padding: 10px 14px;
     border: 1px solid transparent;
     border-radius: 14px;
     cursor: pointer;
@@ -126,8 +133,9 @@
 
   .sidebar-storage {
     width: calc(100% - 24px);
-    padding: 15px 14px 13px;
-    margin: auto 12px 4px;
+    padding: 12px 14px 10px;
+    margin: auto 12px 3px;
+    flex-shrink: 0;
     position: relative;
     cursor: pointer;
     border-radius: 16px;
@@ -291,11 +299,12 @@
   .sidebar-user {
     width: calc(100% - 24px);
     background: linear-gradient(135deg, rgba(255, 249, 239, .96), rgba(238, 222, 200, .96));
-    padding: 12px 13px;
+    padding: 10px 12px;
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 12px 12px 0;
+    margin: 6px 12px 0;
+    flex-shrink: 0;
     border: 1px solid rgba(255, 255, 255, .48);
     border-radius: 15px;
     box-shadow: 0 8px 22px rgba(48, 31, 20, .15), inset 0 1px 0 rgba(255, 255, 255, .7);
@@ -373,7 +382,7 @@
     .sidebar-nav-item {
       justify-content: center;
       width: 52px;
-      min-height: 50px;
+      min-height: 46px;
       margin: 0 auto;
       padding: 12px 0;
       gap: 0;
@@ -548,7 +557,7 @@
   .sidebar.sidebar-collapsed .sidebar-nav-item {
     justify-content: center;
     width: 54px;
-    min-height: 50px;
+    min-height: 46px;
     margin: 0 auto;
     padding: 12px 0;
     gap: 0;
@@ -672,7 +681,7 @@
     .sidebar:not(.sidebar-collapsed) .sidebar-nav-item {
       justify-content: center;
       width: 54px;
-      min-height: 50px;
+      min-height: 46px;
       margin: 0 auto;
       padding: 12px 0;
       gap: 0;
