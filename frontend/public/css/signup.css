@@ -195,6 +195,37 @@ body {
     color: #fff;                /* เปลี่ยนตัวเครื่องหมายถูกเป็นสีขาว */
 }
 
+/* จัดปุ่มตาให้อยู่ชิดขวาของ input-box */
+.toggle-password {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #998a7e; /* สีเดียวกับไอคอนด้านหน้า */
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.toggle-password svg {
+    width: 20px;
+    height: 20px;
+}
+
+.toggle-password:hover {
+    color: #4a2c14; /* สีเข้มขึ้นเมื่อเอาเมาส์ชี้ */
+}
+
+/* เพิ่ม padding ด้านขวาของ input ป้องกันข้อความพิมพ์ทับไอคอนตา */
+.input-box input[type="password"],
+.input-box input[type="text"] {
+    padding-right: 45px;
+}
+
 .check {
     flex: 0 0 14px;
     width: 14px;

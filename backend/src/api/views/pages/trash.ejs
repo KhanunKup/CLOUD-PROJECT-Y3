@@ -28,7 +28,7 @@
         <input class="search-input" type="text" placeholder="Search in Drive" />
       </div>
       <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
-      <form action="/trash/empty" method="POST" style="margin-left:auto;">
+      <form action="/trash/empty" method="POST" style="margin-left:auto;" id="emptyTrashForm" onsubmit="event.preventDefault(); if (window.executeOptimisticEmptyTrash) { window.executeOptimisticEmptyTrash(); } else { this.submit(); }">
         <button class="btn-empty-trash" type="submit">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -59,7 +59,7 @@
 
       <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
         <% files.forEach(function(file) { %>
-        <div class="file-row">
+        <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %>" data-id="<%= file.id %>" data-name="<%= file.name %>" data-type="<%= file.type %>">
           <div class="file-name">
             <% if (file.type === 'folder') { %>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"

@@ -316,3 +316,44 @@
 .upload-btn-submit:active {
     transform: scale(0.98);
 }
+
+/* Options Bar & Fast Scanning */
+.upload-options-bar {
+    padding: 8px 24px 4px 24px;
+}
+
+.upload-option-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #2e3820;
+    font-weight: 500;
+}
+
+.upload-scanning-box {
+    display: none;
+    padding: 24px 16px;
+    text-align: center;
+    background: #edf1e9;
+    border-radius: 8px;
+    margin: 8px 0;
+}
+
+.upload-scanning-spinner {
+    font-size: 24px;
+    color: #414a33;
+    margin-bottom: 8px;
+}
+
+/* Upload Progress Box Spacing & Polish */
+.upload-progress-box {
+    margin: 14px 0 10px 0;
+    padding: 12px 18px;
+    background: #f3f6f0;
+    border: 1px solid #dce2d5;
+    border-radius: 10px;
+    box-sizing: border-box;
+    width: 100%;
+}

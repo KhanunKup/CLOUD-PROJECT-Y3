@@ -461,6 +461,17 @@
                         <div style="margin-top: 8px; padding: 12px; background: #fdfbf7; border: 1px solid #ecd8c6; border-radius: 8px;">
                             <strong style="display: block; margin-bottom: 4px; color: #44362A;">รายละเอียดเพิ่มเติม:</strong>
                             <span style="color: #555;">${log.details || 'ไม่มีรายละเอียดเพิ่มเติม'}</span>
+                        ${log.metadata ? `
+                        <div style="margin-top: 8px; padding: 12px; background: #f5f8fa; border: 1px solid #d0e2ec; border-radius: 8px;">
+                            <strong style="display: block; margin-bottom: 6px; color: #2c4960; font-size: 0.88rem;">ข้อมูลทางเทคนิค (Technical Metadata):</strong>
+                            <div style="display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: #456;">
+                                ${log.metadata.file_id ? `<div><strong>File ID:</strong> <code>${log.metadata.file_id}</code></div>` : ''}
+                                ${log.metadata.category ? `<div><strong>Category:</strong> <span style="text-transform: capitalize;">${log.metadata.category}</span></div>` : ''}
+                                ${log.metadata.count ? `<div><strong>Count:</strong> ${log.metadata.count} files</div>` : ''}
+                                ${log.metadata.file_ids && Array.isArray(log.metadata.file_ids) ? `<div><strong>File IDs:</strong> <code>${log.metadata.file_ids.join(', ')}</code></div>` : ''}
+                                ${log.metadata.total_bytes ? `<div><strong>Total Volume:</strong> ${log.metadata.total_bytes} bytes</div>` : ''}
+                            </div>
+                        </div>` : ''}
                         </div>
                     `;
                     if (modal) modal.style.display = 'flex';

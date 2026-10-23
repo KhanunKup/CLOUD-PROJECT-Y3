@@ -5,6 +5,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const express = require('express');
 const { app } = require('./src/api/index.js');
+const storage = require('./src/api/storage.js');
 
 const PORT = process.env.PORT;
 
@@ -15,17 +16,12 @@ if (!PORT) {
 // Serve static assets from frontend/public (CSS, JS, Fonts, Images)
 app.use(express.static(path.join(__dirname, '../frontend/public')));
 
-// Mock upload endpoint for local testing
-app.put('/mock-upload', (req, res) => {
-  req.on('data', () => {});
-  req.on('end', () => {
-    console.log('[Mock Upload] Received binary file upload via Mock Presigned URL');
-    res.status(200).send('Upload simulated successfully');
-  });
-});
-
 // Mock download endpoint for local testing
 app.get('/mock-download/:filename', (req, res) => {
+  const storedPath = storage.findStoredFile(req.params.filename);
+  if (storedPath) {
+    return res.sendFile(storedPath);
+  }
   res.send(`Mock Download Content for file: ${req.params.filename}`);
 });
 

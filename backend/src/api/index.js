@@ -21,9 +21,24 @@ const {
   ScanCommand 
 } = require('@aws-sdk/lib-dynamodb');
 const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+const storage = require('./storage');
 
 const app = express();
 app.use(cors());
+
+// Raw binary/mock upload endpoint mounted BEFORE body-parsers so arbitrary file uploads
+// (including JSON with comments like tsconfig.json, raw binary, or large files) are not parsed as JSON
+app.put('/mock-upload', async (req, res) => {
+  const key = req.query.key || req.query.filename || `unnamed_${Date.now()}`;
+  try {
+    await storage.saveUploadedFile(key, req);
+    return res.status(200).send('Upload simulated successfully');
+  } catch (err) {
+    console.error(`[Mock Upload Error] Failed saving file ${key}:`, err);
+    return res.status(500).send('Failed to save file');
+  }
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -73,7 +88,7 @@ if (!IS_MOCK_MODE) {
 // ==========================================
 // 2. In-Memory Mock Store (For Local Development)
 // ==========================================
-let mockFiles = [
+const initialMockFiles = [
   {
     file_id: 'folder-001',
     owner_id: 'user-normal-01',
@@ -95,6 +110,7 @@ let mockFiles = [
     size: 2450000,
     category: 'document',
     tags: ['document', 'pdf', 'final'],
+    s3_key: 'folders/user-normal-01/file-001/Project_Proposal.pdf',
     file_hash: 'a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
@@ -108,6 +124,7 @@ let mockFiles = [
     size: 5120000,
     category: 'image',
     tags: ['image', 'png', 'diagram'],
+    s3_key: 'folders/user-normal-01/file-002/Architecture_Diagram.png',
     file_hash: 'b2c3d4e5f6a17890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000).toISOString(),
@@ -121,6 +138,7 @@ let mockFiles = [
     size: 1120000,
     category: 'document',
     tags: ['document', 'docx', 'notes'],
+    s3_key: 'folders/user-normal-01/folder-001/file-004/Meeting_Notes.docx',
     file_hash: 'd4e5f6a1b2c37890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
@@ -193,6 +211,20 @@ let mockFiles = [
     updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
   }
 ];
+
+let mockFiles = storage.loadMockFiles(initialMockFiles);
+
+// Prune any orphan folders/files in storage/uploads that do not exist in metadata
+if (IS_MOCK_MODE && storage.pruneOrphanUploads) {
+  try {
+    const pruneResult = storage.pruneOrphanUploads(mockFiles);
+    if (pruneResult && pruneResult.removedFoldersCount > 0) {
+      console.log(`[Storage Prune] Cleaned up ${pruneResult.removedFoldersCount} orphan folders from disk.`);
+    }
+  } catch (err) {
+    console.warn('[Storage Prune Error]:', err.message);
+  }
+}
 
 let mockShares = [];
 const DEFAULT_STORAGE_QUOTA = 53687091200; // 50 GB (3.3x more than Google Drive's 15 GB)
@@ -267,7 +299,8 @@ let mockAuditLogs = [
     role: 'user',
     action: 'UPLOAD',
     level: 'info',
-    details: 'Uploaded file Project_Proposal.pdf (2.45 MB)',
+    details: 'Uploaded 1 file (document, 2.45 MB)',
+    metadata: { file_id: 'file-001', category: 'document', size: 2450000, count: 1 },
     timestamp: new Date(Date.now() - 3600000 * 3).toISOString()
   },
   {
@@ -286,10 +319,34 @@ let mockAuditLogs = [
 // ==========================================
 // 3. Helper Functions
 // ==========================================
-function canUserAccessFile(file, user) {
-  if (!file || !user) return false;
+function canUserAccessFile(file, user, requiredPermission = 'view', visited = new Set()) {
+  if (!file || !user || visited.has(file.file_id)) return false;
+  visited.add(file.file_id);
+
+  // 1. Resource owner always has full access
   if (file.owner_id === user.user_id) return true;
   if (user.user_id === 'user-normal-01' && file.owner_id === 'demo-user') return true;
+
+  // 2. Direct collaborator check via access_list
+  const userEmail = (user.email || '').toLowerCase();
+  if (userEmail && Array.isArray(file.access_list)) {
+    const entry = file.access_list.find(a => ((a.email || a.name || '').toLowerCase() === userEmail));
+    if (entry) {
+      if (requiredPermission === 'edit') {
+        return entry.permission === 'can edit';
+      }
+      return true; // 'view' is granted
+    }
+  }
+
+  // 3. Recursive folder parent inheritance check
+  if (file.folder_id) {
+    const parentFolder = mockFiles.find(f => f.file_id === file.folder_id);
+    if (parentFolder && canUserAccessFile(parentFolder, user, requiredPermission, visited)) {
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -356,19 +413,39 @@ function getUserStorage(userId) {
   };
 }
 
-function getFolderDescendantIds(folderId) {
+function getFolderDescendantIds(folderId, filesArray = mockFiles) {
+  if (!folderId || !filesArray || filesArray.length === 0) return [];
+  // Build parent -> children map in O(N) single pass
+  const childrenMap = new Map();
+  for (const f of filesArray) {
+    if (!f.folder_id) continue;
+    let list = childrenMap.get(f.folder_id);
+    if (!list) {
+      list = [];
+      childrenMap.set(f.folder_id, list);
+    }
+    list.push(f);
+  }
+
+  // Queue-based BFS traversal in O(K) where K is number of descendants using index pointer
   const descendantIds = [];
-  const children = mockFiles.filter(f => f.folder_id === folderId);
-  for (const child of children) {
-    descendantIds.push(child.file_id);
-    if (child.category === 'folder') {
-      descendantIds.push(...getFolderDescendantIds(child.file_id));
+  const queue = [folderId];
+  let head = 0;
+  while (head < queue.length) {
+    const currentId = queue[head++];
+    const children = childrenMap.get(currentId);
+    if (!children) continue;
+    for (const child of children) {
+      descendantIds.push(child.file_id);
+      if (child.category === 'folder') {
+        queue.push(child.file_id);
+      }
     }
   }
   return descendantIds;
 }
 
-function recordAuditLog({ user, action, level = 'info', details = '', req = null }) {
+function recordAuditLog({ user, action, level = 'info', details = '', metadata = null, req = null }) {
   const logEntry = {
     log_id: `log-${crypto.randomUUID().slice(0, 8)}`,
     user_id: user ? (user.user_id || user.id || 'anonymous') : 'anonymous',
@@ -378,6 +455,7 @@ function recordAuditLog({ user, action, level = 'info', details = '', req = null
     action,
     level, // 'info' | 'warning' | 'critical'
     details,
+    metadata: metadata || null,
     timestamp: new Date().toISOString()
   };
   mockAuditLogs.unshift(logEntry);
@@ -399,6 +477,56 @@ function getCategoryFromExtension(filename) {
     if (exts.includes(ext)) return cat;
   }
   return 'other';
+}
+
+function getMimeType(filename) {
+  const ext = (filename || '').split('.').pop().toLowerCase();
+  const mimeTypes = {
+    txt: 'text/plain; charset=utf-8',
+    md: 'text/markdown; charset=utf-8',
+    csv: 'text/csv; charset=utf-8',
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    js: 'text/javascript; charset=utf-8',
+    mjs: 'text/javascript; charset=utf-8',
+    ts: 'text/plain; charset=utf-8',
+    jsx: 'text/javascript; charset=utf-8',
+    tsx: 'text/plain; charset=utf-8',
+    json: 'application/json; charset=utf-8',
+    html: 'text/html; charset=utf-8',
+    htm: 'text/html; charset=utf-8',
+    css: 'text/css; charset=utf-8',
+    py: 'text/plain; charset=utf-8',
+    sh: 'text/plain; charset=utf-8',
+    bash: 'text/plain; charset=utf-8',
+    sql: 'text/plain; charset=utf-8',
+    yaml: 'text/plain; charset=utf-8',
+    yml: 'text/plain; charset=utf-8',
+    xml: 'text/xml; charset=utf-8',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    gif: 'image/gif',
+    svg: 'image/svg+xml',
+    ico: 'image/x-icon',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    ogg: 'audio/ogg',
+    zip: 'application/zip',
+    rar: 'application/x-rar-compressed',
+    tar: 'application/x-tar',
+    gz: 'application/gzip'
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
 }
 
 // Helper to parse cookies without extra dependencies
@@ -478,8 +606,28 @@ function authMiddleware(req, res, next) {
 
 // Authentication Guards for Web SSR routes
 function requireAuthWeb(req, res, next) {
-  const user = getSessionUser(req);
+  let user = getSessionUser(req);
+  if (!user && IS_MOCK_MODE) {
+    if (req.headers['x-user-id']) {
+      user = {
+        user_id: req.headers['x-user-id'],
+        email: 'demo@kmitl.ac.th',
+        name: 'Demo User',
+        role: req.headers['x-user-role'] || 'user'
+      };
+    } else {
+      user = {
+        user_id: mockUsers[0].user_id,
+        email: mockUsers[0].email,
+        name: mockUsers[0].name,
+        role: mockUsers[0].role
+      };
+    }
+  }
   if (!user) {
+    if ((req.headers.accept && req.headers.accept.includes('application/json')) || req.xhr) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
     return res.redirect('/signin');
   }
   req.user = user;
@@ -712,7 +860,7 @@ app.get('/drive', requireAuthWeb, (req, res) => {
         tags: Array.isArray(f.tags) ? f.tags : (f.category ? [f.category] : []),
         owner: f.owner_id === req.user.user_id ? 'me' : (f.owner_id === 'demo-user' ? 'me' : f.owner_id),
         uploadDate: new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        accessList: [],
+        accessList: f.access_list || [],
         isShared: Boolean(share),
         shareId: share ? share.share_id : null,
         shareUrl: share ? `/share/${share.share_id}` : null,
@@ -725,6 +873,110 @@ app.get('/drive', requireAuthWeb, (req, res) => {
     })
   });
 });
+
+function getSharedWithMeForUser(user) {
+  const userEmail = (user.email || '').toLowerCase();
+  const defaultSharedWithMe = [
+    {
+      id: 'demo-shared-doc',
+      shareId: 'demo-share-doc',
+      name: 'Shared_Document.pdf',
+      size: 1840000,
+      category: 'document',
+      tags: ['document', 'shared'],
+      type: 'file',
+      owner: 'Passakorn',
+      ownerId: 'demo-passakorn',
+      isOwner: false,
+      uploadDate: '10 Oct. 2026',
+      shareUrl: '/share/demo-share-doc',
+      maxDownloads: 0,
+      downloadsLeft: 'Unlimited',
+      downloadCount: 0,
+      hasPassword: false,
+      remainingHours: 120,
+      accessList: [{ name: 'Anan', permission: 'can view', timeRemaining: '5 days' }]
+    }
+  ];
+
+  const invitedFiles = mockFiles.filter(f => {
+    if (f.status === 'trash') return false;
+    const isOwner = f.owner_id === user.user_id || (user.user_id === 'user-normal-01' && f.owner_id === 'demo-user');
+    if (isOwner) return false;
+
+    if (Array.isArray(f.dismissed_by) && (f.dismissed_by.includes(user.user_id) || f.dismissed_by.includes(userEmail))) {
+      return false;
+    }
+
+    return canUserAccessFile(f, user);
+  }).map(f => {
+    const ownerUser = mockUsers.find(u => u.user_id === f.owner_id);
+    const ownerName = ownerUser ? ownerUser.name : (f.owner_id || 'Shared Owner');
+    const directEntry = Array.isArray(f.access_list) ? f.access_list.find(a => ((a.email || a.name || '').toLowerCase() === userEmail)) : null;
+    const perm = directEntry ? directEntry.permission : 'can view';
+
+    return {
+      id: f.file_id,
+      shareId: `invite-${f.file_id}`,
+      name: f.filename,
+      size: f.size || 0,
+      category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+      tags: f.tags || [],
+      type: f.category === 'folder' ? 'folder' : 'file',
+      owner: ownerName,
+      ownerId: f.owner_id,
+      isOwner: false,
+      uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently',
+      shareUrl: null,
+      maxDownloads: 0,
+      downloadsLeft: 'Unlimited',
+      downloadCount: 0,
+      hasPassword: false,
+      remainingHours: null,
+      isDirectInvite: true,
+      permission: perm,
+      accessList: f.access_list || [{ name: user.name, permission: perm }]
+    };
+  });
+
+  const publicSharedWithMe = mockShares
+    .filter(s => s.owner_id !== user.user_id)
+    .map(s => {
+      const f = mockFiles.find(file => file.file_id === s.file_id) || {};
+      const remainingDownloads = s.max_downloads > 0 ? Math.max(0, s.max_downloads - s.download_count) : 'Unlimited';
+      const remainingHours = s.expires_at ? Math.max(0, Math.round((s.expires_at - Math.floor(Date.now() / 1000)) / 3600)) : null;
+      return {
+        id: s.file_id,
+        shareId: s.share_id,
+        name: s.filename || f.filename || 'Shared File',
+        size: f.size || 0,
+        category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+        tags: f.tags || [],
+        type: 'file',
+        owner: s.owner_email || s.owner_id || 'Shared Link',
+        ownerId: s.owner_id,
+        isOwner: false,
+        uploadDate: new Date(s.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        shareUrl: `/share/${s.share_id}`,
+        maxDownloads: s.max_downloads,
+        downloadsLeft: remainingDownloads,
+        downloadCount: s.download_count,
+        hasPassword: Boolean(s.has_password),
+        remainingHours,
+        accessList: [{
+          name: s.has_password ? 'Protected (PW)' : 'Anyone with link',
+          permission: s.max_downloads > 0 ? `Limit: ${remainingDownloads}` : 'can view',
+          timeRemaining: remainingHours !== null ? `${remainingHours} hrs` : 'Unlimited'
+        }]
+      };
+    });
+
+  return [
+    ...defaultSharedWithMe.filter(d => !Array.isArray(d.dismissed_by) || (!d.dismissed_by.includes(user.user_id) && !d.dismissed_by.includes(userEmail))),
+    ...invitedFiles,
+    ...publicSharedWithMe
+  ];
+}
 
 // 4.4 Shared Page (Protected)
 app.get('/shared', requireAuthWeb, (req, res) => {
@@ -787,10 +1039,7 @@ app.get('/shared', requireAuthWeb, (req, res) => {
 
   // Divide into Shared By Me and Shared With Me
   const sharedByMe = allShares.filter(s => s.isOwner);
-  const sharedWithMe = [
-    ...defaultSharedWithMe,
-    ...allShares.filter(s => !s.isOwner)
-  ];
+  const sharedWithMe = getSharedWithMeForUser(req.user);
 
   const storage = getUserStorage(req.user.user_id);
   res.render('pages/shared', {
@@ -802,12 +1051,28 @@ app.get('/shared', requireAuthWeb, (req, res) => {
   });
 });
 
+function filterRootTrashedFiles(files = mockFiles, userId) {
+  // Pre-collect all trashed folder IDs in O(N)
+  const trashedFolderIdSet = new Set(
+    files.filter(f => f.status === 'trash' && f.category === 'folder').map(f => f.file_id)
+  );
+
+  return files.filter(f => {
+    if (f.status !== 'trash') return false;
+    const isOwner = f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user');
+    if (!isOwner) return false;
+
+    // Root-level trashed filtering in O(1): hide items whose parent folder is also in trash
+    if (f.folder_id && f.folder_id !== 'root') {
+      if (trashedFolderIdSet.has(f.folder_id)) return false;
+    }
+    return true;
+  });
+}
+
 // 4.5 Trash Page (Protected)
 app.get('/trash', requireAuthWeb, (req, res) => {
-  const trashedFiles = mockFiles.filter(f => {
-    if (f.status !== 'trash') return false;
-    return f.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && f.owner_id === 'demo-user');
-  });
+  const trashedFiles = filterRootTrashedFiles(mockFiles, req.user.user_id);
   const storage = getUserStorage(req.user.user_id);
   res.render('pages/trash', {
     user: req.user,
@@ -815,18 +1080,117 @@ app.get('/trash', requireAuthWeb, (req, res) => {
     files: trashedFiles.map(f => ({
       id: f.file_id,
       name: f.filename,
-      type: 'file',
+      type: f.category === 'folder' ? 'folder' : 'file',
+      category: f.category || 'other',
       owner: 'me',
       trashedAt: new Date(f.trashed_at || f.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
     }))
   });
 });
 
-app.post('/trash/empty', requireAuthWeb, (req, res) => {
-  if (IS_MOCK_MODE) {
-    mockFiles = mockFiles.filter(f => f.status !== 'trash');
-    recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: 'Emptied entire trash bin' });
+function emptyUserTrash({ files = mockFiles, userStorage = mockUserStorage, userId, storageModule = storage }) {
+  const trashedItems = files.filter(f => {
+    if (f.status !== 'trash') return false;
+    return f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user');
+  });
+
+  const trashedFolderIds = new Set(
+    trashedItems.filter(f => f.category === 'folder').map(f => f.file_id)
+  );
+
+  let totalSizeFreed = 0;
+  const categoryFreed = {};
+
+  trashedItems.forEach(item => {
+    if (item.category !== 'folder') {
+      const sz = Number(item.size) || 0;
+      if (sz > 0) {
+        totalSizeFreed += sz;
+        const cat = item.category || 'document';
+        categoryFreed[cat] = (categoryFreed[cat] || 0) + sz;
+      }
+    }
+  });
+
+  // Background non-blocking disk purge
+  let purgePromise = null;
+  if (storageModule) {
+    const foldersToPurge = trashedItems.filter(f => f.category === 'folder');
+    const standaloneFilesToPurge = trashedItems.filter(f => f.category !== 'folder' && (!f.folder_id || !trashedFolderIds.has(f.folder_id)));
+
+    purgePromise = new Promise(resolve => {
+      setImmediate(async () => {
+        try {
+          for (const item of foldersToPurge) {
+            if (item.owner_id) {
+              if (typeof storageModule.deleteStoredFolderAsync === 'function') {
+                await storageModule.deleteStoredFolderAsync(item.owner_id, item.file_id);
+              } else if (typeof storageModule.deleteStoredFolder === 'function') {
+                storageModule.deleteStoredFolder(item.owner_id, item.file_id);
+              }
+            }
+          }
+          for (const file of standaloneFilesToPurge) {
+            if (typeof storageModule.deleteStoredFile === 'function') {
+              storageModule.deleteStoredFile(file);
+            }
+          }
+        } catch (purgeErr) {
+          console.warn('Background empty trash purge error:', purgeErr.message);
+        } finally {
+          resolve();
+        }
+      });
+    });
   }
+
+  if (totalSizeFreed > 0 && userStorage) {
+    userStorage.totalUsed = Math.max(0, (userStorage.totalUsed || 0) - totalSizeFreed);
+    if (userStorage.breakdown) {
+      for (const [cat, sz] of Object.entries(categoryFreed)) {
+        if (userStorage.breakdown[cat] !== undefined) {
+          userStorage.breakdown[cat] = Math.max(0, userStorage.breakdown[cat] - sz);
+        }
+      }
+    }
+  }
+
+  const trashedIds = new Set(trashedItems.map(f => f.file_id));
+  const remainingFiles = files.filter(f => !trashedIds.has(f.file_id));
+  if (storageModule && storageModule.saveMockFiles) {
+    storageModule.saveMockFiles(remainingFiles, false);
+  }
+
+  return {
+    purgedCount: trashedItems.length,
+    totalSizeFreed,
+    remainingFiles,
+    purgePromise
+  };
+}
+
+app.post('/trash/empty', requireAuthWeb, (req, res) => {
+  let result = { purgedCount: 0, totalSizeFreed: 0 };
+  if (IS_MOCK_MODE) {
+    result = emptyUserTrash({
+      files: mockFiles,
+      userStorage: mockUserStorage,
+      userId: req.user.user_id,
+      storageModule: storage
+    });
+    mockFiles = result.remainingFiles;
+    recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Emptied entire trash bin (${result.purgedCount} items purged)` });
+  }
+
+  const wantsJson = (req.headers.accept && req.headers.accept.includes('application/json')) || req.xhr;
+  if (wantsJson) {
+    return res.json({
+      success: true,
+      purgedCount: result.purgedCount,
+      totalSizeFreed: result.totalSizeFreed
+    });
+  }
+
   res.redirect('/trash');
 });
 
@@ -963,12 +1327,55 @@ app.get('/api/files', authMiddleware, async (req, res) => {
 
 // 5.2.1 Create Folder
 app.post('/api/folders', authMiddleware, async (req, res) => {
-  const { folderName, folder_id, parent_id } = req.body;
+  const { folderName, folder_id, parent_id, reuseExisting } = req.body;
   if (!folderName) {
     return res.status(400).json({ error: 'folderName is required' });
   }
 
   const parentFolderId = folder_id || parent_id || null;
+
+  if (reuseExisting) {
+    if (IS_MOCK_MODE) {
+      const existingFolder = mockFiles.find(f =>
+        (f.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && f.owner_id === 'demo-user')) &&
+        f.status === 'active' &&
+        f.category === 'folder' &&
+        f.filename === folderName &&
+        (f.folder_id || null) === parentFolderId
+      );
+      if (existingFolder) {
+        return res.json({ success: true, file: existingFolder, reused: true });
+      }
+    } else {
+      try {
+        const queryCmd = new QueryCommand({
+          TableName: FILES_TABLE,
+          IndexName: 'OwnerIndex',
+          KeyConditionExpression: 'owner_id = :owner',
+          FilterExpression: '#st = :status AND #fn = :filename AND #cat = :category',
+          ExpressionAttributeNames: {
+            '#st': 'status',
+            '#fn': 'filename',
+            '#cat': 'category'
+          },
+          ExpressionAttributeValues: {
+            ':owner': req.user.user_id,
+            ':status': 'active',
+            ':filename': folderName,
+            ':category': 'folder'
+          }
+        });
+        const queryRes = await docClient.send(queryCmd);
+        const matched = (queryRes.Items || []).find(f => (f.folder_id || null) === parentFolderId);
+        if (matched) {
+          return res.json({ success: true, file: matched, reused: true });
+        }
+      } catch (err) {
+        console.warn('Error checking existing folder in DynamoDB:', err);
+      }
+    }
+  }
+
   const fileId = `folder-${crypto.randomUUID()}`;
   const newFolder = {
     file_id: fileId,
@@ -986,6 +1393,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
 
   if (IS_MOCK_MODE) {
     mockFiles.unshift(newFolder);
+    storage.saveMockFiles(mockFiles);
     recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
     return res.json({ success: true, file: newFolder });
   }
@@ -1001,6 +1409,15 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
     console.error('Create folder error:', err);
     res.status(500).json({ error: 'Failed to create folder' });
   }
+});
+
+// Mock download endpoint (for local mock mode)
+app.get('/mock-download/:filename', (req, res) => {
+  const storedPath = storage.findStoredFile(req.params.filename);
+  if (storedPath) {
+    return res.sendFile(storedPath);
+  }
+  res.send(`Mock Download Content for file: ${req.params.filename}`);
 });
 
 // 5.3 Request Presigned Upload URL
@@ -1043,18 +1460,32 @@ app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
       updated_at: new Date().toISOString()
     };
     mockFiles.unshift(mockFileRecord);
+    storage.saveMockFiles(mockFiles);
 
     // Update mock storage breakdown
     mockUserStorage.totalUsed += Number(size);
     mockUserStorage.breakdown[category] = (mockUserStorage.breakdown[category] || 0) + Number(size);
 
-    recordAuditLog({ user: req.user, action: 'UPLOAD', level: 'info', details: `Uploaded file "${filename}" (${formatBytes(Number(size))})` });
+    recordAuditLog({
+      user: req.user,
+      action: 'UPLOAD',
+      level: 'info',
+      details: `Uploaded 1 file (${category}, ${formatBytes(Number(size))})`,
+      metadata: {
+        file_id: fileId,
+        category,
+        size: Number(size),
+        count: 1
+      }
+    });
 
+    const host = req.get('host') || 'localhost:3000';
+    const protocol = req.protocol || 'http';
     return res.json({
       success: true,
       file_id: fileId,
       key: s3Key,
-      uploadUrl: `http://localhost:3000/mock-upload?key=${encodeURIComponent(s3Key)}`,
+      uploadUrl: `${protocol}://${host}/mock-upload?key=${encodeURIComponent(s3Key)}`,
       file: mockFileRecord
     });
   }
@@ -1090,6 +1521,148 @@ app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Presigned URL error:', err);
     res.status(500).json({ error: 'Failed to generate upload URL' });
+  }
+});
+
+// 5.3.1 Request Batch Presigned Upload URLs
+app.post('/api/files/batch-upload-urls', authMiddleware, async (req, res) => {
+  const filesList = req.body.files;
+  if (!filesList || !Array.isArray(filesList) || filesList.length === 0) {
+    return res.status(400).json({ error: 'files array is required and must not be empty' });
+  }
+
+  // Quota Guard: Enforce storage quota limits across all files in the batch
+  const currentStorage = getUserStorage(req.user.user_id);
+  const totalBatchBytes = filesList.reduce((acc, f) => acc + (Number(f.size) || 0), 0);
+  if (currentStorage.totalUsed + totalBatchBytes > currentStorage.quota) {
+    return res.status(400).json({
+      error: `Storage quota exceeded. You have ${currentStorage.formattedFree} free space remaining out of ${currentStorage.formattedQuota}.`
+    });
+  }
+
+  const host = req.get('host') || 'localhost:3000';
+  const protocol = req.protocol || 'http';
+  const items = [];
+  const newMockRecords = [];
+  const categoryFreed = {};
+
+  if (IS_MOCK_MODE) {
+    for (const fileItem of filesList) {
+      const filename = fileItem.filename || fileItem.name;
+      const size = Number(fileItem.size) || 0;
+      const parentFolderId = fileItem.folder_id || fileItem.parent_id || null;
+      const fileId = `file-${crypto.randomUUID()}`;
+      const s3Key = parentFolderId
+        ? `uploads/${req.user.user_id}/${parentFolderId}/${fileId}/${filename}`
+        : `uploads/${req.user.user_id}/${fileId}/${filename}`;
+      const category = getCategoryFromExtension(filename);
+
+      const mockFileRecord = {
+        file_id: fileId,
+        owner_id: req.user.user_id,
+        folder_id: parentFolderId,
+        filename,
+        size,
+        category,
+        tags: [category, filename.split('.').pop().toLowerCase()],
+        file_hash: crypto.randomBytes(32).toString('hex'),
+        s3_key: s3Key,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      newMockRecords.push(mockFileRecord);
+      categoryFreed[category] = (categoryFreed[category] || 0) + size;
+
+      items.push({
+        file_id: fileId,
+        filename,
+        key: s3Key,
+        s3_key: s3Key,
+        uploadUrl: `${protocol}://${host}/mock-upload?key=${encodeURIComponent(s3Key)}`,
+        file: mockFileRecord
+      });
+    }
+
+    mockFiles.unshift(...newMockRecords);
+    storage.saveMockFiles(mockFiles);
+
+    mockUserStorage.totalUsed += totalBatchBytes;
+    for (const [cat, sz] of Object.entries(categoryFreed)) {
+      mockUserStorage.breakdown[cat] = (mockUserStorage.breakdown[cat] || 0) + sz;
+    }
+
+    recordAuditLog({
+      user: req.user,
+      action: 'UPLOAD',
+      level: 'info',
+      details: `Batch uploaded ${items.length} files (${formatBytes(totalBatchBytes)})`,
+      metadata: {
+        file_ids: items.map(item => item.file_id),
+        count: items.length,
+        total_bytes: totalBatchBytes
+      }
+    });
+
+    return res.json({
+      success: true,
+      items
+    });
+  }
+
+  try {
+    for (const fileItem of filesList) {
+      const filename = fileItem.filename || fileItem.name;
+      const size = Number(fileItem.size) || 0;
+      const parentFolderId = fileItem.folder_id || fileItem.parent_id || null;
+      const fileId = `file-${crypto.randomUUID()}`;
+      const s3Key = parentFolderId
+        ? `uploads/${req.user.user_id}/${parentFolderId}/${fileId}/${filename}`
+        : `uploads/${req.user.user_id}/${fileId}/${filename}`;
+
+      const putCommand = new PutObjectCommand({
+        Bucket: STORAGE_BUCKET,
+        Key: s3Key,
+        ContentType: fileItem.contentType || 'application/octet-stream'
+      });
+      const uploadUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: 900 });
+
+      const newFile = {
+        file_id: fileId,
+        owner_id: req.user.user_id,
+        folder_id: parentFolderId,
+        filename,
+        size,
+        category: getCategoryFromExtension(filename),
+        s3_key: s3Key,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      await docClient.send(new PutCommand({
+        TableName: FILES_TABLE,
+        Item: newFile
+      }));
+
+      items.push({
+        file_id: fileId,
+        filename,
+        key: s3Key,
+        s3_key: s3Key,
+        uploadUrl,
+        file: newFile
+      });
+    }
+
+    return res.json({
+      success: true,
+      items
+    });
+  } catch (err) {
+    console.error('Batch presigned URL error:', err);
+    res.status(500).json({ error: 'Failed to generate batch upload URLs' });
   }
 });
 
@@ -1131,6 +1704,103 @@ app.get('/api/files/:id/download-url', authMiddleware, async (req, res) => {
   }
 });
 
+// 5.4.1 Stream File Content Inline (For Preview / Media Streaming)
+app.get('/api/files/:id/content', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+
+  if (IS_MOCK_MODE) {
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
+    if (!file) return res.status(404).json({ error: 'File not found or unauthorized' });
+
+    const storedPath = storage.findStoredFile(file);
+    if (!storedPath) {
+      return res.status(404).json({ error: 'File content not found in local storage' });
+    }
+
+    const mime = getMimeType(file.filename);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.filename)}"`);
+    return res.sendFile(storedPath);
+  }
+
+  try {
+    const result = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = result.Item;
+    if (!file || !canUserAccessFile(file, req.user)) {
+      return res.status(404).json({ error: 'File not found or unauthorized' });
+    }
+
+    const mime = getMimeType(file.filename);
+    const getCommand = new GetObjectCommand({
+      Bucket: STORAGE_BUCKET,
+      Key: file.s3_key,
+      ResponseContentType: mime,
+      ResponseContentDisposition: `inline; filename="${encodeURIComponent(file.filename)}"`
+    });
+    const inlineUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 900 });
+    return res.redirect(inlineUrl);
+  } catch (err) {
+    console.error('File content error:', err);
+    res.status(500).json({ error: 'Failed to retrieve file content' });
+  }
+});
+
+// 5.4.2 Request Preview URL & Metadata
+app.get('/api/files/:id/preview-url', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+
+  if (IS_MOCK_MODE) {
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
+    if (!file) return res.status(404).json({ error: 'File not found or unauthorized' });
+
+    return res.json({
+      success: true,
+      file_id: file.file_id,
+      filename: file.filename,
+      category: file.category,
+      size: file.size,
+      mimeType: getMimeType(file.filename),
+      previewUrl: `/api/files/${file.file_id}/content`
+    });
+  }
+
+  try {
+    const result = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = result.Item;
+    if (!file || !canUserAccessFile(file, req.user)) {
+      return res.status(404).json({ error: 'File not found or unauthorized' });
+    }
+
+    const mime = getMimeType(file.filename);
+    const getCommand = new GetObjectCommand({
+      Bucket: STORAGE_BUCKET,
+      Key: file.s3_key,
+      ResponseContentType: mime,
+      ResponseContentDisposition: `inline; filename="${encodeURIComponent(file.filename)}"`
+    });
+    const previewUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 900 });
+
+    res.json({
+      success: true,
+      file_id: file.file_id,
+      filename: file.filename,
+      category: file.category,
+      size: file.size,
+      mimeType: mime,
+      previewUrl
+    });
+  } catch (err) {
+    console.error('Preview URL error:', err);
+    res.status(500).json({ error: 'Failed to generate preview URL' });
+  }
+});
+
 // 5.5 Rename File
 app.patch('/api/files/:id', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
@@ -1142,6 +1812,7 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
     if (!file) return res.status(404).json({ error: 'File not found' });
     file.filename = filename;
     file.updated_at = new Date().toISOString();
+    storage.saveMockFiles(mockFiles);
     recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
     return res.json({ success: true, file });
   }
@@ -1182,6 +1853,7 @@ app.patch('/api/files/:id/tags', authMiddleware, async (req, res) => {
     if (!file) return res.status(404).json({ error: 'File not found' });
     file.tags = tags;
     file.updated_at = new Date().toISOString();
+    storage.saveMockFiles(mockFiles);
     recordAuditLog({ user: req.user, action: 'UPDATE_TAGS', level: 'info', details: `Updated tags for "${file.filename}" to: [${tags.join(', ')}]` });
     return res.json({ success: true, file, tags });
   }
@@ -1207,6 +1879,99 @@ app.patch('/api/files/:id/tags', authMiddleware, async (req, res) => {
   }
 });
 
+function permanentlyDeleteFileOrFolder({ fileId, user, files = mockFiles, userStorage = mockUserStorage, storageModule = storage }) {
+  const index = files.findIndex(f => f.file_id === fileId && canUserAccessFile(f, user));
+  if (index === -1) return { error: 'File not found', status: 404 };
+
+  const targetFile = files[index];
+  const isOwner = targetFile.owner_id === user.user_id || (user.user_id === 'user-normal-01' && targetFile.owner_id === 'demo-user');
+  if (!isOwner && user.role !== 'admin') {
+    return { error: 'Only the resource owner can delete this item', status: 403 };
+  }
+
+  const isFolder = targetFile.category === 'folder';
+  const descendantIds = isFolder ? getFolderDescendantIds(fileId, files) : [];
+  const descendantIdSet = new Set(descendantIds);
+  const itemsToDelete = [targetFile];
+  if (descendantIds.length > 0) {
+    itemsToDelete.push(...files.filter(f => descendantIdSet.has(f.file_id)));
+  }
+
+  // Background non-blocking disk purge
+  let purgePromise = null;
+  if (storageModule) {
+    const foldersToPurge = itemsToDelete.filter(f => f.category === 'folder');
+    const standaloneFilesToPurge = itemsToDelete.filter(f => f.category !== 'folder');
+
+    purgePromise = new Promise(resolve => {
+      setImmediate(async () => {
+        try {
+          for (const item of foldersToPurge) {
+            if (item.owner_id) {
+              if (typeof storageModule.deleteStoredFolderAsync === 'function') {
+                await storageModule.deleteStoredFolderAsync(item.owner_id, item.file_id);
+              } else if (typeof storageModule.deleteStoredFolder === 'function') {
+                storageModule.deleteStoredFolder(item.owner_id, item.file_id);
+              }
+            }
+          }
+          for (const file of standaloneFilesToPurge) {
+            if (typeof storageModule.deleteStoredFile === 'function') {
+              storageModule.deleteStoredFile(file);
+            }
+          }
+        } catch (purgeErr) {
+          console.warn('Background permanent delete error:', purgeErr.message);
+        } finally {
+          resolve();
+        }
+      });
+    });
+  }
+
+  let totalSizeFreed = 0;
+  const categoryFreed = {};
+
+  itemsToDelete.forEach(item => {
+    if (item.category !== 'folder') {
+      const sz = Number(item.size) || 0;
+      if (sz > 0) {
+        totalSizeFreed += sz;
+        const cat = item.category || 'document';
+        categoryFreed[cat] = (categoryFreed[cat] || 0) + sz;
+      }
+    }
+  });
+
+  if (totalSizeFreed > 0 && userStorage) {
+    userStorage.totalUsed = Math.max(0, (userStorage.totalUsed || 0) - totalSizeFreed);
+    if (userStorage.breakdown) {
+      for (const [cat, sz] of Object.entries(categoryFreed)) {
+        if (userStorage.breakdown[cat] !== undefined) {
+          userStorage.breakdown[cat] = Math.max(0, userStorage.breakdown[cat] - sz);
+        }
+      }
+    }
+  }
+
+  const deleteIdSet = new Set(itemsToDelete.map(f => f.file_id));
+  const remainingFiles = files.filter(f => !deleteIdSet.has(f.file_id));
+  if (storageModule && storageModule.saveMockFiles) {
+    storageModule.saveMockFiles(remainingFiles, false);
+  }
+
+  return {
+    success: true,
+    targetFile,
+    isFolder,
+    descendantCount: descendantIds.length,
+    deletedItemsCount: itemsToDelete.length,
+    totalSizeFreed,
+    remainingFiles,
+    purgePromise
+  };
+}
+
 // 5.6 Move to Trash or Permanent Delete
 app.delete('/api/files/:id', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
@@ -1217,27 +1982,50 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
     if (index === -1) return res.status(404).json({ error: 'File not found' });
 
     const targetFile = mockFiles[index];
+    const isOwner = targetFile.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && targetFile.owner_id === 'demo-user');
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only the resource owner can delete this item' });
+    }
     const isFolder = targetFile.category === 'folder';
     const descendantIds = isFolder ? getFolderDescendantIds(fileId) : [];
 
     if (isPermanent) {
-      const deletedFile = mockFiles.splice(index, 1)[0];
-      if (descendantIds.length > 0) {
-        mockFiles = mockFiles.filter(f => !descendantIds.includes(f.file_id));
+      const delResult = permanentlyDeleteFileOrFolder({
+        fileId,
+        user: req.user,
+        files: mockFiles,
+        userStorage: mockUserStorage,
+        storageModule: storage
+      });
+      if (delResult.error) {
+        return res.status(delResult.status).json({ error: delResult.error });
       }
-      recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Permanently deleted ${isFolder ? 'folder' : 'file'} "${deletedFile ? deletedFile.filename : fileId}"${descendantIds.length > 0 ? ` and ${descendantIds.length} nested item(s)` : ''}` });
-      return res.json({ success: true, message: `${isFolder ? 'Folder' : 'File'} deleted permanently` });
+      mockFiles = delResult.remainingFiles;
+      recordAuditLog({
+        user: req.user,
+        action: 'PERMANENT_DELETE',
+        level: 'critical',
+        details: `Permanently deleted ${delResult.isFolder ? 'folder' : 'file'} "${delResult.targetFile ? delResult.targetFile.filename : fileId}"${delResult.descendantCount > 0 ? ` and ${delResult.descendantCount} nested item(s)` : ''}`
+      });
+      return res.json({
+        success: true,
+        message: `${delResult.isFolder ? 'Folder' : 'File'} deleted permanently`,
+        deletedItemsCount: delResult.deletedItemsCount,
+        totalSizeFreed: delResult.totalSizeFreed
+      });
     } else {
       targetFile.status = 'trash';
       targetFile.trashed_at = new Date().toISOString();
       if (descendantIds.length > 0) {
+        const descendantIdSet = new Set(descendantIds);
         mockFiles.forEach(f => {
-          if (descendantIds.includes(f.file_id)) {
+          if (descendantIdSet.has(f.file_id)) {
             f.status = 'trash';
-            f.trashed_at = new Date().toISOString();
+            f.trashed_at = targetFile.trashed_at;
           }
         });
       }
+      storage.saveMockFiles(mockFiles);
       recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved ${isFolder ? 'folder' : 'file'} "${targetFile.filename}" to trash${descendantIds.length > 0 ? ` and ${descendantIds.length} nested item(s)` : ''}` });
       return res.json({ success: true, message: `${isFolder ? 'Folder' : 'File'} moved to trash` });
     }
@@ -1294,6 +2082,7 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
         }
       });
     }
+    storage.saveMockFiles(mockFiles);
 
     recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored ${file.category === 'folder' ? 'folder' : 'file'} "${file.filename}" from trash` });
     return res.json({ success: true, message: 'Restored successfully', file });
@@ -1529,6 +2318,85 @@ app.delete('/api/shares/:id', authMiddleware, async (req, res) => {
     message: 'Share link revoked successfully',
     share_id: share ? share.share_id : targetId
   });
+});
+
+// 5.8.4 Direct Collaborator Access Control (GET & PUT /api/files/:id/access)
+app.get('/api/files/:id/access', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+  const file = mockFiles.find(f => f.file_id === fileId);
+  if (!file) {
+    return res.status(404).json({ error: 'File or folder not found' });
+  }
+  if (!canUserAccessFile(file, req.user) && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Access denied' });
+  }
+  res.json({ success: true, accessList: file.access_list || [] });
+});
+
+app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+  const file = mockFiles.find(f => f.file_id === fileId);
+  if (!file) {
+    return res.status(404).json({ error: 'File or folder not found' });
+  }
+
+  const isOwner = file.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && file.owner_id === 'demo-user');
+  if (!isOwner && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Only the resource owner can modify access permissions' });
+  }
+
+  const { accessList } = req.body;
+  if (!Array.isArray(accessList)) {
+    return res.status(400).json({ error: 'accessList must be an array' });
+  }
+
+  const sanitized = accessList
+    .filter(item => item && (item.email || item.name))
+    .map(item => ({
+      email: (item.email || item.name).trim().toLowerCase(),
+      name: (item.name || item.email).trim(),
+      permission: item.permission || 'can view',
+      timeRemaining: item.timeRemaining || null,
+      hasPassword: Boolean(item.hasPassword),
+      password: item.password || '',
+      added_at: item.added_at || new Date().toISOString(),
+      added_by: req.user.user_id
+    }));
+
+  file.access_list = sanitized;
+  file.updated_at = new Date().toISOString();
+
+  recordAuditLog({
+    user: req.user,
+    action: 'SHARE_INVITE',
+    level: 'info',
+    details: `Updated collaborator access for "${file.filename}": ${sanitized.length} collaborators`
+  });
+
+  res.json({ success: true, message: 'Access list updated successfully', accessList: file.access_list });
+});
+
+// 5.8.5 Shared With Me Endpoints
+app.get('/api/shares/shared-with-me', authMiddleware, async (req, res) => {
+  const sharedWithMe = getSharedWithMeForUser(req.user);
+  res.json({ success: true, sharedWithMe });
+});
+
+app.delete('/api/shares/shared-with-me/:file_id', authMiddleware, async (req, res) => {
+  const fileId = req.params.file_id;
+  const userEmail = (req.user.email || '').toLowerCase();
+  const file = mockFiles.find(f => f.file_id === fileId);
+  if (file) {
+    file.dismissed_by = file.dismissed_by || [];
+    if (!file.dismissed_by.includes(req.user.user_id)) {
+      file.dismissed_by.push(req.user.user_id);
+    }
+    if (!file.dismissed_by.includes(userEmail)) {
+      file.dismissed_by.push(userEmail);
+    }
+    return res.json({ success: true, message: 'File dismissed from Shared with me' });
+  }
+  res.json({ success: true, message: 'Removed from Shared with me' });
 });
 
 // 5.9 Verify Password & Download Shared File (Burn-After-Read Check & SNS Alert)
@@ -1784,4 +2652,9 @@ app.get('/api/admin/audit', authMiddleware, (req, res) => {
 // Export Lambda handler
 module.exports.handler = serverless(app);
 module.exports.app = app; // Export app for local runner
+module.exports.filterRootTrashedFiles = filterRootTrashedFiles;
+module.exports.getFolderDescendantIds = getFolderDescendantIds;
+module.exports.emptyUserTrash = emptyUserTrash;
+module.exports.permanentlyDeleteFileOrFolder = permanentlyDeleteFileOrFolder;
+module.exports.recordAuditLog = recordAuditLog;
 
