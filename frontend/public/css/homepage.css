@@ -782,3 +782,10 @@ body {
 
 
 
+
+.trash-table .folder-row {
+    cursor: default;
+}
+.trash-table .folder-row:hover {
+    background-color: inherit;
+}

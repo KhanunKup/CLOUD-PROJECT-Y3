@@ -689,27 +689,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ─── Folder Navigation ───
+    function navigateToFolder(folderId) {
+        if (!folderId) return;
+        if (window.location.pathname.startsWith('/trash')) return;
+        window.location.href = `/drive?folder=${encodeURIComponent(folderId)}`;
+    }
+
     // 1. Double click on folder row
     document.addEventListener('dblclick', (e) => {
         const folderRow = e.target.closest('.folder-row');
         if (folderRow) {
-            if (e.target.closest('.options-wrapper, .options-dropdown, button')) return;
+            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline')) return;
             const folderId = folderRow.dataset.id;
             if (folderId) {
-                window.location.href = `/drive?folder=${encodeURIComponent(folderId)}`;
+                navigateToFolder(folderId);
             }
         }
     });
 
-    // 2. Single click on folder name
+    // 2. Single click on folder row or folder name
     document.addEventListener('click', (e) => {
-        const folderNameEl = e.target.closest('.folder-row .file-name');
-        if (folderNameEl) {
-            if (e.target.closest('.shared-badge-inline, .file-tag-badge, .options-wrapper, button')) return;
-            const folderRow = folderNameEl.closest('.folder-row');
-            const folderId = folderRow ? folderRow.dataset.id : null;
+        const folderRow = e.target.closest('.folder-row');
+        if (folderRow) {
+            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline')) return;
+            const folderId = folderRow.dataset.id;
             if (folderId) {
-                window.location.href = `/drive?folder=${encodeURIComponent(folderId)}`;
+                navigateToFolder(folderId);
             }
         }
     });
@@ -721,7 +726,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.stopPropagation();
             const folderId = openBtn.dataset.id;
             if (folderId) {
-                window.location.href = `/drive?folder=${encodeURIComponent(folderId)}`;
+                navigateToFolder(folderId);
             }
         }
     });
