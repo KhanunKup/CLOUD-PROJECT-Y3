@@ -17,6 +17,8 @@
 @font-face {
     font-family: 'Outfit';
     src: url('/fonts/Outfit-VariableFont_wght.ttf') format('truetype');
+    font-weight: 100 900;
+    font-style: normal;
 }
 
 body {
@@ -167,7 +169,7 @@ body {
 .page-title {
     font-family: 'Outfit', 'Kanit', sans-serif;
     font-size: 36px;
-    font-weight: 700;
+    font-weight: 800;
     color: #423E3B;
     margin: 0;
     line-height: 1.2;
@@ -881,7 +883,7 @@ body {
 .page-title {
     color: #433328;
     font-size: clamp(30px, 2.6vw, 40px);
-    font-weight: 700;
+    font-weight: 800;
     line-height: 1.12;
     letter-spacing: -0.8px;
 }
