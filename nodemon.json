@@ -1,0 +1,17 @@
+{
+  "watch": [
+    "backend/src/api",
+    "backend/server.js",
+    "frontend/views",
+    "server.js"
+  ],
+  "ignore": [
+    "**/storage/**",
+    "**/uploads/**",
+    "**/*.json",
+    "**/*.tmp",
+    "**/.git/**",
+    "**/node_modules/**"
+  ],
+  "ext": "js,ejs"
+}

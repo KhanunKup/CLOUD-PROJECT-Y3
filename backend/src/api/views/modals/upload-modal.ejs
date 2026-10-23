@@ -24,6 +24,14 @@
             </div>
         </div>
 
+        <!-- Upload Options Bar -->
+        <div class="upload-options-bar" id="uploadOptionsBar" style="padding: 10px 24px 2px 24px; display: flex; align-items: center; justify-content: flex-start;">
+            <label class="upload-option-label" style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #37412d; user-select: none;">
+                <input type="checkbox" id="uploadSkipDevFoldersCheckbox" checked style="accent-color: #5c7b4a; width: 16px; height: 16px; cursor: pointer;">
+                <span>ข้ามโฟลเดอร์สำหรับพัฒนา (node_modules, .git) โดยอัตโนมัติ</span>
+            </label>
+        </div>
+
         <!-- File Queue Section -->
         <div class="upload-queue-container">
             <div class="upload-queue-header">
@@ -33,11 +41,35 @@
             </div>
             <hr class="upload-queue-divider">
 
+            <!-- Live Scanning Indicator -->
+            <div class="upload-scanning-box" id="uploadScanningBox" style="display: none; padding: 24px 16px; text-align: center; color: #435e39;">
+                <div style="font-size: 24px; margin-bottom: 8px; color: #5c7b4a;">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                </div>
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;" id="uploadScanningTitle">
+                    กำลังสแกนโครงสร้างโฟลเดอร์...
+                </div>
+                <div style="font-size: 12px; color: #6b735c;" id="uploadScanningCount">
+                    พบแล้ว 0 รายการ (0 B)
+                </div>
+            </div>
+
             <div class="upload-queue-list" id="uploadQueueList">
                 <!-- Example initial row if empty, or populated dynamically -->
                 <div class="upload-queue-empty" id="uploadQueueEmpty" style="text-align: center; color: #6b735c; font-size: 14px; padding: 20px 0;">
                     No files selected yet
                 </div>
+            </div>
+        </div>
+
+        <!-- Upload Progress Section -->
+        <div class="upload-progress-box" id="uploadProgressBox" style="display: none;">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; color: #435e39; font-weight: 500;">
+                <span id="uploadProgressText">Uploading...</span>
+                <span id="uploadProgressPercent">0%</span>
+            </div>
+            <div style="width: 100%; height: 6px; background: #e0e5d9; border-radius: 3px; overflow: hidden; margin-top: 8px;">
+                <div id="uploadProgressBar" style="width: 0%; height: 100%; background: #5c7b4a; transition: width 0.2s;"></div>
             </div>
         </div>
 
