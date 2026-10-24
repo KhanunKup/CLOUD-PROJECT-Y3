@@ -65,7 +65,7 @@
                         <i class="fas <%= index === 0 ? 'fa-hdd' : 'fa-folder-open' %>"></i> <%= crumb.name %>
                     </span>
                 <% } else { %>
-                    <a href="<%= crumb.url %>" class="crumb-link">
+                    <a href="<%= crumb.url %>" class="crumb-link" data-folder-id="<%= (crumb.url && crumb.url.includes('folder=')) ? decodeURIComponent(crumb.url.split('folder=')[1]) : '' %>">
                         <i class="fas <%= index === 0 ? 'fa-hdd' : 'fa-folder' %>"></i> <%= crumb.name %>
                     </a>
                     <span class="crumb-separator"><i class="fas fa-chevron-right"></i></span>
@@ -170,5 +170,6 @@
 <script src="/js/menu.js"></script>
 <script src="/js/info-drawer.js"></script>
 <script src="/js/storage-modal.js"></script>
+<script src="/js/drag-move.js"></script>
 </body>
 </html>

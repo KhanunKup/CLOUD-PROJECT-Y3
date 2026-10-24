@@ -2030,6 +2030,117 @@ app.patch('/api/files/:id/tags', authMiddleware, async (req, res) => {
   }
 });
 
+// 5.5.2 Move File or Folder (Drag and Drop)
+app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+  const { target_folder_id } = req.body;
+
+  // Normalize target folder: null, undefined, or 'root' means root directory
+  const targetFolderId = (!target_folder_id || target_folder_id === 'root') ? null : String(target_folder_id);
+
+  if (IS_MOCK_MODE) {
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
+    if (!file) return res.status(404).json({ error: 'File not found' });
+
+    // If target folder is specified, validate destination
+    if (targetFolderId) {
+      const targetFolder = mockFiles.find(f => f.file_id === targetFolderId && f.category === 'folder');
+      if (!targetFolder || targetFolder.status === 'trash') {
+        return res.status(404).json({ error: 'Destination folder not found' });
+      }
+
+      // Prevent cyclic folder moving
+      if (file.category === 'folder') {
+        if (targetFolderId === file.file_id) {
+          return res.status(400).json({ error: 'Cannot move folder into itself' });
+        }
+        const descendants = getFolderDescendantIds(file.file_id, mockFiles);
+        if (descendants.includes(targetFolderId)) {
+          return res.status(400).json({ error: 'Cannot move folder into its own subfolder' });
+        }
+      }
+    }
+
+    file.folder_id = targetFolderId;
+    file.updated_at = new Date().toISOString();
+    storage.saveMockFiles(mockFiles);
+
+    const destName = targetFolderId
+      ? (mockFiles.find(f => f.file_id === targetFolderId)?.filename || targetFolderId)
+      : 'My Drive (root)';
+
+    recordAuditLog({
+      user: req.user,
+      action: 'FILE_MOVE',
+      level: 'info',
+      details: `Moved "${file.filename}" to ${destName}`
+    });
+
+    return res.json({ success: true, file, target_folder_id: targetFolderId });
+  }
+
+  try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = getRes.Item;
+    if (!file || !canUserAccessFile(file, req.user)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    if (targetFolderId) {
+      const targetRes = await docClient.send(new GetCommand({
+        TableName: FILES_TABLE,
+        Key: { file_id: targetFolderId }
+      }));
+      const targetFolder = targetRes.Item;
+      if (!targetFolder || targetFolder.category !== 'folder' || targetFolder.status === 'trash') {
+        return res.status(404).json({ error: 'Destination folder not found' });
+      }
+
+      if (file.category === 'folder') {
+        if (targetFolderId === file.file_id) {
+          return res.status(400).json({ error: 'Cannot move folder into itself' });
+        }
+        const scanRes = await docClient.send(new ScanCommand({
+          TableName: FILES_TABLE,
+          FilterExpression: 'owner_id = :owner',
+          ExpressionAttributeValues: { ':owner': req.user.user_id }
+        }));
+        const descendants = getFolderDescendantIds(file.file_id, scanRes.Items || []);
+        if (descendants.includes(targetFolderId)) {
+          return res.status(400).json({ error: 'Cannot move folder into its own subfolder' });
+        }
+      }
+    }
+
+    const updateRes = await docClient.send(new UpdateCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId },
+      UpdateExpression: 'SET folder_id = :fid, updated_at = :up',
+      ExpressionAttributeValues: {
+        ':fid': targetFolderId,
+        ':up': new Date().toISOString()
+      },
+      ReturnValues: 'ALL_NEW'
+    }));
+
+    const destName = targetFolderId ? targetFolderId : 'My Drive (root)';
+    recordAuditLog({
+      user: req.user,
+      action: 'FILE_MOVE',
+      level: 'info',
+      details: `Moved "${file.filename}" to ${destName}`
+    });
+
+    res.json({ success: true, file: updateRes.Attributes, target_folder_id: targetFolderId });
+  } catch (err) {
+    console.error('Move file error:', err);
+    res.status(500).json({ error: 'Failed to move file' });
+  }
+});
+
 function permanentlyDeleteFileOrFolder({ fileId, user, files = mockFiles, userStorage = mockUserStorage, storageModule = storage }) {
   const index = files.findIndex(f => f.file_id === fileId && canUserAccessFile(f, user));
   if (index === -1) return { error: 'File not found', status: 404 };
