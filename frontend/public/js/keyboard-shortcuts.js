@@ -327,11 +327,12 @@
   function initKeyboardShortcuts() {
     document.addEventListener('keydown', onKeyDown, true);
 
-    // Click on row to set keyboard selection
-    document.addEventListener('click', (e) => {
-      const row = e.target.closest ? e.target.closest('.file-row:not(.empty-state)') : null;
-      if (row) {
-        setSelectedRow(row);
+    // Mouse interaction clears any active keyboard navigation selection
+    // so rows do NOT retain a persistent hover-like background when clicked with mouse
+    document.addEventListener('click', () => {
+      const current = getSelectedRow();
+      if (current) {
+        current.classList.remove('is-keyboard-selected');
       }
     });
 
