@@ -75,9 +75,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 newRow.dataset.folderId = currentFolderId || '';
                 newRow.dataset.category = 'folder';
                 newRow.dataset.tags = 'folder';
+                newRow.dataset.pinned = 'false';
                 newRow.dataset.date = new Date().toISOString();
                 newRow.innerHTML = `
                     <div class="file-name">
+                        <input type="checkbox" class="row-select-checkbox" data-id="${fileId}" aria-label="Select ${safeName}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                         </svg>
@@ -85,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="file-tags-wrapper">
                             <span class="file-tag-badge" title="Click to filter by tag: folder">folder</span>
                         </div>
+                        <button class="pin-toggle-btn" data-id="${fileId}" data-pinned="false" title="Pin to top" aria-label="Pin to top"><i class="fas fa-thumbtack"></i></button>
                     </div>
                     <div class="file-owner">
                         <div class="owner-avatar">
@@ -102,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </button>
                         <div class="options-dropdown folder-options">
                             <button class="option-item open-folder-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-folder-open"></i> Open</button>
+                            <button class="option-item toggle-pin-action" data-type="folder" data-id="${fileId}" data-pinned="false"><i class="fas fa-thumbtack"></i> <span class="pin-text">Pin to top</span></button>
                             <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                             <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                             <button class="option-item open-tags-modal" data-id="${fileId}" data-filename="${safeName}" data-type="folder" data-tags="folder"><i class="fas fa-tags"></i> Edit Tags</button>

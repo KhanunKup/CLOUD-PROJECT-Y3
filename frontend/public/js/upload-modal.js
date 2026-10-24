@@ -1439,6 +1439,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const menuContent = isFolder
                             ? `<div class="options-dropdown folder-options">
                                    <button class="option-item open-folder-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-folder-open"></i> Open</button>
+                                   <button class="option-item toggle-pin-action" data-type="folder" data-id="${fileId}" data-pinned="false"><i class="fas fa-thumbtack"></i> <span class="pin-text">Pin to top</span></button>
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
@@ -1448,6 +1449,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                </div>`
                             : `<div class="options-dropdown file-options">
                                    <button class="option-item open-preview-modal" data-id="${fileId}" data-filename="${safeName}" data-category="${fileCat}"><i class="fas fa-eye"></i> Preview</button>
+                                   <button class="option-item toggle-pin-action" data-id="${fileId}" data-pinned="false"><i class="fas fa-thumbtack"></i> <span class="pin-text">Pin to top</span></button>
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item open-tags-modal" data-id="${fileId}" data-filename="${safeName}" data-tags="${tagsJoined}"><i class="fas fa-tags"></i> Edit Tags</button>
@@ -1465,14 +1467,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         newRow.dataset.folderId = currentFolderId || '';
                         newRow.dataset.category = fileCat;
                         newRow.dataset.tags = tagsJoined;
+                        newRow.dataset.pinned = 'false';
                         newRow.dataset.date = (uploadedFileRecord && (uploadedFileRecord.created_at || uploadedFileRecord.createdAt)) || new Date().toISOString();
                         newRow.innerHTML = `
                             <div class="file-name">
+                                <input type="checkbox" class="row-select-checkbox" data-id="${fileId}" aria-label="Select ${safeName}">
                                 ${iconSvg}
                                 <span class="file-name-text">${safeName}</span>
                                 <div class="file-tags-wrapper">
                                     ${fileTags.map(t => `<span class="file-tag-badge" title="Click to filter by tag: ${t}">${t}</span>`).join('')}
                                 </div>
+                                <button class="pin-toggle-btn" data-id="${fileId}" data-pinned="false" title="Pin to top" aria-label="Pin to top"><i class="fas fa-thumbtack"></i></button>
                             </div>
                             <div class="file-owner">
                                 <div class="owner-avatar">

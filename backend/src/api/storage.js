@@ -171,6 +171,18 @@ function seedDefaultFiles() {
     {
       key: 'File1.txt',
       data: Buffer.from('ที่มาของคณะไอที ลาดกระบัง\n\nโครงการจัดตั้งคณะเทคโนโลยีสารสนเทศ ได้รับความเห็นชอบจากสภา สถาบันเทคโนโลยีพระจอมเกล้า เจ้าคุณทหารลาดกระบัง เมื่อวันที่ 12 กรกฎาคม 2537', 'utf-8')
+    },
+    {
+      key: 'folders/user-admin-01/file-adm-001/Admin_Security_Policy.pdf',
+      data: createMinimalPdfBuffer('Admin Security Policy: Cloud Infrastructure & Compliance Standards')
+    },
+    {
+      key: 'folders/user-admin-01/file-adm-002/System_Architecture.png',
+      data: createMinimalPngBuffer()
+    },
+    {
+      key: 'folders/user-admin-01/folder-adm-01/file-adm-003/Deployment_Config.yaml',
+      data: Buffer.from('env: production\nreplicas: 3\nregion: ap-southeast-1\nservices:\n  - api\n  - worker\n', 'utf-8')
     }
   ];
 
@@ -205,6 +217,20 @@ function loadMockFiles(defaultFiles = []) {
       const raw = fs.readFileSync(METADATA_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(defaultFiles) && defaultFiles.length > 0) {
+          const existingOwners = new Set(parsed.map(f => f.owner_id));
+          const existingIds = new Set(parsed.map(f => f.file_id));
+          let changed = false;
+          defaultFiles.forEach(item => {
+            if (!existingOwners.has(item.owner_id) && !existingIds.has(item.file_id)) {
+              parsed.push(item);
+              changed = true;
+            }
+          });
+          if (changed) {
+            saveMockFiles(parsed, true);
+          }
+        }
         return parsed;
       }
     }

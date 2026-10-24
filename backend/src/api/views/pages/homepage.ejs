@@ -97,7 +97,6 @@
                      data-date="<%= file.createdAt || file.uploadDate || '' %>">
                     <div class="file-name">
                         <input type="checkbox" class="row-select-checkbox" data-id="<%= file.id %>" aria-label="Select <%= file.name %>">
-                        <button class="pin-toggle-btn <%= file.isPinned ? 'is-pinned' : '' %>" data-id="<%= file.id %>" data-pinned="<%= file.isPinned ? 'true' : 'false' %>" title="<%= file.isPinned ? 'Unpin from top' : 'Pin to top' %>" aria-label="<%= file.isPinned ? 'Unpin from top' : 'Pin to top' %>"><i class="fas fa-thumbtack"></i></button>
                         <% if (file.type === 'folder') { %>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -117,6 +116,8 @@
                                 <span class="file-tag-badge" title="Click to filter by tag: <%= tag %>"><%= tag %></span>
                             <% }); %>
                         </div>
+
+                        <button class="pin-toggle-btn <%= file.isPinned ? 'is-pinned' : '' %>" data-id="<%= file.id %>" data-pinned="<%= file.isPinned ? 'true' : 'false' %>" title="<%= file.isPinned ? 'Unpin from top' : 'Pin to top' %>" aria-label="<%= file.isPinned ? 'Unpin from top' : 'Pin to top' %>"><i class="fas fa-thumbtack"></i></button>
 
                         <% if (file.isShared) { %>
                             <span class="shared-badge-inline open-share-modal"

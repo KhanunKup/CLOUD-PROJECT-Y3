@@ -324,8 +324,9 @@ function canUserAccessFile(file, user, requiredPermission = 'view', visited = ne
   if (!file || !user || visited.has(file.file_id)) return false;
   visited.add(file.file_id);
 
-  // 1. Resource owner always has full access
+  // 1. Resource owner or Admin role always has full access
   if (file.owner_id === user.user_id) return true;
+  if (user.role === 'admin') return true;
   if (user.user_id === 'user-normal-01' && file.owner_id === 'demo-user') return true;
 
   // 2. Direct collaborator check via access_list
