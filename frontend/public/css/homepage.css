@@ -1646,3 +1646,188 @@ body:has(#storageBreakdownModal:not([style*="display: none"])) .storage-popover,
     color: #ffd599 !important;
 }
 
+/* ─── Keyboard Navigation Row Selection ─── */
+.file-row.is-keyboard-selected {
+    outline: 2px solid #a06e3d !important;
+    outline-offset: -2px;
+    background-color: #eed9ba !important;
+    box-shadow: inset 4px 0 0 #846145, 0 2px 8px rgba(92, 65, 42, 0.12) !important;
+}
+
+/* ─── Keyboard Shortcuts Modal & Badges ─── */
+.shortcuts-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(30, 20, 12, 0.65);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000 !important;
+    padding: 16px;
+    animation: fadeIn 0.15s ease;
+}
+
+.shortcuts-modal-card {
+    width: 100%;
+    max-width: 580px;
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 18px 48px rgba(45, 30, 18, 0.32);
+    overflow: hidden;
+    border: 1px solid #ebd8c8;
+}
+
+.shortcuts-modal-header {
+    background: linear-gradient(135deg, #57402f, #483326);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #ffffff;
+}
+
+.shortcuts-title-box {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.shortcuts-icon-badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #f7ecde;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.shortcuts-modal-header .modal-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #ffffff;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+}
+
+.shortcuts-modal-header .modal-subtitle {
+    margin: 3px 0 0;
+    font-size: 13px;
+    color: #ebd8c8;
+    font-weight: 400;
+}
+
+.shortcuts-modal-header .btn-close-modal {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 26px;
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.shortcuts-modal-header .btn-close-modal:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+}
+
+.shortcuts-modal-body {
+    padding: 20px 24px;
+    background: #fdfaf6;
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
+.shortcuts-section-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #8c6a49;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.shortcuts-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: #ffffff;
+    border: 1px solid #ede1d3;
+    border-radius: 12px;
+    font-size: 14px;
+    color: #4a3728;
+    box-shadow: 0 1px 3px rgba(60, 42, 26, 0.04);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.shortcut-item:hover {
+    background-color: #faf5ee;
+    border-color: #dfcebc;
+}
+
+.shortcut-desc {
+    font-weight: 500;
+}
+
+.shortcut-keys {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.shortcut-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    padding: 4px 9px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #3f2e21;
+    background-color: #fcf9f5;
+    border: 1.5px solid #d9c7b4;
+    border-bottom: 3px solid #b89f88;
+    border-radius: 7px;
+    box-shadow: 0 1px 2px rgba(60, 40, 20, 0.08);
+}
+
+.shortcut-or {
+    font-size: 11.5px;
+    color: #9c836c;
+    font-style: italic;
+    margin: 0 2px;
+}
+
+.shortcuts-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    padding: 14px 24px;
+    background: #f7efe4;
+    border-top: 1px solid #ebd9c8;
+}
+

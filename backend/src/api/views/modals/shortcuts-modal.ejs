@@ -1,0 +1,67 @@
+<!-- backend/src/api/views/modals/shortcuts-modal.ejs -->
+<div class="modal-overlay shortcuts-modal-overlay" id="shortcutsModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="shortcutsModalTitle">
+    <div class="modal-card shortcuts-modal-card">
+        <div class="modal-header shortcuts-modal-header">
+            <div class="shortcuts-title-box">
+                <div class="shortcuts-icon-badge">
+                    <i class="fas fa-keyboard"></i>
+                </div>
+                <div>
+                    <h3 class="modal-title" id="shortcutsModalTitle">Keyboard Shortcuts</h3>
+                    <p class="modal-subtitle">Navigate and manage your drive with ease</p>
+                </div>
+            </div>
+            <button type="button" class="btn-close-modal" id="closeShortcutsModalBtn" aria-label="Close shortcuts modal">&times;</button>
+        </div>
+
+        <div class="modal-body shortcuts-modal-body">
+            <div class="shortcuts-section">
+                <h4 class="shortcuts-section-title"><i class="fas fa-compass"></i> Navigation</h4>
+                <div class="shortcuts-grid">
+                    <div class="shortcut-item">
+                        <span class="shortcut-desc">Select previous / next item</span>
+                        <div class="shortcut-keys"><kbd class="shortcut-kbd">↑</kbd> <kbd class="shortcut-kbd">↓</kbd></div>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-desc">Enter selected folder</span>
+                        <div class="shortcut-keys"><kbd class="shortcut-kbd">→</kbd> <span class="shortcut-or">or</span> <kbd class="shortcut-kbd">Enter</kbd></div>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-desc">Exit to parent folder</span>
+                        <div class="shortcut-keys"><kbd class="shortcut-kbd">←</kbd></div>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-desc">Focus search bar</span>
+                        <div class="shortcut-keys"><kbd class="shortcut-kbd">/</kbd></div>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-desc">Close modal, drawer, or menu</span>
+                        <div class="shortcut-keys"><kbd class="shortcut-kbd">Esc</kbd></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="shortcuts-section" style="margin-top: 20px;">
+                <h4 class="shortcuts-section-title"><i class="fas fa-bolt"></i> Actions</h4>
+                <div class="shortcuts-grid">
+                    <div class="shortcut-item">
+                        <span class="shortcut-desc">Quick preview file</span>
+                        <div class="shortcut-keys"><kbd class="shortcut-kbd">Space</kbd> <span class="shortcut-or">or</span> <kbd class="shortcut-kbd">P</kbd></div>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-desc">Move to trash</span>
+                        <div class="shortcut-keys"><kbd class="shortcut-kbd">Delete</kbd> <span class="shortcut-or">or</span> <kbd class="shortcut-kbd">Backspace</kbd></div>
+                    </div>
+                    <div class="shortcut-item">
+                        <span class="shortcut-desc">Show / hide cheatsheet</span>
+                        <div class="shortcut-keys"><kbd class="shortcut-kbd">?</kbd></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer shortcuts-modal-footer">
+            <button type="button" class="btn-storage-close" id="closeShortcutsModalBtn2">Got it</button>
+        </div>
+    </div>
+</div>
