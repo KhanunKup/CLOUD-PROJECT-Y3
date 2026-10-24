@@ -1,6 +1,8 @@
 // public/js/tags-modal.js
 document.addEventListener('DOMContentLoaded', () => {
     const tagsModal = document.getElementById('tagsModal');
+    const titleEl = document.getElementById('tagsModalTitle');
+    const labelEl = document.getElementById('tagsFileLabel');
     const filenameEl = document.getElementById('tagsModalFilename');
     const chipsContainer = document.getElementById('tagsChipsContainer');
     const newTagInput = document.getElementById('tagsNewTagInput');
@@ -74,35 +76,64 @@ document.addEventListener('DOMContentLoaded', () => {
         if (newTagInput) newTagInput.value = '';
     }
 
-    // เปิด Tags Modal เมื่อกดปุ่ม Edit Tags จาก dropdown
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest('.open-tags-modal');
-        if (btn) {
-            e.stopPropagation();
+    // Helper to open Tags Modal for any target (file or folder)
+    function openTagsModalForTarget(data = {}) {
+        if (!data || !data.id) return;
 
-            // ปิด dropdown ทั้งหมด
-            document.querySelectorAll('.options-dropdown').forEach(d => d.classList.remove('show'));
+        // Close any open dropdowns
+        document.querySelectorAll('.options-dropdown').forEach(d => d.classList.remove('show'));
 
-            currentTriggerBtn = btn;
-            currentTargetRow = btn.closest('.file-row');
-            currentFileId = btn.dataset.id;
-            const filename = btn.dataset.filename || (currentTargetRow ? currentTargetRow.dataset.name : 'File');
+        currentFileId = data.id;
+        currentTriggerBtn = data.triggerBtn || document.querySelector(`.open-tags-modal[data-id="${data.id}"]`);
+        currentTargetRow = data.targetRow || (currentTriggerBtn ? currentTriggerBtn.closest('.file-row') : document.querySelector(`.file-row[data-id="${data.id}"]`));
 
-            // อ่าน tags ที่มีอยู่
-            const rawTags = btn.dataset.tags || (currentTargetRow ? currentTargetRow.dataset.tags : '');
+        const isFolder = data.type === 'folder' ||
+                         (currentTriggerBtn && currentTriggerBtn.dataset.type === 'folder') ||
+                         (currentTargetRow && currentTargetRow.classList.contains('folder-row'));
+
+        const filename = data.name || (currentTriggerBtn ? currentTriggerBtn.dataset.filename : '') || (currentTargetRow ? currentTargetRow.dataset.name : 'Item');
+
+        if (titleEl) titleEl.textContent = isFolder ? 'Edit Folder Tags' : 'Edit File Tags';
+        if (labelEl) labelEl.textContent = isFolder ? 'Folder:' : 'File:';
+        if (filenameEl) filenameEl.textContent = filename;
+
+        // Read existing tags
+        if (Array.isArray(data.tags)) {
+            currentTags = [...data.tags].map(t => String(t).trim().toLowerCase()).filter(Boolean);
+        } else {
+            const rawTags = (typeof data.tags === 'string' ? data.tags : '') ||
+                            (currentTriggerBtn ? currentTriggerBtn.dataset.tags : '') ||
+                            (currentTargetRow ? currentTargetRow.dataset.tags : '');
             currentTags = rawTags
                 ? rawTags.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0)
                 : [];
+        }
 
-            if (filenameEl) filenameEl.textContent = filename;
-            renderChips();
+        renderChips();
 
-            if (tagsModal) {
-                tagsModal.style.display = 'flex';
-                setTimeout(() => {
-                    if (newTagInput) newTagInput.focus();
-                }, 50);
-            }
+        if (tagsModal) {
+            tagsModal.style.display = 'flex';
+            setTimeout(() => {
+                if (newTagInput) newTagInput.focus();
+            }, 50);
+        }
+    }
+
+    window.openTagsModalForTarget = openTagsModalForTarget;
+
+    // เปิด Tags Modal เมื่อกดปุ่ม Edit Tags จาก dropdown
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest ? e.target.closest('.open-tags-modal') : null;
+        if (btn) {
+            e.stopPropagation();
+            openTagsModalForTarget({
+                id: btn.dataset.id,
+                name: btn.dataset.filename,
+                type: btn.dataset.type,
+                tags: btn.dataset.tags,
+                triggerBtn: btn,
+                targetRow: btn.closest ? btn.closest('.file-row') : null
+            });
         }
     });
 
@@ -184,10 +215,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     targetRow.dataset.tags = updatedTags.join(',');
 
                     // 2. อัปเดต Tag Badges ข้างชื่อไฟล์
-                    let tagsWrapper = targetRow.querySelector('.file-tags-wrapper');
-                    if (!tagsWrapper) {
+                    let tagsWrapper = targetRow.querySelector ? targetRow.querySelector('.file-tags-wrapper') : null;
+                    if (!tagsWrapper && targetRow.querySelector) {
                         const nameEl = targetRow.querySelector('.file-name');
-                        if (nameEl) {
+                        if (nameEl && nameEl.appendChild) {
                             tagsWrapper = document.createElement('div');
                             tagsWrapper.className = 'file-tags-wrapper';
                             nameEl.appendChild(tagsWrapper);
@@ -199,11 +230,28 @@ document.addEventListener('DOMContentLoaded', () => {
                             `<span class="file-tag-badge" title="Click to filter by tag: ${escapeHtml(tag)}">${escapeHtml(tag)}</span>`
                         ).join('');
                     }
+
+                    // 3. อัปเดต data-tags บนทุกปุ่มในแถว
+                    if (typeof targetRow.querySelectorAll === 'function') {
+                        targetRow.querySelectorAll('.open-tags-modal, .open-info-drawer').forEach(b => {
+                            if (b && b.dataset) b.dataset.tags = updatedTags.join(',');
+                        });
+                    }
                 }
 
-                // 3. อัปเดต data-tags บนปุ่มเปิด modal ใน dropdown
-                if (triggerBtn) {
+                // 4. อัปเดต data-tags บนปุ่มเปิด modal ใน dropdown
+                if (triggerBtn && triggerBtn.dataset) {
                     triggerBtn.dataset.tags = updatedTags.join(',');
+                }
+
+                // 5. อัปเดต Tags ใน Information Drawer ทันทีหากกำลังเปิดอยู่
+                if (typeof window.updateInfoDrawerTags === 'function') {
+                    window.updateInfoDrawerTags(fileId, updatedTags);
+                }
+
+                // 6. อัปเดตผลลัพธ์การค้นหาทันที
+                if (typeof window.applyDriveFilters === 'function') {
+                    window.applyDriveFilters();
                 }
 
                 if (window.showToast) {
