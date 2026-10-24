@@ -75,7 +75,7 @@
 
         <div class="file-table-container">
             <div class="file-table-header">
-                <span class="sortable-col" data-sort="name">Name <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+                <span class="file-header-name-col"><input type="checkbox" id="selectAllCheckbox" class="row-select-checkbox master-select-checkbox" aria-label="Select all visible files"><span class="sortable-col" data-sort="name">Name <span class="sort-icon"><i class="fas fa-sort"></i></span></span></span>
                 <span class="sortable-col" data-sort="owner">Owner <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
                 <span class="sortable-col sort-active" data-sort="date">Date Uploaded <span class="sort-icon"><i class="fas fa-arrow-down"></i></span></span>
                 <span></span>
@@ -95,6 +95,7 @@
                      data-tags="<%= (file.tags || []).join(',') %>"
                      data-date="<%= file.createdAt || file.uploadDate || '' %>">
                     <div class="file-name">
+                        <input type="checkbox" class="row-select-checkbox" data-id="<%= file.id %>" aria-label="Select <%= file.name %>">
                         <% if (file.type === 'folder') { %>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -166,6 +167,7 @@
 <%- include('../modals/info-drawer') %>
 <%- include('../modals/storage-modal') %>
 <%- include('../modals/shortcuts-modal') %>
+<%- include('../partials/floating-batch-bar') %>
 
 <script src="/js/toast.js"></script>
 <script src="/js/menu.js"></script>
@@ -173,5 +175,6 @@
 <script src="/js/storage-modal.js"></script>
 <script src="/js/drag-move.js"></script>
 <script src="/js/keyboard-shortcuts.js"></script>
+<script src="/js/batch-actions.js"></script>
 </body>
 </html>

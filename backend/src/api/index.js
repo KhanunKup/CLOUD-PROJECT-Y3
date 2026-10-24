@@ -2019,6 +2019,170 @@ app.get('/api/folders/:id/download-zip', authMiddleware, async (req, res) => {
   }
 });
 
+// 5.3.10 Batch Download Selected Files as ZIP Archive
+app.post('/api/files/batch-download-zip', authMiddleware, async (req, res) => {
+  const { file_ids } = req.body || {};
+  if (!Array.isArray(file_ids) || file_ids.length === 0) {
+    return res.status(400).json({ error: 'file_ids array is required' });
+  }
+
+  if (IS_MOCK_MODE) {
+    mockFiles = storage.loadMockFiles();
+    const targetFiles = mockFiles.filter(f => file_ids.includes(f.file_id) && canUserAccessFile(f, req.user) && f.status !== 'trash');
+    if (targetFiles.length === 0) {
+      return res.status(404).json({ error: 'No accessible files found to package' });
+    }
+
+    const entries = [];
+    const childrenMap = new Map();
+    for (const f of mockFiles) {
+      if (!f.folder_id) continue;
+      let list = childrenMap.get(f.folder_id);
+      if (!list) {
+        list = [];
+        childrenMap.set(f.folder_id, list);
+      }
+      list.push(f);
+    }
+
+    for (const target of targetFiles) {
+      if (target.category === 'folder') {
+        // Collect folder hierarchy
+        entries.push({
+          path: target.filename,
+          isFolder: true,
+          date: target.created_at || target.uploadDate
+        });
+
+        const folderPathMap = new Map();
+        folderPathMap.set(target.file_id, target.filename);
+
+        const queue = [target.file_id];
+        let head = 0;
+        while (head < queue.length) {
+          const parentId = queue[head++];
+          const parentPath = folderPathMap.get(parentId);
+          const children = childrenMap.get(parentId) || [];
+
+          for (const child of children) {
+            if (child.status === 'trash') continue;
+            if (!canUserAccessFile(child, req.user)) continue;
+
+            const relPath = `${parentPath}/${child.filename}`;
+            if (child.category === 'folder') {
+              folderPathMap.set(child.file_id, relPath);
+              queue.push(child.file_id);
+              entries.push({
+                path: relPath,
+                isFolder: true,
+                date: child.created_at || child.uploadDate
+              });
+            } else {
+              let content = Buffer.alloc(0);
+              const storedPath = storage.findStoredFile ? storage.findStoredFile(child) : null;
+              if (storedPath && fs.existsSync(storedPath)) {
+                try { content = fs.readFileSync(storedPath); } catch (_) {}
+              } else if (child.content) {
+                content = Buffer.isBuffer(child.content) ? child.content : Buffer.from(child.content);
+              } else {
+                content = Buffer.from(`Sample content for ${child.filename}`);
+              }
+
+              entries.push({
+                path: relPath,
+                content,
+                isFolder: false,
+                date: child.created_at || child.uploadDate
+              });
+            }
+          }
+        }
+      } else {
+        // Single file at root of ZIP
+        let content = Buffer.alloc(0);
+        const storedPath = storage.findStoredFile ? storage.findStoredFile(target) : null;
+        if (storedPath && fs.existsSync(storedPath)) {
+          try { content = fs.readFileSync(storedPath); } catch (_) {}
+        } else if (target.content) {
+          content = Buffer.isBuffer(target.content) ? target.content : Buffer.from(target.content);
+        } else {
+          content = Buffer.from(`Sample content for ${target.filename}`);
+        }
+
+        entries.push({
+          path: target.filename,
+          content,
+          isFolder: false,
+          date: target.created_at || target.uploadDate
+        });
+      }
+    }
+
+    const zipBuffer = createZipArchive(entries);
+
+    recordAuditLog({
+      user: req.user,
+      action: 'BATCH_DOWNLOAD_ZIP',
+      level: 'info',
+      details: `Batch downloaded ${targetFiles.length} item(s) as ZIP (${entries.length} archive entries)`
+    });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="EasyDrive_Batch_Download.zip"');
+    return res.send(zipBuffer);
+  }
+
+  // DynamoDB / S3 mode
+  try {
+    const entries = [];
+    for (const fileId of file_ids) {
+      const result = await docClient.send(new GetCommand({
+        TableName: FILES_TABLE,
+        Key: { file_id: fileId }
+      }));
+      const file = result.Item;
+      if (!file || file.owner_id !== req.user.user_id || file.status === 'trash') continue;
+
+      let content = Buffer.alloc(0);
+      if (file.s3_key) {
+        const getCommand = new GetObjectCommand({
+          Bucket: STORAGE_BUCKET,
+          Key: file.s3_key
+        });
+        const s3Res = await s3Client.send(getCommand);
+        const chunks = [];
+        for await (const chunk of s3Res.Body) {
+          chunks.push(chunk);
+        }
+        content = Buffer.concat(chunks);
+      }
+
+      entries.push({
+        path: file.filename,
+        content,
+        isFolder: file.category === 'folder',
+        date: file.created_at
+      });
+    }
+
+    const zipBuffer = createZipArchive(entries);
+
+    recordAuditLog({
+      user: req.user,
+      action: 'BATCH_DOWNLOAD_ZIP',
+      level: 'info',
+      details: `Batch downloaded ${entries.length} items as ZIP`
+    });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="EasyDrive_Batch_Download.zip"');
+    res.send(zipBuffer);
+  } catch (err) {
+    console.error('Batch download zip error:', err);
+    res.status(500).json({ error: 'Failed to package batch download ZIP' });
+  }
+});
+
 // 5.4 Request Download URL (Owner Download)
 app.get('/api/files/:id/download-url', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
@@ -2524,6 +2688,258 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Delete file error:', err);
     res.status(500).json({ error: 'Failed to delete file' });
+  }
+});
+
+// 5.6.1 Batch Move to Trash
+app.post('/api/files/batch-trash', authMiddleware, async (req, res) => {
+  const { file_ids } = req.body || {};
+  if (!Array.isArray(file_ids) || file_ids.length === 0) {
+    return res.status(400).json({ error: 'file_ids array is required' });
+  }
+
+  const targetIdSet = new Set(file_ids);
+  let affectedCount = 0;
+
+  if (IS_MOCK_MODE) {
+    mockFiles = storage.loadMockFiles();
+    const trashedAt = new Date().toISOString();
+    const allDescendantIds = new Set();
+
+    mockFiles.forEach(f => {
+      if (targetIdSet.has(f.file_id) && canUserAccessFile(f, req.user)) {
+        f.status = 'trash';
+        f.trashed_at = trashedAt;
+        affectedCount++;
+
+        if (f.category === 'folder') {
+          const descendantIds = getFolderDescendantIds(f.file_id);
+          descendantIds.forEach(id => allDescendantIds.add(id));
+        }
+      }
+    });
+
+    if (allDescendantIds.size > 0) {
+      mockFiles.forEach(f => {
+        if (allDescendantIds.has(f.file_id)) {
+          f.status = 'trash';
+          f.trashed_at = trashedAt;
+        }
+      });
+    }
+
+    storage.saveMockFiles(mockFiles, true);
+
+    recordAuditLog({
+      user: req.user,
+      action: 'BATCH_MOVE_TRASH',
+      level: 'warning',
+      details: `Moved ${affectedCount} item(s) to trash${allDescendantIds.size > 0 ? ` and ${allDescendantIds.size} nested item(s)` : ''}`
+    });
+
+    return res.json({
+      success: true,
+      message: `Moved ${affectedCount} item(s) to trash`,
+      count: affectedCount
+    });
+  }
+
+  // DynamoDB Mode
+  try {
+    const trashedAt = new Date().toISOString();
+    for (const fileId of file_ids) {
+      await docClient.send(new UpdateCommand({
+        TableName: FILES_TABLE,
+        Key: { file_id: fileId },
+        ConditionExpression: 'owner_id = :owner',
+        UpdateExpression: 'SET #st = :trash, trashed_at = :t',
+        ExpressionAttributeNames: { '#st': 'status' },
+        ExpressionAttributeValues: {
+          ':trash': 'trash',
+          ':t': trashedAt,
+          ':owner': req.user.user_id
+        }
+      })).catch(e => console.warn(`Skipping batch trash for file ${fileId}:`, e.message));
+      affectedCount++;
+    }
+
+    recordAuditLog({
+      user: req.user,
+      action: 'BATCH_MOVE_TRASH',
+      level: 'warning',
+      details: `Moved ${affectedCount} item(s) to trash`
+    });
+
+    res.json({
+      success: true,
+      message: `Moved ${affectedCount} item(s) to trash`,
+      count: affectedCount
+    });
+  } catch (err) {
+    console.error('Batch trash error:', err);
+    res.status(500).json({ error: 'Failed to process batch trash' });
+  }
+});
+
+// 5.7.1 Batch Restore from Trash
+app.post('/api/files/batch-restore', authMiddleware, async (req, res) => {
+  const { file_ids } = req.body || {};
+  if (!Array.isArray(file_ids) || file_ids.length === 0) {
+    return res.status(400).json({ error: 'file_ids array is required' });
+  }
+
+  const targetIdSet = new Set(file_ids);
+  let affectedCount = 0;
+
+  if (IS_MOCK_MODE) {
+    mockFiles = storage.loadMockFiles();
+    const allDescendantIds = new Set();
+
+    mockFiles.forEach(f => {
+      if (targetIdSet.has(f.file_id) && canUserAccessFile(f, req.user)) {
+        f.status = 'active';
+        delete f.trashed_at;
+        affectedCount++;
+
+        if (f.category === 'folder') {
+          const descendantIds = getFolderDescendantIds(f.file_id);
+          descendantIds.forEach(id => allDescendantIds.add(id));
+        }
+      }
+    });
+
+    if (allDescendantIds.size > 0) {
+      mockFiles.forEach(f => {
+        if (allDescendantIds.has(f.file_id)) {
+          f.status = 'active';
+          delete f.trashed_at;
+        }
+      });
+    }
+
+    storage.saveMockFiles(mockFiles, true);
+
+    recordAuditLog({
+      user: req.user,
+      action: 'BATCH_RESTORE',
+      level: 'info',
+      details: `Restored ${affectedCount} item(s) from trash${allDescendantIds.size > 0 ? ` and ${allDescendantIds.size} nested item(s)` : ''}`
+    });
+
+    return res.json({
+      success: true,
+      message: `Restored ${affectedCount} item(s) successfully`,
+      count: affectedCount
+    });
+  }
+
+  // DynamoDB Mode
+  try {
+    for (const fileId of file_ids) {
+      await docClient.send(new UpdateCommand({
+        TableName: FILES_TABLE,
+        Key: { file_id: fileId },
+        ConditionExpression: 'owner_id = :owner',
+        UpdateExpression: 'SET #st = :active REMOVE trashed_at',
+        ExpressionAttributeNames: { '#st': 'status' },
+        ExpressionAttributeValues: {
+          ':active': 'active',
+          ':owner': req.user.user_id
+        }
+      })).catch(e => console.warn(`Skipping batch restore for ${fileId}:`, e.message));
+      affectedCount++;
+    }
+
+    recordAuditLog({
+      user: req.user,
+      action: 'BATCH_RESTORE',
+      level: 'info',
+      details: `Restored ${affectedCount} file(s) from trash`
+    });
+
+    res.json({
+      success: true,
+      message: `Restored ${affectedCount} item(s) successfully`,
+      count: affectedCount
+    });
+  } catch (err) {
+    console.error('Batch restore error:', err);
+    res.status(500).json({ error: 'Failed to restore batch files' });
+  }
+});
+
+// 5.7.2 Batch Delete Forever (Permanent Deletion)
+app.post('/api/files/batch-delete-forever', authMiddleware, async (req, res) => {
+  const { file_ids } = req.body || {};
+  if (!Array.isArray(file_ids) || file_ids.length === 0) {
+    return res.status(400).json({ error: 'file_ids array is required' });
+  }
+
+  let totalDeleted = 0;
+  let totalFreed = 0;
+
+  if (IS_MOCK_MODE) {
+    mockFiles = storage.loadMockFiles();
+
+    for (const fileId of file_ids) {
+      const delResult = permanentlyDeleteFileOrFolder({
+        fileId,
+        user: req.user,
+        files: mockFiles,
+        userStorage: mockUserStorage,
+        storageModule: storage
+      });
+
+      if (delResult && !delResult.error) {
+        mockFiles = delResult.remainingFiles;
+        totalDeleted += delResult.deletedItemsCount || 1;
+        totalFreed += delResult.totalSizeFreed || 0;
+      }
+    }
+
+    storage.saveMockFiles(mockFiles, true);
+
+    recordAuditLog({
+      user: req.user,
+      action: 'BATCH_PERMANENT_DELETE',
+      level: 'critical',
+      details: `Permanently deleted ${totalDeleted} item(s) (${formatBytes(totalFreed)})`
+    });
+
+    return res.json({
+      success: true,
+      message: `Permanently deleted ${totalDeleted} item(s)`,
+      deletedCount: totalDeleted,
+      totalSizeFreed: totalFreed
+    });
+  }
+
+  // DynamoDB / S3 Mode
+  try {
+    for (const fileId of file_ids) {
+      const getRes = await docClient.send(new GetCommand({ TableName: FILES_TABLE, Key: { file_id: fileId } }));
+      if (getRes.Item && getRes.Item.s3_key) {
+        await s3Client.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: getRes.Item.s3_key })).catch(() => {});
+      }
+      await docClient.send(new DeleteCommand({ TableName: FILES_TABLE, Key: { file_id: fileId } })).catch(() => {});
+      totalDeleted++;
+    }
+
+    recordAuditLog({
+      user: req.user,
+      action: 'BATCH_PERMANENT_DELETE',
+      level: 'critical',
+      details: `Permanently deleted ${totalDeleted} item(s)`
+    });
+
+    res.json({
+      success: true,
+      message: `Permanently deleted ${totalDeleted} item(s)`,
+      deletedCount: totalDeleted
+    });
+  } catch (err) {
+    console.error('Batch permanent delete error:', err);
+    res.status(500).json({ error: 'Failed to permanently delete batch items' });
   }
 });
 

@@ -267,28 +267,35 @@ body {
     background-color: #6e2424;
 }
 
-/* Restore button (สำหรับ Trash) */
+/* Restore button (สำหรับ Trash) - High contrast Soft Forest Green */
 .btn-restore {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    padding: 5px 10px;
-    background-color: rgba(232, 226, 214, 0.2);
-    color: #F6FAF2;
-    border: 1.5px solid #E8E2D6;
+    gap: 6px;
+    padding: 6px 12px;
+    background-color: #eaf5ea;
+    color: #1e7025;
+    border: 1.5px solid #a3d9a5;
     border-radius: 6px;
     font-family: 'Outfit', 'Kanit', sans-serif;
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: all 0.18s ease;
     text-decoration: none;
     white-space: nowrap;
 }
 
 .btn-restore:hover {
-    background-color: rgba(232, 226, 214, 0.35);
+    background-color: #d4ebd4;
+    border-color: #81c784;
+    color: #134e18;
+    box-shadow: 0 2px 6px rgba(30, 112, 37, 0.15);
+}
+
+.btn-restore svg {
+    stroke: currentColor;
 }
 
 /* ── File Table — Figma: Rect52 #4E3E2E ──────────────────── */
@@ -1831,3 +1838,157 @@ body:has(#storageBreakdownModal:not([style*="display: none"])) .storage-popover,
     border-top: 1px solid #ebd9c8;
 }
 
+
+/* ---------------------------------------------------
+   Multi-Select & Floating Batch Action Bar
+   --------------------------------------------------- */
+.file-header-name-col {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.row-select-checkbox {
+    width: 17px;
+    height: 17px;
+    accent-color: #846145;
+    cursor: pointer;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.file-row .row-select-checkbox {
+    margin-right: 4px;
+}
+
+.file-row.is-selected {
+    background-color: #eed9ba !important;
+    box-shadow: inset 4px 0 0 #846145, 0 2px 8px rgba(92, 65, 42, 0.1) !important;
+}
+
+.floating-batch-bar {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.24s ease;
+    background: rgba(58, 44, 33, 0.94);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 245, 235, 0.22);
+    border-radius: 40px;
+    padding: 8px 14px 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    color: #ffffff;
+    box-shadow: 0 16px 40px rgba(35, 22, 12, 0.4), 0 2px 6px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+}
+
+.floating-batch-bar.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.batch-bar-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.batch-bar-badge {
+    background: #d4a373;
+    color: #2e1d11;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 2px 9px;
+    border-radius: 12px;
+    min-width: 22px;
+    text-align: center;
+}
+
+.batch-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.batch-bar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.18s ease;
+}
+
+.batch-btn-zip {
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.batch-btn-zip:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.batch-btn-trash {
+    background: #e63946;
+    color: #ffffff;
+}
+
+.batch-btn-trash:hover {
+    background: #d62828;
+    box-shadow: 0 4px 12px rgba(230, 57, 70, 0.35);
+    transform: translateY(-1px);
+}
+
+.batch-btn-close {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.75);
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    justify-content: center;
+}
+
+.batch-btn-close:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.18);
+}
+
+
+.batch-btn-restore {
+    background: #2e7d32;
+    color: #ffffff;
+}
+
+.batch-btn-restore:hover {
+    background: #1b5e20;
+    box-shadow: 0 4px 12px rgba(46, 125, 50, 0.35);
+    transform: translateY(-1px);
+}
+
+.batch-btn-delete-forever {
+    background: #c1121f;
+    color: #ffffff;
+}
+
+.batch-btn-delete-forever:hover {
+    background: #780000;
+    box-shadow: 0 4px 12px rgba(193, 18, 31, 0.35);
+    transform: translateY(-1px);
+}
