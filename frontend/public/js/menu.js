@@ -325,13 +325,34 @@ document.addEventListener('DOMContentLoaded', () => {
             e.stopPropagation();
             const textSpan = downloadActionEl.querySelector('.download-text') || downloadActionEl;
             const originalText = textSpan.textContent;
-            textSpan.textContent = 'Downloading...';
-
             const targetId = downloadActionEl.dataset.id;
             const filename = downloadActionEl.dataset.filename || 'downloaded-file';
+            const isFolder = downloadActionEl.dataset.type === 'folder' ||
+                             Boolean(downloadActionEl.closest('.folder-options')) ||
+                             Boolean(downloadActionEl.closest('.folder-row'));
 
             (async () => {
                 try {
+                    if (isFolder) {
+                        textSpan.textContent = 'Preparing ZIP...';
+                        if (window.showToast) {
+                            window.showToast(`Preparing folder ZIP download for "${filename}"...`, 'info');
+                        }
+
+                        if (targetId) {
+                            const a = document.createElement('a');
+                            a.href = `/api/folders/${encodeURIComponent(targetId)}/download-zip`;
+                            a.download = `${filename}.zip`;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                        }
+                        textSpan.textContent = 'Downloaded!';
+                        setTimeout(() => { textSpan.textContent = originalText; }, 1500);
+                        return;
+                    }
+
+                    textSpan.textContent = 'Downloading...';
                     if (targetId) {
                         const res = await fetch(`/api/files/${targetId}/download-url`);
                         const data = await res.json();

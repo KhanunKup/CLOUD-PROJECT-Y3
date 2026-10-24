@@ -22,6 +22,7 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 const storage = require('./storage');
+const { createZipArchive } = require('./zip-packager');
 
 const app = express();
 app.use(cors());
@@ -1814,6 +1815,207 @@ app.post('/api/files/batch-upload-urls', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Batch presigned URL error:', err);
     res.status(500).json({ error: 'Failed to generate batch upload URLs' });
+  }
+});
+
+// 5.3.9 Download Entire Folder as ZIP Archive
+app.get('/api/folders/:id/download-zip', authMiddleware, async (req, res) => {
+  const folderId = req.params.id;
+
+  if (IS_MOCK_MODE) {
+    mockFiles = storage.loadMockFiles();
+    const folder = mockFiles.find(f => f.file_id === folderId);
+    if (!folder || !canUserAccessFile(folder, req.user) || folder.status === 'trash') {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+    if (folder.category !== 'folder') {
+      return res.status(400).json({ error: 'Requested item is not a folder' });
+    }
+
+    // Build hierarchical entries
+    const entries = [];
+    entries.push({
+      path: folder.filename,
+      isFolder: true,
+      date: folder.created_at || folder.uploadDate
+    });
+
+    const folderPathMap = new Map();
+    folderPathMap.set(folder.file_id, folder.filename);
+
+    const childrenMap = new Map();
+    for (const f of mockFiles) {
+      if (!f.folder_id) continue;
+      let list = childrenMap.get(f.folder_id);
+      if (!list) {
+        list = [];
+        childrenMap.set(f.folder_id, list);
+      }
+      list.push(f);
+    }
+
+    const queue = [folder.file_id];
+    let head = 0;
+    while (head < queue.length) {
+      const parentId = queue[head++];
+      const parentPath = folderPathMap.get(parentId);
+      const children = childrenMap.get(parentId) || [];
+
+      for (const child of children) {
+        if (child.status === 'trash') continue;
+        if (!canUserAccessFile(child, req.user)) continue;
+
+        const relPath = `${parentPath}/${child.filename}`;
+        if (child.category === 'folder') {
+          folderPathMap.set(child.file_id, relPath);
+          queue.push(child.file_id);
+          entries.push({
+            path: relPath,
+            isFolder: true,
+            date: child.created_at || child.uploadDate
+          });
+        } else {
+          let content = Buffer.alloc(0);
+          const storedPath = storage.findStoredFile ? storage.findStoredFile(child) : null;
+          if (storedPath && fs.existsSync(storedPath)) {
+            try {
+              content = fs.readFileSync(storedPath);
+            } catch (_) {}
+          } else if (child.content) {
+            content = Buffer.isBuffer(child.content) ? child.content : Buffer.from(child.content);
+          } else {
+            content = Buffer.from(`Sample content for ${child.filename}`);
+          }
+
+          entries.push({
+            path: relPath,
+            content,
+            isFolder: false,
+            date: child.created_at || child.uploadDate
+          });
+        }
+      }
+    }
+
+    const zipBuffer = createZipArchive(entries);
+
+    recordAuditLog({
+      user: req.user,
+      action: 'FOLDER_DOWNLOAD_ZIP',
+      level: 'info',
+      details: `Downloaded folder "${folder.filename}" as ZIP (${entries.length} items)`
+    });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(folder.filename)}.zip"`);
+    return res.send(zipBuffer);
+  }
+
+  // DynamoDB & S3 production mode
+  try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: folderId }
+    }));
+    const folder = getRes.Item;
+    if (!folder || !canUserAccessFile(folder, req.user) || folder.status === 'trash') {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+    if (folder.category !== 'folder') {
+      return res.status(400).json({ error: 'Requested item is not a folder' });
+    }
+
+    const scanRes = await docClient.send(new ScanCommand({
+      TableName: FILES_TABLE,
+      FilterExpression: 'owner_id = :owner AND (attribute_not_exists(#st) OR #st <> :trash)',
+      ExpressionAttributeNames: { '#st': 'status' },
+      ExpressionAttributeValues: {
+        ':owner': req.user.user_id,
+        ':trash': 'trash'
+      }
+    }));
+    const allFiles = scanRes.Items || [];
+
+    const entries = [];
+    entries.push({
+      path: folder.filename,
+      isFolder: true,
+      date: folder.created_at || folder.uploadDate
+    });
+
+    const folderPathMap = new Map();
+    folderPathMap.set(folder.file_id, folder.filename);
+
+    const childrenMap = new Map();
+    for (const f of allFiles) {
+      if (!f.folder_id) continue;
+      let list = childrenMap.get(f.folder_id);
+      if (!list) {
+        list = [];
+        childrenMap.set(f.folder_id, list);
+      }
+      list.push(f);
+    }
+
+    const queue = [folder.file_id];
+    let head = 0;
+    while (head < queue.length) {
+      const parentId = queue[head++];
+      const parentPath = folderPathMap.get(parentId);
+      const children = childrenMap.get(parentId) || [];
+
+      for (const child of children) {
+        const relPath = `${parentPath}/${child.filename}`;
+        if (child.category === 'folder') {
+          folderPathMap.set(child.file_id, relPath);
+          queue.push(child.file_id);
+          entries.push({
+            path: relPath,
+            isFolder: true,
+            date: child.created_at || child.uploadDate
+          });
+        } else {
+          let content = Buffer.alloc(0);
+          if (child.s3_key) {
+            try {
+              const s3Res = await s3Client.send(new GetObjectCommand({
+                Bucket: STORAGE_BUCKET,
+                Key: child.s3_key
+              }));
+              const chunks = [];
+              for await (const chunk of s3Res.Body) {
+                chunks.push(chunk);
+              }
+              content = Buffer.concat(chunks);
+            } catch (s3Err) {
+              console.warn(`Could not read S3 key ${child.s3_key}:`, s3Err.message);
+            }
+          }
+          entries.push({
+            path: relPath,
+            content,
+            isFolder: false,
+            date: child.created_at || child.uploadDate
+          });
+        }
+      }
+    }
+
+    const zipBuffer = createZipArchive(entries);
+
+    recordAuditLog({
+      user: req.user,
+      action: 'FOLDER_DOWNLOAD_ZIP',
+      level: 'info',
+      details: `Downloaded folder "${folder.filename}" as ZIP (${entries.length} items)`
+    });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(folder.filename)}.zip"`);
+    res.send(zipBuffer);
+  } catch (err) {
+    console.error('Download folder zip error:', err);
+    res.status(500).json({ error: 'Failed to package folder zip' });
   }
 });
 
