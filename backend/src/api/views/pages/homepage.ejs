@@ -75,9 +75,9 @@
 
         <div class="file-table-container">
             <div class="file-table-header">
-                <span>Name</span>
-                <span>Owner</span>
-                <span>Date Uploaded</span>
+                <span class="sortable-col" data-sort="name">Name <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+                <span class="sortable-col" data-sort="owner">Owner <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+                <span class="sortable-col sort-active" data-sort="date">Date Uploaded <span class="sort-icon"><i class="fas fa-arrow-down"></i></span></span>
                 <span></span>
             </div>
 
@@ -92,7 +92,8 @@
                      data-owner="<%= file.owner || 'Admin Rick' %>"
                      data-folder-id="<%= file.folderId || '' %>"
                      data-category="<%= file.category || 'other' %>"
-                     data-tags="<%= (file.tags || []).join(',') %>">
+                     data-tags="<%= (file.tags || []).join(',') %>"
+                     data-date="<%= file.createdAt || file.uploadDate || '' %>">
                     <div class="file-name">
                         <% if (file.type === 'folder') { %>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"

@@ -41,7 +41,96 @@ function handleTagClick(targetEl, searchInput) {
 if (typeof window !== 'undefined') {
     window.handleTagClick = handleTagClick;
 }
+// ─── Core Folders-on-Top Sorting Engine ───
+function sortDriveTable(container, sortCol = 'date', sortDir = 'desc') {
+    const tableContainer = container || (typeof document !== 'undefined' ? document.querySelector('.file-table-container') : null);
+    if (!tableContainer) return;
 
+    const rows = Array.from(tableContainer.querySelectorAll('.file-row'));
+    if (rows.length === 0) return;
+
+    const folders = [];
+    const files = [];
+
+    rows.forEach(row => {
+        const isFolder = (row.classList && row.classList.contains('folder-row')) ||
+                         (row.dataset && (row.dataset.category === 'folder' || row.dataset.type === 'folder'));
+        if (isFolder) folders.push(row);
+        else files.push(row);
+    });
+
+    function getVal(row, col) {
+        if (!row) return '';
+        if (col === 'name') {
+            return ((row.dataset && row.dataset.name) || (row.querySelector && row.querySelector('.file-name')?.textContent) || '').toLowerCase().trim();
+        }
+        if (col === 'owner') {
+            return ((row.dataset && row.dataset.owner) || (row.querySelector && row.querySelector('.file-owner')?.textContent) || '').toLowerCase().trim();
+        }
+        if (col === 'date') {
+            const raw = (row.dataset && (row.dataset.date || row.dataset.created)) || (row.querySelector && row.querySelector('.file-date')?.textContent) || '';
+            const t = new Date(raw).getTime();
+            const lower = String(raw).trim().toLowerCase();
+            if (lower === 'just now' || lower === 'recently' || lower === 'today') {
+                return Date.now();
+            }
+            return isNaN(t) ? 0 : t;
+        }
+        return '';
+    }
+
+    function comparator(a, b) {
+        const valA = getVal(a, sortCol);
+        const valB = getVal(b, sortCol);
+
+        let res = 0;
+        if (typeof valA === 'number' && typeof valB === 'number') {
+            res = valA - valB;
+        } else {
+            res = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+        }
+        if (res === 0) {
+            const nameA = getVal(a, 'name');
+            const nameB = getVal(b, 'name');
+            return String(nameA).localeCompare(String(nameB), undefined, { numeric: true, sensitivity: 'base' });
+        }
+
+        return sortDir === 'desc' ? -res : res;
+    }
+
+    folders.sort(comparator);
+    files.sort(comparator);
+
+    // Re-append: Folders on Top, Files below
+    folders.forEach(row => tableContainer.appendChild(row));
+    files.forEach(row => tableContainer.appendChild(row));
+
+    // Update Header UI
+    const headerCols = tableContainer.querySelectorAll ? tableContainer.querySelectorAll('.sortable-col') : (typeof document !== 'undefined' ? document.querySelectorAll('.sortable-col') : []);
+    if (headerCols && headerCols.length > 0) {
+        headerCols.forEach(col => {
+            const cSort = col.dataset ? col.dataset.sort : '';
+            const iconEl = col.querySelector ? col.querySelector('.sort-icon') : null;
+            if (cSort === sortCol) {
+                if (col.classList && col.classList.add) col.classList.add('sort-active');
+                if (iconEl) {
+                    iconEl.innerHTML = sortDir === 'asc' ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
+                }
+            } else {
+                if (col.classList && col.classList.remove) col.classList.remove('sort-active');
+                if (iconEl) {
+                    iconEl.innerHTML = '<i class="fas fa-sort"></i>';
+                }
+            }
+        });
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.sortDriveTable = sortDriveTable;
+}
+
+if (typeof document !== 'undefined') {
 document.addEventListener('DOMContentLoaded', () => {
     // ฟังก์ชันคำนวณตำแหน่ง Dropdown เพื่อให้อยู่ในหน้าจอเสมอ (auto-dropup เมื่อขอบล่างไม่พอ)
     function positionDropdown(dropdown, anchorEl) {
@@ -670,6 +759,73 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Expose globally
     window.applyDriveFilters = applyDriveFilters;
+    // ─── Table Column Sorting State & Persistence ───
+    let currentSortCol = 'date';
+    let currentSortDir = 'desc';
+
+    try {
+        const savedCol = localStorage.getItem('drive_sort_col');
+        const savedDir = localStorage.getItem('drive_sort_dir');
+        if (savedCol && savedCol !== 'date') {
+            currentSortCol = savedCol;
+            currentSortDir = savedDir || 'asc';
+        } else {
+            // Fresh load always enforces Date column to Newest First (desc)
+            currentSortCol = 'date';
+            currentSortDir = 'desc';
+            try {
+                localStorage.setItem('drive_sort_col', 'date');
+                localStorage.setItem('drive_sort_dir', 'desc');
+            } catch (e) {}
+        }
+    } catch (e) {}
+
+    // Perform initial sort on all table containers
+    const tableContainers = document.querySelectorAll('.file-table-container');
+    if (tableContainers && tableContainers.length > 0) {
+        tableContainers.forEach(container => {
+            if (typeof window !== 'undefined' && typeof window.sortDriveTable === 'function') {
+                window.sortDriveTable(container, currentSortCol, currentSortDir);
+            } else if (typeof sortDriveTable === 'function') {
+                sortDriveTable(container, currentSortCol, currentSortDir);
+            }
+        });
+    }
+
+    // Header click event delegation for column sorting
+    document.addEventListener('click', (e) => {
+        const headerCol = e.target.closest ? e.target.closest('.sortable-col') : null;
+        if (headerCol) {
+            e.stopPropagation();
+            const col = headerCol.dataset ? headerCol.dataset.sort : '';
+            if (!col) return;
+
+            if (col === currentSortCol) {
+                currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortCol = col;
+                currentSortDir = col === 'date' ? 'desc' : 'asc';
+            }
+
+            try {
+                localStorage.setItem('drive_sort_col', currentSortCol);
+                localStorage.setItem('drive_sort_dir', currentSortDir);
+            } catch (e) {}
+
+            const container = headerCol.closest ? headerCol.closest('.file-table-container') : document.querySelector('.file-table-container');
+            if (typeof window !== 'undefined' && typeof window.sortDriveTable === 'function') {
+                window.sortDriveTable(container, currentSortCol, currentSortDir);
+            } else if (typeof sortDriveTable === 'function') {
+                sortDriveTable(container, currentSortCol, currentSortDir);
+            }
+
+            if (typeof window !== 'undefined' && typeof window.applyDriveFilters === 'function') {
+                window.applyDriveFilters();
+            } else if (typeof applyDriveFilters === 'function') {
+                applyDriveFilters();
+            }
+        }
+    });
 
     if (categoryChips && categoryChips.length > 0) {
         categoryChips.forEach(chip => {
@@ -820,10 +976,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+}
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         handleTagClick,
+        sortDriveTable,
         applyDriveFilters: (...args) => {
             if (typeof window !== 'undefined' && typeof window.applyDriveFilters === 'function') {
                 return window.applyDriveFilters(...args);

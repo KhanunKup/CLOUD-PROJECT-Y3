@@ -51,16 +51,16 @@
     <!-- File Table — Trash has extra Restore action column -->
     <div class="file-table-container trash-table">
       <div class="file-table-header">
-        <span>Name</span>
-        <span>Owner</span>
-        <span>Date Trashed</span>  <!-- Figma: "Date Trashed" (not Uploaded) -->
+        <span class="sortable-col" data-sort="name">Name <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+        <span class="sortable-col" data-sort="owner">Owner <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+        <span class="sortable-col sort-active" data-sort="date">Date Trashed <span class="sort-icon"><i class="fas fa-arrow-down"></i></span></span>
         <span>Restore</span>
         <span></span>
       </div>
 
       <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
         <% files.forEach(function(file) { %>
-        <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %>" data-id="<%= file.id %>" data-name="<%= file.name %>" data-type="<%= file.type %>">
+        <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %>" data-id="<%= file.id %>" data-name="<%= file.name %>" data-type="<%= file.type %>" data-date="<%= file.trashedAt || file.createdAt || file.uploadedAt || '' %>">
           <div class="file-name">
             <% if (file.type === 'folder') { %>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"

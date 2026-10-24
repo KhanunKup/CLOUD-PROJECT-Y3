@@ -1273,3 +1273,43 @@ body {
         margin-bottom: 4px;
     }
 }
+
+
+.sortable-col {
+    cursor: pointer;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    max-width: max-content;
+    justify-self: start;
+    padding: 4px 10px;
+    border-radius: 8px;
+    color: rgba(255, 248, 239, 0.85);
+    transition: all 0.15s ease;
+}
+
+.sortable-col:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.sort-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    color: rgba(255, 248, 239, 0.5);
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.sortable-col.sort-active {
+    color: #ffffff !important;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.sortable-col.sort-active .sort-icon {
+    color: #ffd599 !important;
+}

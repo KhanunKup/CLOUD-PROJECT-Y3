@@ -963,6 +963,18 @@ app.get('/drive', requireAuthWeb, (req, res) => {
   });
 
   const storage = getUserStorage(req.user.user_id);
+  // Sort activeFiles: Folders on top, Newest files first (descending by created_at)
+  activeFiles.sort((a, b) => {
+    const isFolderA = a.category === 'folder';
+    const isFolderB = b.category === 'folder';
+    if (isFolderA && !isFolderB) return -1;
+    if (!isFolderA && isFolderB) return 1;
+    const tA = new Date(a.created_at || a.createdAt || 0).getTime();
+    const tB = new Date(b.created_at || b.createdAt || 0).getTime();
+    if (tA !== tB) return tB - tA;
+    return (a.filename || '').localeCompare(b.filename || '');
+  });
+
   res.render('pages/homepage', {
     user: req.user,
     storage,
@@ -1201,6 +1213,18 @@ function filterRootTrashedFiles(files = mockFiles, userId) {
 app.get('/trash', requireAuthWeb, (req, res) => {
   const trashedFiles = filterRootTrashedFiles(mockFiles, req.user.user_id);
   const storage = getUserStorage(req.user.user_id);
+  // Sort trashedFiles: Folders on top, Newest trashed files first
+  trashedFiles.sort((a, b) => {
+    const isFolderA = a.category === 'folder';
+    const isFolderB = b.category === 'folder';
+    if (isFolderA && !isFolderB) return -1;
+    if (!isFolderA && isFolderB) return 1;
+    const tA = new Date(a.trashed_at || a.created_at || 0).getTime();
+    const tB = new Date(b.trashed_at || b.created_at || 0).getTime();
+    if (tA !== tB) return tB - tA;
+    return (a.filename || '').localeCompare(b.filename || '');
+  });
+
   res.render('pages/trash', {
     user: req.user,
     storage,

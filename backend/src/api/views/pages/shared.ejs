@@ -54,9 +54,9 @@
     <!-- Tab 1: Shared With Me -->
     <div class="file-table-container shared-table-panel" id="sharedWithMeTable">
       <div class="file-table-header">
-        <span>Name</span>
-        <span>Owner</span>
-        <span>Date Uploaded</span>
+        <span class="sortable-col" data-sort="name">Name <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+        <span class="sortable-col" data-sort="owner">Owner <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+        <span class="sortable-col sort-active" data-sort="date">Date Uploaded <span class="sort-icon"><i class="fas fa-arrow-down"></i></span></span>
         <span></span>
       </div>
 
@@ -70,7 +70,7 @@
              data-size="<%= file.size || '' %>"
              data-owner="<%= file.owner || 'unknown' %>"
              data-is-owner="<%= file.isOwner ? 'true' : 'false' %>"
-             data-date="<%= file.uploadDate || '' %>"
+             data-date="<%= file.createdAt || file.uploadDate || '' %>"
              data-tags="<%= (file.tags || []).join(',') %>"
              data-share-url="<%= file.shareUrl || '' %>">
           <div class="file-name">
@@ -113,9 +113,9 @@
     <!-- Tab 2: Shared By Me -->
     <div class="file-table-container shared-table-panel" id="sharedByMeTable" style="display: none;">
       <div class="file-table-header shared-by-me-header">
-        <span>Name</span>
+        <span class="sortable-col" data-sort="name">Name <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
         <span>Share Status &amp; Limits</span>
-        <span>Date Shared</span>
+        <span class="sortable-col sort-active" data-sort="date">Date Shared <span class="sort-icon"><i class="fas fa-arrow-down"></i></span></span>
         <span></span>
       </div>
 
@@ -129,7 +129,7 @@
              data-size="<%= file.size || '' %>"
              data-owner="me"
              data-is-owner="true"
-             data-date="<%= file.uploadDate || '' %>"
+             data-date="<%= file.createdAt || file.uploadDate || '' %>"
              data-tags="<%= (file.tags || []).join(',') %>"
              data-share-url="<%= file.shareUrl || '' %>">
           <div class="file-name">

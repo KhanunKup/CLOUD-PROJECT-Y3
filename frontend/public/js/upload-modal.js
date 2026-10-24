@@ -1465,6 +1465,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         newRow.dataset.folderId = currentFolderId || '';
                         newRow.dataset.category = fileCat;
                         newRow.dataset.tags = tagsJoined;
+                        newRow.dataset.date = (uploadedFileRecord && (uploadedFileRecord.created_at || uploadedFileRecord.createdAt)) || new Date().toISOString();
                         newRow.innerHTML = `
                             <div class="file-name">
                                 ${iconSvg}
@@ -1509,6 +1510,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Refresh sidebar storage and filters
                 if (window.refreshSidebarStorage) {
                     window.refreshSidebarStorage();
+                }
+                if (typeof window !== 'undefined' && typeof window.sortDriveTable === 'function') {
+                    const savedCol = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_col')) || 'date';
+                    const savedDir = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_dir')) || 'desc';
+                    window.sortDriveTable(fileContainer, savedCol, savedDir);
                 }
                 if (window.applyDriveFilters) {
                     window.applyDriveFilters();

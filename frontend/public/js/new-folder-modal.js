@@ -75,6 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 newRow.dataset.folderId = currentFolderId || '';
                 newRow.dataset.category = 'folder';
                 newRow.dataset.tags = 'folder';
+                newRow.dataset.date = new Date().toISOString();
                 newRow.innerHTML = `
                     <div class="file-name">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -116,6 +117,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     fileContainer.insertBefore(newRow, tableHeader.nextSibling);
                 } else {
                     fileContainer.appendChild(newRow);
+                }
+
+                // Auto re-sort according to active sort column & direction
+                if (typeof window !== 'undefined' && typeof window.sortDriveTable === 'function') {
+                    const savedCol = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_col')) || 'date';
+                    const savedDir = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_dir')) || 'desc';
+                    window.sortDriveTable(fileContainer, savedCol, savedDir);
+                }
+                if (typeof window !== 'undefined' && typeof window.applyDriveFilters === 'function') {
+                    window.applyDriveFilters();
                 }
             }
 
