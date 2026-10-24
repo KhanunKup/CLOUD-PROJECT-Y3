@@ -93,6 +93,20 @@
   }
 
   function handleDelete(e) {
+    if (typeof window !== 'undefined' && window.BatchActions && typeof window.BatchActions.getSelectedIds === 'function') {
+      const selectedIds = window.BatchActions.getSelectedIds();
+      if (selectedIds && selectedIds.length > 0) {
+        if (e && e.preventDefault) e.preventDefault();
+        const isTrashPage = typeof document !== 'undefined' && !!document.querySelector('.trash-table');
+        const targetBtnId = isTrashPage ? 'batchDeleteForeverBtn' : 'batchTrashBtn';
+        const batchBtn = document.getElementById(targetBtnId);
+        if (batchBtn && typeof batchBtn.click === 'function') {
+          batchBtn.click();
+          return;
+        }
+      }
+    }
+
     const selectedRow = getSelectedRow();
     if (!selectedRow) return;
 

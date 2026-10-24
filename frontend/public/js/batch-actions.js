@@ -203,8 +203,13 @@
                 const visibleRows = getVisibleRows();
                 if (visibleRows.length > 0) {
                     e.preventDefault();
-                    visibleRows.forEach(row => toggleRowSelection(row, true));
-                    updateUI();
+                    const allSelected = visibleRows.every(row => selectedFileIds.has(row.dataset.id));
+                    if (allSelected) {
+                        clearSelection();
+                    } else {
+                        visibleRows.forEach(row => toggleRowSelection(row, true));
+                        updateUI();
+                    }
                 }
             } else if (e.key === 'Escape') {
                 if (selectedFileIds.size > 0) {
