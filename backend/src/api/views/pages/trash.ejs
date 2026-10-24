@@ -26,6 +26,7 @@
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
         <input class="search-input" type="text" placeholder="Search in Drive" />
+        <button type="button" class="search-clear-btn" id="searchClearBtn" aria-label="Clear search" title="Clear search" style="display: none;">&times;</button>
       </div>
       <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
       <form action="/trash/empty" method="POST" style="margin-left:auto;" id="emptyTrashForm" onsubmit="event.preventDefault(); if (window.executeOptimisticEmptyTrash) { window.executeOptimisticEmptyTrash(); } else { this.submit(); }">

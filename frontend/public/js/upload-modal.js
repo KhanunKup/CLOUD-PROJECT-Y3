@@ -1470,7 +1470,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ${iconSvg}
                                 <span class="file-name-text">${safeName}</span>
                                 <div class="file-tags-wrapper">
-                                    ${fileTags.map(t => `<span class="file-tag-badge" title="Tag: ${t}">${t}</span>`).join('')}
+                                    ${fileTags.map(t => `<span class="file-tag-badge" title="Click to filter by tag: ${t}">${t}</span>`).join('')}
                                 </div>
                             </div>
                             <div class="file-owner">

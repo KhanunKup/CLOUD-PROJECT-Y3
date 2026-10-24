@@ -23,6 +23,7 @@
                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                 </svg>
                 <input class="search-input" type="text" placeholder="Search in Drive" />
+                <button type="button" class="search-clear-btn" id="searchClearBtn" aria-label="Clear search" title="Clear search" style="display: none;">&times;</button>
             </div>
 
             <div class="new-action-wrapper">
@@ -109,7 +110,7 @@
 
                         <div class="file-tags-wrapper">
                             <% (file.tags || []).forEach(function(tag) { %>
-                                <span class="file-tag-badge" title="Tag: <%= tag %>"><%= tag %></span>
+                                <span class="file-tag-badge" title="Click to filter by tag: <%= tag %>"><%= tag %></span>
                             <% }); %>
                         </div>
 

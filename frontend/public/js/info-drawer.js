@@ -278,6 +278,12 @@
                     const chip = document.createElement('span');
                     chip.className = 'info-tag-chip';
                     chip.textContent = `#${cleanTag}`;
+                    chip.title = `Click to filter by tag: ${cleanTag}`;
+                    const currentQuery = (document.querySelector('.search-input')?.value || '').trim().toLowerCase();
+                    const activeQueries = currentQuery ? currentQuery.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean) : [];
+                    if (activeQueries.includes(cleanTag.toLowerCase())) {
+                        chip.classList.add('tag-active');
+                    }
                     tagsContainerEl.appendChild(chip);
                 });
             }

@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </svg>
                         <span class="file-name-text">${safeName}</span>
                         <div class="file-tags-wrapper">
-                            <span class="file-tag-badge" title="Tag: folder">folder</span>
+                            <span class="file-tag-badge" title="Click to filter by tag: folder">folder</span>
                         </div>
                     </div>
                     <div class="file-owner">

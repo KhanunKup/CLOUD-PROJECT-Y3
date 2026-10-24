@@ -1,4 +1,47 @@
 // public/js/menu.js
+
+// Function to handle clicking on tag badges (file table or info drawer)
+function handleTagClick(targetEl, searchInput) {
+    if (!targetEl) return false;
+    const tagEl = targetEl.closest ? targetEl.closest('.file-tag-badge, .info-tag-chip') : targetEl;
+    if (!tagEl) return false;
+
+    const rawTag = (tagEl.textContent || '').trim().replace(/^#/, '');
+    if (!rawTag) return false;
+
+    const sInput = searchInput || (typeof document !== 'undefined' ? document.querySelector('.search-input') : null);
+    if (!sInput) return false;
+
+    // Parse current tokens (comma-separated, trimmed, without '#')
+    const currentVal = (sInput.value || '').trim();
+    let tokens = currentVal ? currentVal.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean) : [];
+
+    const lowerTag = rawTag.toLowerCase();
+    const existingIndex = tokens.findIndex(t => t.toLowerCase() === lowerTag);
+
+    if (existingIndex !== -1) {
+        // Toggle OFF: remove this tag from the list
+        tokens.splice(existingIndex, 1);
+    } else {
+        // Toggle ON: append this tag to the list
+        tokens.push(rawTag);
+    }
+
+    sInput.value = tokens.join(', ');
+
+    if (typeof Event !== 'undefined') {
+        sInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (typeof sInput.focus === 'function') {
+        sInput.focus();
+    }
+    return true;
+}
+
+if (typeof window !== 'undefined') {
+    window.handleTagClick = handleTagClick;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // ฟังก์ชันคำนวณตำแหน่ง Dropdown เพื่อให้อยู่ในหน้าจอเสมอ (auto-dropup เมื่อขอบล่างไม่พอ)
     function positionDropdown(dropdown, anchorEl) {
@@ -544,8 +587,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applyDriveFilters() {
         const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const queries = query ? query.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean) : [];
         const fileRows = document.querySelectorAll('.file-row');
         let visibleCount = 0;
+
+        // Toggle search clear button visibility
+        const searchClearBtn = document.querySelector('.search-clear-btn') || document.getElementById('searchClearBtn');
+        if (searchClearBtn) {
+            searchClearBtn.style.display = query ? 'flex' : 'none';
+        }
+
+        // 0. Update active state on all tag badges and chips
+        const allTagBadges = document.querySelectorAll('.file-tag-badge, .info-tag-chip');
+        if (allTagBadges && allTagBadges.length > 0) {
+            allTagBadges.forEach(badge => {
+                const bText = (badge.textContent || '').trim().replace(/^#/, '').toLowerCase();
+                const isActive = queries.length > 0 && queries.includes(bText);
+                if (badge.classList) {
+                    if (isActive) {
+                        badge.classList.add('tag-active');
+                    } else {
+                        badge.classList.remove('tag-active');
+                    }
+                }
+            });
+        }
 
         fileRows.forEach(row => {
             const rowCat = (row.dataset.category || '').toLowerCase();
@@ -563,10 +629,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // 2. Query match (matches either filename or tags)
+            // 2. Query match: AND (intersection) across all comma-separated queries
             let matchQuery = true;
-            if (query) {
-                matchQuery = name.includes(query) || rowTags.includes(query);
+            if (queries.length > 0) {
+                matchQuery = queries.every(q => name.includes(q) || rowTags.includes(q));
             }
 
             if (matchCategory && matchQuery) {
@@ -619,6 +685,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (searchInput) {
         searchInput.addEventListener('input', applyDriveFilters);
+
+        // Click listener for one-click search clear button
+        document.addEventListener('click', (e) => {
+            const clearBtn = e.target.closest ? e.target.closest('.search-clear-btn') : null;
+            if (clearBtn) {
+                e.stopPropagation();
+                if (searchInput) {
+                    searchInput.value = '';
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    if (typeof searchInput.focus === 'function') searchInput.focus();
+                }
+            }
+        });
+
+
+        // ─── Interactive One-Click Tag Filter (Event Delegation) ───
+        document.addEventListener('click', (e) => {
+            const tagEl = e.target.closest ? e.target.closest('.file-tag-badge, .info-tag-chip') : null;
+            if (tagEl) {
+                e.stopPropagation();
+                handleTagClick(tagEl, searchInput);
+            }
+        });
     }
 
     // ─── Global Sidebar Storage Refresher ───
@@ -699,7 +788,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('dblclick', (e) => {
         const folderRow = e.target.closest('.folder-row');
         if (folderRow) {
-            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline')) return;
+            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline, .file-tag-badge, .info-tag-chip')) return;
             const folderId = folderRow.dataset.id;
             if (folderId) {
                 navigateToFolder(folderId);
@@ -711,7 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (e) => {
         const folderRow = e.target.closest('.folder-row');
         if (folderRow) {
-            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline')) return;
+            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline, .file-tag-badge, .info-tag-chip')) return;
             const folderId = folderRow.dataset.id;
             if (folderId) {
                 navigateToFolder(folderId);
@@ -731,3 +820,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        handleTagClick,
+        applyDriveFilters: (...args) => {
+            if (typeof window !== 'undefined' && typeof window.applyDriveFilters === 'function') {
+                return window.applyDriveFilters(...args);
+            }
+        }
+    };
+}

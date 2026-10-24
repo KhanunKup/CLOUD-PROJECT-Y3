@@ -196,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (tagsWrapper) {
                         tagsWrapper.innerHTML = updatedTags.map(tag => 
-                            `<span class="file-tag-badge" title="Tag: ${escapeHtml(tag)}">${escapeHtml(tag)}</span>`
+                            `<span class="file-tag-badge" title="Click to filter by tag: ${escapeHtml(tag)}">${escapeHtml(tag)}</span>`
                         ).join('');
                     }
                 }
