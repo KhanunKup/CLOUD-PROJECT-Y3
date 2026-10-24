@@ -194,6 +194,47 @@
             });
         }
 
+        function isAnyModalOrOverlayOpen() {
+            // Check preview modal
+            const previewModal = document.getElementById('previewModal');
+            if (previewModal && previewModal.style && previewModal.style.display !== 'none' && previewModal.style.display !== '') {
+                return true;
+            }
+            // Check confirm modal
+            const confirmModal = document.getElementById('confirmModal') || document.querySelector('.confirm-modal-overlay');
+            if (confirmModal && confirmModal.style && confirmModal.style.display !== 'none' && confirmModal.style.display !== '') {
+                return true;
+            }
+            // Check shortcuts modal
+            const shortcutsModal = document.getElementById('shortcutsModal');
+            if (shortcutsModal && shortcutsModal.style && shortcutsModal.style.display !== 'none' && shortcutsModal.style.display !== '') {
+                return true;
+            }
+            // Check storage breakdown modal
+            const storageModal = document.getElementById('storageBreakdownModal');
+            if (storageModal && storageModal.style && storageModal.style.display !== 'none' && storageModal.style.display !== '') {
+                return true;
+            }
+            // Check info drawer
+            const infoDrawer = document.getElementById('infoDrawer');
+            if (infoDrawer && (infoDrawer.classList.contains('open') || infoDrawer.classList.contains('active'))) {
+                return true;
+            }
+            // Check open dropdowns
+            const openDropdown = document.querySelector('.options-dropdown.show, .new-options-dropdown.show, .dropdown-menu.show');
+            if (openDropdown) {
+                return true;
+            }
+            // Generic check for any visible overlay or modal
+            const openModals = document.querySelectorAll('.modal-overlay, .modal, .modal-backdrop');
+            for (const modal of openModals) {
+                if (modal.style && modal.style.display && modal.style.display !== 'none') {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         // Keyboard Shortcuts: Ctrl+A / Cmd+A and Esc
         document.addEventListener('keydown', (e) => {
             const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) ||
@@ -212,6 +253,9 @@
                     }
                 }
             } else if (e.key === 'Escape') {
+                if (isAnyModalOrOverlayOpen()) {
+                    return;
+                }
                 if (selectedFileIds.size > 0) {
                     clearSelection();
                 }

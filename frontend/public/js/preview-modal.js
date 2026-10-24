@@ -469,6 +469,9 @@
         // Keyboard Escape to close
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && previewModal && previewModal.style.display === 'flex') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
                 closePreview();
             }
         });

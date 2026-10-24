@@ -622,6 +622,9 @@
         // Close on Escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && infoDrawer && infoDrawer.classList.contains('open')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
                 closeDrawer();
             }
         });

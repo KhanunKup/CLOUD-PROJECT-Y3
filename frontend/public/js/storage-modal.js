@@ -158,6 +158,9 @@
       if (e.key === 'Escape') {
         const m = document.getElementById('storageBreakdownModal');
         if (m && m.style.display !== 'none') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
           closeStorageModal();
         }
       }
