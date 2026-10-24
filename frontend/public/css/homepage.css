@@ -1313,3 +1313,301 @@ body {
 .sortable-col.sort-active .sort-icon {
     color: #ffd599 !important;
 }
+
+/* ─── Storage Breakdown Modal ─── */
+.storage-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(30, 20, 12, 0.6);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    padding: 16px;
+    animation: fadeIn 0.15s ease;
+}
+
+.storage-modal-card {
+    background: #ffffff;
+    width: 100%;
+    max-width: 520px;
+    border-radius: 20px;
+    box-shadow: 0 16px 48px rgba(48, 32, 20, 0.25);
+    overflow: hidden;
+    border: 1px solid #ebd8c8;
+}
+
+.storage-modal-header {
+    background: linear-gradient(135deg, #57402f, #483326);
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #ffffff;
+}
+
+.storage-modal-title-box {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.storage-modal-icon-badge {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: #ffd599;
+}
+
+.storage-modal-header .modal-title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.storage-modal-header .modal-subtitle {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: rgba(255, 248, 239, 0.7);
+}
+
+.storage-modal-header .btn-close-modal {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 26px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+    transition: color 0.15s ease;
+}
+
+.storage-modal-header .btn-close-modal:hover {
+    color: #ffffff;
+}
+
+.storage-modal-body {
+    padding: 24px;
+    background: #faf6f0;
+}
+
+.storage-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.storage-stat-card {
+    background: #ffffff;
+    border: 1px solid #eedecf;
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.storage-stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8c735d;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.storage-stat-value {
+    font-size: 16px;
+    font-weight: 800;
+    color: #382c21;
+}
+
+.storage-bar-wrapper {
+    background: #ffffff;
+    border: 1px solid #eedecf;
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.storage-bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #44362a;
+}
+
+.storage-percent-badge {
+    background: #eedecf;
+    color: #57402f;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.storage-segmented-bar {
+    width: 100%;
+    height: 14px;
+    background: #ebd8c8;
+    border-radius: 7px;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+}
+
+.storage-segment {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.segment-document { background-color: #2196f3; }
+.segment-image { background-color: #ff9800; }
+.segment-media { background-color: #9c27b0; }
+.segment-audio { background-color: #e91e63; }
+.segment-archive { background-color: #795548; }
+.segment-code { background-color: #4caf50; }
+.segment-other { background-color: #9e9e9e; }
+
+.storage-category-list {
+    background: #ffffff;
+    border: 1px solid #eedecf;
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.storage-category-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 16px;
+    border-bottom: 1px solid #f2e7dc;
+    font-size: 13px;
+    transition: background 0.1s ease;
+}
+
+.storage-category-row:last-child {
+    border-bottom: none;
+}
+
+.storage-category-row:hover {
+    background: #fbf8f4;
+}
+
+.storage-cat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.storage-cat-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.storage-cat-icon {
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+}
+
+.storage-cat-name {
+    font-weight: 600;
+    color: #382c21;
+}
+
+.storage-cat-metric {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.storage-cat-size {
+    font-weight: 600;
+    color: #554433;
+}
+
+.storage-cat-pct {
+    font-size: 12px;
+    color: #998370;
+    min-width: 32px;
+    text-align: right;
+}
+
+.storage-modal-footer {
+    padding: 14px 24px;
+    background: #ffffff;
+    border-top: 1px solid #eedecf;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    margin-top: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.btn-storage-trash-shortcut {
+    color: #8c735d;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s ease;
+}
+
+.btn-storage-trash-shortcut:hover {
+    color: #b71c1c;
+}
+
+.btn-storage-close,
+.storage-modal-footer .btn-secondary {
+    border: none;
+    border-radius: 20px;
+    padding: 8px 26px;
+    font-family: 'Outfit', 'Kanit', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: #ffffff;
+    background-color: #6e7960;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    line-height: 1.4;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-storage-close:hover,
+.storage-modal-footer .btn-secondary:hover {
+    background-color: #616c54;
+}
+
+.btn-storage-close:active,
+.storage-modal-footer .btn-secondary:active {
+    transform: scale(0.98);
+}
+
+/* Hide small storage popover when the big storage breakdown modal is open */
+body:has(#storageBreakdownModal:not([style*="display: none"])) .storage-popover,
+.storage-modal-overlay:not([style*="display: none"]) ~ * .storage-popover {
+    display: none !important;
+}
+

@@ -929,7 +929,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storageSection) {
         storageSection.addEventListener('click', (e) => {
             // If clicking directly on storage, toggle open state
-            storageSection.classList.toggle('popover-open');
+            storageSection.classList.remove('popover-open');
+        });
+        storageSection.addEventListener('mouseleave', () => {
+            storageSection.classList.remove('popover-open');
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#sidebarStorageSection, .sidebar-storage, .storage-popover')) {
+                storageSection.classList.remove('popover-open');
+            }
         });
     }
 
