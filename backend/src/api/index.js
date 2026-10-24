@@ -964,8 +964,13 @@ app.get('/drive', requireAuthWeb, (req, res) => {
   });
 
   const storage = getUserStorage(req.user.user_id);
-  // Sort activeFiles: Folders on top, Newest files first (descending by created_at)
+  // Sort activeFiles: Pinned items on top, Folders on top, Newest files first (descending by created_at)
   activeFiles.sort((a, b) => {
+    const isPinnedA = Boolean(a.is_pinned);
+    const isPinnedB = Boolean(b.is_pinned);
+    if (isPinnedA && !isPinnedB) return -1;
+    if (!isPinnedA && isPinnedB) return 1;
+
     const isFolderA = a.category === 'folder';
     const isFolderB = b.category === 'folder';
     if (isFolderA && !isFolderB) return -1;
@@ -998,6 +1003,8 @@ app.get('/drive', requireAuthWeb, (req, res) => {
         folderId: f.folder_id || null,
         category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
         tags: Array.isArray(f.tags) ? f.tags : (f.category ? [f.category] : []),
+        isPinned: Boolean(f.is_pinned),
+        pinnedAt: f.pinned_at || null,
         owner: f.owner_id === req.user.user_id ? 'me' : (f.owner_id === 'demo-user' ? 'me' : f.owner_id),
         uploadDate: new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
         accessList: f.access_list || [],
@@ -2504,6 +2511,67 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Move file error:', err);
     res.status(500).json({ error: 'Failed to move file' });
+  }
+});
+
+// 5.5.3 Toggle Pin File or Folder (Pin to Top)
+app.post('/api/files/:id/toggle-pin', authMiddleware, async (req, res) => {
+  const fileId = req.params.id;
+
+  if (IS_MOCK_MODE) {
+    mockFiles = storage.loadMockFiles();
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
+    if (!file) return res.status(404).json({ error: 'File not found' });
+
+    file.is_pinned = !file.is_pinned;
+    file.pinned_at = file.is_pinned ? new Date().toISOString() : null;
+    file.updated_at = new Date().toISOString();
+    storage.saveMockFiles(mockFiles, true);
+
+    // Note: Pinning is treated strictly as personal UI view preference, so NO security audit log is created.
+    return res.json({
+      success: true,
+      file_id: file.file_id,
+      is_pinned: file.is_pinned,
+      pinned_at: file.pinned_at,
+      message: file.is_pinned ? 'Item pinned to top' : 'Item unpinned'
+    });
+  }
+
+  // DynamoDB Mode
+  try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = getRes.Item;
+    if (!file || (file.owner_id !== req.user.user_id && req.user.role !== 'admin')) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const newPinned = !file.is_pinned;
+    const pinnedAt = newPinned ? new Date().toISOString() : null;
+    await docClient.send(new UpdateCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId },
+      UpdateExpression: 'SET is_pinned = :p, pinned_at = :pa, updated_at = :u',
+      ExpressionAttributeValues: {
+        ':p': newPinned,
+        ':pa': pinnedAt,
+        ':u': new Date().toISOString()
+      }
+    }));
+
+    return res.json({
+      success: true,
+      file_id: fileId,
+      is_pinned: newPinned,
+      pinned_at: pinnedAt,
+      message: newPinned ? 'Item pinned to top' : 'Item unpinned'
+    });
+  } catch (err) {
+    console.error('Toggle pin error:', err);
+    return res.status(500).json({ error: 'Failed to toggle pin state' });
   }
 });
 
