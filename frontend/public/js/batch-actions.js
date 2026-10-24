@@ -41,6 +41,44 @@
             });
         }
 
+        function checkAndRenderEmptyState() {
+            const container = document.querySelector('.trash-table, .file-table-container, .file-container');
+            if (!container) return;
+            const remainingRows = container.querySelectorAll('.file-row');
+            if (remainingRows.length === 0 && !container.querySelector('.empty-state')) {
+                const emptyEl = document.createElement('div');
+                emptyEl.className = 'empty-state';
+                emptyEl.textContent = isTrashPage ? 'Trash is empty.' : 'No files found.';
+                container.appendChild(emptyEl);
+
+                const emptyTrashForm = document.getElementById('emptyTrashForm');
+                if (emptyTrashForm) {
+                    emptyTrashForm.style.display = 'none';
+                }
+            }
+        }
+
+        function removeRowsWithAnimation(targetIds) {
+            targetIds.forEach(id => {
+                const row = document.querySelector(`.file-row[data-id="${id}"]`);
+                if (row) {
+                    row.style.transition = 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
+                    row.style.opacity = '0';
+                    row.style.transform = 'translateX(20px)';
+                    row.style.height = '0px';
+                    row.style.minHeight = '0px';
+                    row.style.paddingTop = '0px';
+                    row.style.paddingBottom = '0px';
+                    row.style.borderBottom = 'none';
+                    row.style.overflow = 'hidden';
+                    setTimeout(() => {
+                        if (row.parentNode) row.remove();
+                        checkAndRenderEmptyState();
+                    }, 260);
+                }
+            });
+        }
+
         function updateUI() {
             const count = selectedFileIds.size;
             if (batchSelectedCount) {
@@ -197,16 +235,7 @@
                         const data = await res.json();
 
                         if (res.ok && data.success) {
-                            targetIds.forEach(id => {
-                                const row = document.querySelector(`.file-row[data-id="${id}"]`);
-                                if (row) {
-                                    row.style.transition = 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
-                                    row.style.opacity = '0';
-                                    row.style.transform = 'translateX(20px)';
-                                    setTimeout(() => row.remove(), 250);
-                                }
-                            });
-
+                            removeRowsWithAnimation(targetIds);
                             clearSelection();
 
                             if (typeof window.showToast === 'function') {
@@ -381,16 +410,7 @@
                         const data = await res.json();
 
                         if (res.ok && data.success) {
-                            targetIds.forEach(id => {
-                                const row = document.querySelector(`.file-row[data-id="${id}"]`);
-                                if (row) {
-                                    row.style.transition = 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
-                                    row.style.opacity = '0';
-                                    row.style.transform = 'translateX(20px)';
-                                    setTimeout(() => row.remove(), 250);
-                                }
-                            });
-
+                            removeRowsWithAnimation(targetIds);
                             clearSelection();
 
                             if (typeof window.showToast === 'function') {
@@ -459,16 +479,7 @@
                         const data = await res.json();
 
                         if (res.ok && data.success) {
-                            targetIds.forEach(id => {
-                                const row = document.querySelector(`.file-row[data-id="${id}"]`);
-                                if (row) {
-                                    row.style.transition = 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)';
-                                    row.style.opacity = '0';
-                                    row.style.transform = 'translateX(20px)';
-                                    setTimeout(() => row.remove(), 250);
-                                }
-                            });
-
+                            removeRowsWithAnimation(targetIds);
                             clearSelection();
 
                             if (typeof window.showToast === 'function') {
@@ -525,7 +536,8 @@
             getSelectedIds: () => Array.from(selectedFileIds),
             clearSelection,
             updateUI,
-            toggleRowSelection
+            toggleRowSelection,
+            checkAndRenderEmptyState
         };
     }
 
