@@ -83,10 +83,11 @@
 
             <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
                 <% files.forEach(function(file) { %>
-                <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %>"
+                <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %> <%= file.isPinned ? 'is-pinned' : '' %>"
                      data-id="<%= file.id %>"
                      data-name="<%= file.name %>"
                      data-type="<%= file.type %>"
+                     data-pinned="<%= file.isPinned ? 'true' : 'false' %>"
                      data-size="<%= file.size || '' %>"
                      data-hash="<%= file.file_hash || '' %>"
                      data-owner="<%= file.owner || 'Admin Rick' %>"
@@ -96,6 +97,7 @@
                      data-date="<%= file.createdAt || file.uploadDate || '' %>">
                     <div class="file-name">
                         <input type="checkbox" class="row-select-checkbox" data-id="<%= file.id %>" aria-label="Select <%= file.name %>">
+                        <button class="pin-toggle-btn <%= file.isPinned ? 'is-pinned' : '' %>" data-id="<%= file.id %>" data-pinned="<%= file.isPinned ? 'true' : 'false' %>" title="<%= file.isPinned ? 'Unpin from top' : 'Pin to top' %>" aria-label="<%= file.isPinned ? 'Unpin from top' : 'Pin to top' %>"><i class="fas fa-thumbtack"></i></button>
                         <% if (file.type === 'folder') { %>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

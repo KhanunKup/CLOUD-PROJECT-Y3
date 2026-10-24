@@ -1992,3 +1992,47 @@ body:has(#storageBreakdownModal:not([style*="display: none"])) .storage-popover,
     box-shadow: 0 4px 12px rgba(193, 18, 31, 0.35);
     transform: translateY(-1px);
 }
+
+
+/* ─── Pinned Rows and Pin Button ─────────────────────────── */
+.file-row.is-pinned {
+    background: rgba(245, 158, 11, 0.05);
+    border-left: 3px solid #f59e0b;
+}
+
+.pin-toggle-btn {
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    margin-right: 2px;
+    cursor: pointer;
+    color: #9ca3af;
+    opacity: 0;
+    transition: all 0.2s ease;
+    font-size: 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.file-row:hover .pin-toggle-btn {
+    opacity: 0.45;
+}
+
+.pin-toggle-btn:hover {
+    opacity: 1 !important;
+    color: #d97706;
+    transform: scale(1.15);
+}
+
+.pin-toggle-btn.is-pinned {
+    opacity: 1 !important;
+    color: #f59e0b;
+    transform: rotate(45deg);
+}
+
+.pin-toggle-btn.is-pinned:hover {
+    color: #d97706;
+    transform: rotate(0deg) scale(1.15);
+}

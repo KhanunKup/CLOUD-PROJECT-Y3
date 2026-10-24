@@ -49,14 +49,20 @@ function sortDriveTable(container, sortCol = 'date', sortDir = 'desc') {
     const rows = Array.from(tableContainer.querySelectorAll('.file-row'));
     if (rows.length === 0) return;
 
-    const folders = [];
-    const files = [];
+    const pinnedFolders = [];
+    const pinnedFiles = [];
+    const regularFolders = [];
+    const regularFiles = [];
 
     rows.forEach(row => {
+        const isPinned = (row.dataset && row.dataset.pinned === 'true') ||
+                         (row.classList && row.classList.contains('is-pinned'));
         const isFolder = (row.classList && row.classList.contains('folder-row')) ||
                          (row.dataset && (row.dataset.category === 'folder' || row.dataset.type === 'folder'));
-        if (isFolder) folders.push(row);
-        else files.push(row);
+        if (isPinned && isFolder) pinnedFolders.push(row);
+        else if (isPinned && !isFolder) pinnedFiles.push(row);
+        else if (!isPinned && isFolder) regularFolders.push(row);
+        else regularFiles.push(row);
     });
 
     function getVal(row, col) {
@@ -98,12 +104,16 @@ function sortDriveTable(container, sortCol = 'date', sortDir = 'desc') {
         return sortDir === 'desc' ? -res : res;
     }
 
-    folders.sort(comparator);
-    files.sort(comparator);
+    pinnedFolders.sort(comparator);
+    pinnedFiles.sort(comparator);
+    regularFolders.sort(comparator);
+    regularFiles.sort(comparator);
 
-    // Re-append: Folders on Top, Files below
-    folders.forEach(row => tableContainer.appendChild(row));
-    files.forEach(row => tableContainer.appendChild(row));
+    // Re-append: Pinned Folders -> Pinned Files -> Regular Folders -> Regular Files
+    pinnedFolders.forEach(row => tableContainer.appendChild(row));
+    pinnedFiles.forEach(row => tableContainer.appendChild(row));
+    regularFolders.forEach(row => tableContainer.appendChild(row));
+    regularFiles.forEach(row => tableContainer.appendChild(row));
 
     // Update Header UI
     const headerCols = tableContainer.querySelectorAll ? tableContainer.querySelectorAll('.sortable-col') : (typeof document !== 'undefined' ? document.querySelectorAll('.sortable-col') : []);
@@ -1006,6 +1016,88 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 }
+
+
+    // Pin / Unpin click delegation for inline icon and 3-dots menu
+    if (typeof document !== 'undefined') {
+        document.addEventListener('click', async (e) => {
+            const pinBtn = e.target.closest ? (e.target.closest('.toggle-pin-action') || e.target.closest('.pin-toggle-btn')) : null;
+            if (!pinBtn) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const fileId = pinBtn.dataset.id || pinBtn.getAttribute('data-id');
+            if (!fileId) return;
+
+            const row = document.querySelector(`.file-row[data-id="${fileId}"]`);
+            const currentPinned = (row && (row.dataset.pinned === 'true' || row.classList.contains('is-pinned'))) ||
+                                  pinBtn.dataset.pinned === 'true';
+
+            try {
+                const res = await fetch(`/api/files/${fileId}/toggle-pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const newPinned = Boolean(data.is_pinned);
+                    if (row) {
+                        row.dataset.pinned = newPinned ? 'true' : 'false';
+                        if (newPinned) {
+                            row.classList.add('is-pinned');
+                        } else {
+                            row.classList.remove('is-pinned');
+                        }
+
+                        // Update inline pin button
+                        const inlineBtn = row.querySelector('.pin-toggle-btn');
+                        if (inlineBtn) {
+                            inlineBtn.dataset.pinned = newPinned ? 'true' : 'false';
+                            if (newPinned) {
+                                inlineBtn.classList.add('is-pinned');
+                                inlineBtn.title = 'Unpin from top';
+                                inlineBtn.setAttribute('aria-label', 'Unpin from top');
+                            } else {
+                                inlineBtn.classList.remove('is-pinned');
+                                inlineBtn.title = 'Pin to top';
+                                inlineBtn.setAttribute('aria-label', 'Pin to top');
+                            }
+                        }
+
+                        // Update 3-dots dropdown item
+                        const menuBtn = row.querySelector('.toggle-pin-action');
+                        if (menuBtn) {
+                            menuBtn.dataset.pinned = newPinned ? 'true' : 'false';
+                            const pinText = menuBtn.querySelector('.pin-text');
+                            if (pinText) pinText.textContent = newPinned ? 'Unpin from top' : 'Pin to top';
+                        }
+
+                        // Re-sort table dynamically to smoothly reposition row
+                        if (typeof window.sortDriveTable === 'function') {
+                            const savedCol = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_col')) || 'date';
+                            const savedDir = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_dir')) || 'desc';
+                            const container = row.closest ? row.closest('.file-table-container') : document.querySelector('.file-table-container');
+                            window.sortDriveTable(container, savedCol, savedDir);
+                        }
+                    }
+
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(data.message || (newPinned ? 'Item pinned to top' : 'Item unpinned'), 'success');
+                    }
+                } else {
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(data.error || 'Failed to update pin state', 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('Toggle pin error:', err);
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Network error while toggling pin', 'error');
+                }
+            }
+        });
+    }
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
