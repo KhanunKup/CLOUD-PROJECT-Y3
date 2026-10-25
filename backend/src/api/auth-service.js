@@ -338,6 +338,8 @@ async function bootstrapAdminUser() {
         role: 'admin',
         quota: 107374182400, // 100 GB
         used_storage: 0,
+        totalUsed: 0,
+        breakdown: { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 },
         status: 'active',
         created_at: new Date().toISOString()
       };
@@ -412,6 +414,8 @@ async function registerUser({ username, email, password, role = 'user', quota = 
         role,
         quota,
         used_storage: 0,
+        totalUsed: 0,
+        breakdown: { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 },
         status: 'active',
         created_at: new Date().toISOString()
       };

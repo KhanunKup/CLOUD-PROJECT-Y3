@@ -6,11 +6,12 @@ const crypto = require('crypto');
 const { GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 
 class FileRepository {
-  constructor({ isMockMode, storage, docClient, filesTable, defaultQuota = 53687091200 }) {
+  constructor({ isMockMode, storage, docClient, filesTable, usersTable, defaultQuota = 53687091200 }) {
     this.isMockMode = isMockMode;
     this.storage = storage;
     this.docClient = docClient;
     this.filesTable = filesTable;
+    this.usersTable = usersTable || process.env.USERS_TABLE || "easydrive-users";
     this.defaultQuota = defaultQuota;
   }
 
@@ -256,6 +257,264 @@ class FileRepository {
     }
 
     return { affectedCount };
+  }
+  // ==========================================
+  // 6. User Storage & Quota Accounting
+  // ==========================================
+  async getUserStorage(userId) {
+    const DEFAULT_STORAGE_QUOTA = this.defaultQuota || 53687091200; // 50 GB
+    const formatBytes = (bytes) => {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    };
+
+    if (!this.isMockMode && this.docClient && this.usersTable) {
+      try {
+        const res = await this.docClient.send(new GetCommand({
+          TableName: this.usersTable,
+          Key: { user_id: userId }
+        }));
+        const item = res.Item || {};
+        const quota = item.quota || DEFAULT_STORAGE_QUOTA;
+        const totalUsed = item.totalUsed || item.used_storage || 0;
+        const free = Math.max(0, quota - totalUsed);
+        const percentUsed = Math.min(100, Math.round((totalUsed / quota) * 100));
+        const breakdown = item.breakdown || {
+          document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0
+        };
+
+        return {
+          user_id: userId,
+          email: item.email || '',
+          quota,
+          totalUsed,
+          free,
+          formattedQuota: formatBytes(quota),
+          formattedTotalUsed: formatBytes(totalUsed),
+          formattedFree: formatBytes(free),
+          percentUsed,
+          breakdown
+        };
+      } catch (err) {
+        console.error('[FileRepository.getUserStorage Error]:', err);
+      }
+    }
+
+    // Mock Mode fallback
+    const files = this.storage ? this.storage.loadMockFiles() : [];
+    const userFiles = files.filter(f => f.status !== 'trash' && (f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user')));
+    const breakdown = { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 };
+    let totalUsed = 0;
+    for (const f of userFiles) {
+      if (f.category !== 'folder') {
+        const sz = Number(f.size) || 0;
+        totalUsed += sz;
+        const cat = f.category || 'other';
+        breakdown[cat] = (breakdown[cat] || 0) + sz;
+      }
+    }
+    const quota = DEFAULT_STORAGE_QUOTA;
+    const free = Math.max(0, quota - totalUsed);
+    return {
+      user_id: userId,
+      quota,
+      totalUsed,
+      free,
+      formattedQuota: formatBytes(quota),
+      formattedTotalUsed: formatBytes(totalUsed),
+      formattedFree: formatBytes(free),
+      percentUsed: Math.min(100, Math.round((totalUsed / quota) * 100)),
+      breakdown
+    };
+  }
+
+  // ==========================================
+  // 7. Deep Drive View (Hierarchy, Pinned, Breadcrumbs)
+  // ==========================================
+  async getUserDrive({ userId, folderId = null, user = null }) {
+    let activeFiles = [];
+    let currentFolder = null;
+    const breadcrumbs = [{ name: 'My Drive', id: null, url: '/drive' }];
+
+    if (!this.isMockMode && this.docClient && this.filesTable) {
+      try {
+        // 1. Fetch current folder metadata if requested
+        if (folderId) {
+          const folderRes = await this.docClient.send(new GetCommand({
+            TableName: this.filesTable,
+            Key: { file_id: folderId }
+          }));
+          if (folderRes.Item && folderRes.Item.category === 'folder') {
+            currentFolder = folderRes.Item;
+          }
+        }
+
+        // 2. Query files in folder using OwnerFolderIndex (or fallback to OwnerIndex)
+        try {
+          const queryParams = {
+            TableName: this.filesTable,
+            IndexName: 'OwnerFolderIndex',
+            KeyConditionExpression: 'owner_id = :owner AND folder_id = :folder',
+            FilterExpression: '#st = :status',
+            ExpressionAttributeNames: { '#st': 'status' },
+            ExpressionAttributeValues: {
+              ':owner': userId,
+              ':folder': folderId || 'root',
+              ':status': 'active'
+            }
+          };
+          const res = await this.docClient.send(new QueryCommand(queryParams));
+          activeFiles = res.Items || [];
+        } catch (_) {
+          const res = await this.docClient.send(new QueryCommand({
+            TableName: this.filesTable,
+            IndexName: 'OwnerIndex',
+            KeyConditionExpression: 'owner_id = :owner',
+            FilterExpression: '#st = :status',
+            ExpressionAttributeNames: { '#st': 'status' },
+            ExpressionAttributeValues: {
+              ':owner': userId,
+              ':status': 'active'
+            }
+          }));
+          const allOwnerItems = res.Items || [];
+          activeFiles = allOwnerItems.filter(f => (folderId ? f.folder_id === folderId : (!f.folder_id || f.folder_id === 'root')));
+        }
+
+        // 3. Build Breadcrumb ancestry
+        if (currentFolder) {
+          const ancestors = [];
+          let curr = currentFolder;
+          const visited = new Set();
+          while (curr && !visited.has(curr.file_id)) {
+            visited.add(curr.file_id);
+            ancestors.unshift({
+              name: curr.filename,
+              id: curr.file_id,
+              url: `/drive?folder=${curr.file_id}`
+            });
+            if (curr.folder_id && curr.folder_id !== 'root') {
+              const pRes = await this.docClient.send(new GetCommand({
+                TableName: this.filesTable,
+                Key: { file_id: curr.folder_id }
+              })).catch(() => ({ Item: null }));
+              curr = pRes.Item;
+            } else {
+              break;
+            }
+          }
+          breadcrumbs.push(...ancestors);
+        }
+      } catch (cloudErr) {
+        console.error('[FileRepository.getUserDrive Cloud Error]:', cloudErr);
+      }
+    } else {
+      // Mock mode
+      const files = this.storage ? this.storage.loadMockFiles() : [];
+      if (folderId) {
+        currentFolder = files.find(f => f.file_id === folderId && f.category === 'folder') || null;
+      }
+      if (currentFolder) {
+        const ancestors = [];
+        let curr = currentFolder;
+        const visited = new Set();
+        while (curr && !visited.has(curr.file_id)) {
+          visited.add(curr.file_id);
+          ancestors.unshift({
+            name: curr.filename,
+            id: curr.file_id,
+            url: `/drive?folder=${curr.file_id}`
+          });
+          if (curr.folder_id) {
+            curr = files.find(f => f.file_id === curr.folder_id && f.category === 'folder');
+          } else {
+            break;
+          }
+        }
+        breadcrumbs.push(...ancestors);
+      }
+
+      activeFiles = files.filter(f => {
+        if (f.status !== 'active') return false;
+        const isOwner = f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user');
+        if (!isOwner) return false;
+        return folderId ? f.folder_id === folderId : (!f.folder_id || f.folder_id === 'root');
+      });
+    }
+
+    // Sort activeFiles: Pinned items on top, Folders on top, Newest first
+    activeFiles.sort((a, b) => {
+      const isPinnedA = Boolean(a.is_pinned);
+      const isPinnedB = Boolean(b.is_pinned);
+      if (isPinnedA && !isPinnedB) return -1;
+      if (!isPinnedA && isPinnedB) return 1;
+
+      const isFolderA = a.category === 'folder';
+      const isFolderB = b.category === 'folder';
+      if (isFolderA && !isFolderB) return -1;
+      if (!isFolderA && isFolderB) return 1;
+
+      const tA = new Date(a.created_at || a.createdAt || 0).getTime();
+      const tB = new Date(b.created_at || b.createdAt || 0).getTime();
+      if (tA !== tB) return tB - tA;
+      return (a.filename || '').localeCompare(b.filename || '');
+    });
+
+    return {
+      activeFiles,
+      currentFolder,
+      currentFolderId: currentFolder ? currentFolder.file_id : null,
+      breadcrumbs
+    };
+  }
+
+  // ==========================================
+  // 8. Trashed Items Fetch
+  // ==========================================
+  async getUserTrash({ userId }) {
+    let trashedFiles = [];
+
+    if (!this.isMockMode && this.docClient && this.filesTable) {
+      try {
+        const res = await this.docClient.send(new QueryCommand({
+          TableName: this.filesTable,
+          IndexName: 'OwnerIndex',
+          KeyConditionExpression: 'owner_id = :owner',
+          FilterExpression: '#st = :status',
+          ExpressionAttributeNames: { '#st': 'status' },
+          ExpressionAttributeValues: {
+            ':owner': userId,
+            ':status': 'trash'
+          }
+        }));
+        trashedFiles = res.Items || [];
+      } catch (err) {
+        console.error('[FileRepository.getUserTrash Cloud Error]:', err);
+      }
+    } else {
+      const files = this.storage ? this.storage.loadMockFiles() : [];
+      trashedFiles = files.filter(f => {
+        if (f.status !== 'trash') return false;
+        return f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user');
+      });
+    }
+
+    // Sort trashedFiles: Folders on top, newest trashed first
+    trashedFiles.sort((a, b) => {
+      const isFolderA = a.category === 'folder';
+      const isFolderB = b.category === 'folder';
+      if (isFolderA && !isFolderB) return -1;
+      if (!isFolderA && isFolderB) return 1;
+      const tA = new Date(a.trashed_at || a.created_at || 0).getTime();
+      const tB = new Date(b.trashed_at || b.created_at || 0).getTime();
+      if (tA !== tB) return tB - tA;
+      return (a.filename || '').localeCompare(b.filename || '');
+    });
+
+    return trashedFiles;
   }
 }
 

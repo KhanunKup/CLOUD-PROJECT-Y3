@@ -115,7 +115,8 @@ const fileRepo = new FileRepository({
   isMockMode: IS_MOCK_MODE,
   storage,
   docClient,
-  filesTable: FILES_TABLE
+  filesTable: FILES_TABLE,
+  usersTable: USERS_TABLE
 });
 
 authService.initAuthStore({
@@ -1178,31 +1179,20 @@ function filterRootTrashedFiles(files = mockFiles, userId) {
 }
 
 // 4.5 Trash Page (Protected)
-app.get('/trash', requireAuthWeb, (req, res) => {
-  const trashedFiles = filterRootTrashedFiles(mockFiles, req.user.user_id);
-  const storage = getUserStorage(req.user.user_id);
-  // Sort trashedFiles: Folders on top, Newest trashed files first
-  trashedFiles.sort((a, b) => {
-    const isFolderA = a.category === 'folder';
-    const isFolderB = b.category === 'folder';
-    if (isFolderA && !isFolderB) return -1;
-    if (!isFolderA && isFolderB) return 1;
-    const tA = new Date(a.trashed_at || a.created_at || 0).getTime();
-    const tB = new Date(b.trashed_at || b.created_at || 0).getTime();
-    if (tA !== tB) return tB - tA;
-    return (a.filename || '').localeCompare(b.filename || '');
-  });
+app.get('/trash', requireAuthWeb, async (req, res) => {
+  const trashedFiles = await fileRepo.getUserTrash({ userId: req.user.user_id });
+  const userStorage = await fileRepo.getUserStorage(req.user.user_id);
 
   res.render('pages/trash', {
     user: req.user,
-    storage,
+    storage: userStorage,
     files: trashedFiles.map(f => ({
       id: f.file_id,
       name: f.filename,
       type: f.category === 'folder' ? 'folder' : 'file',
       category: f.category || 'other',
       owner: 'me',
-      trashedAt: new Date(f.trashed_at || f.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+      trashedAt: new Date(f.trashed_at || f.updated_at || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
     }))
   });
 });

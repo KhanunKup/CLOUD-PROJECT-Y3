@@ -52,7 +52,7 @@ exports.handler = async (event) => {
     console.log(`[Worker] New upload detected: ${key} (${size} bytes) from bucket: ${bucket}`);
 
     try {
-      // 1. Parse Key Structure: uploads/{owner_id}/{file_id}/{filename}
+      // 1. Parse Key Structure: uploads/{owner_id}/.../{file_id}/{filename}
       const parts = key.split('/');
       let ownerId = 'unknown';
       let fileId = null;
@@ -60,8 +60,9 @@ exports.handler = async (event) => {
 
       if (parts.length >= 4 && parts[0] === 'uploads') {
         ownerId = parts[1];
-        fileId = parts[2];
-        filename = parts.slice(3).join('/');
+        // Penultimate segment is always file_id, last segment is filename
+        fileId = parts[parts.length - 2];
+        filename = parts[parts.length - 1];
       } else {
         filename = parts.pop();
         fileId = parts.pop() || `file-${Date.now()}`;
@@ -136,6 +137,21 @@ exports.handler = async (event) => {
       // 6. Update User Storage Quota and Category Breakdown in easydrive-users
       if (ownerId && ownerId !== 'unknown') {
         try {
+          // Pre-initialize breakdown map to prevent DynamoDB path ValidationException
+          await docClient.send(new UpdateCommand({
+            TableName: USERS_TABLE,
+            Key: { user_id: ownerId },
+            UpdateExpression: `SET 
+              totalUsed = if_not_exists(totalUsed, :zero),
+              breakdown = if_not_exists(breakdown, :emptyBreakdown),
+              updated_at = :up`,
+            ExpressionAttributeValues: {
+              ':zero': 0,
+              ':emptyBreakdown': { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 },
+              ':up': new Date().toISOString()
+            }
+          })).catch(() => {});
+
           await docClient.send(new UpdateCommand({
             TableName: USERS_TABLE,
             Key: { user_id: ownerId },

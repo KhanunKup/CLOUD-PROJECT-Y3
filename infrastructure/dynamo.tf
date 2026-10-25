@@ -19,10 +19,23 @@ resource "aws_dynamodb_table" "easydrive-files" {
     type = "S"
   }
 
+  attribute {
+    name = "folder_id"
+    type = "S"
+  }
+
   # Index to list files belonging to a specific user
   global_secondary_index {
     name            = "OwnerIndex"
     hash_key        = "owner_id"
+    projection_type = "ALL"
+  }
+
+  # Composite index to list files in a folder for a user in O(1)
+  global_secondary_index {
+    name            = "OwnerFolderIndex"
+    hash_key        = "owner_id"
+    range_key       = "folder_id"
     projection_type = "ALL"
   }
 

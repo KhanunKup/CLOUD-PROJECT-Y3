@@ -25,17 +25,6 @@ output "api-gateway-url" {
   value       = aws_apigatewayv2_stage.default.invoke_url
 }
 
-# Cognito Outputs
-output "cognito-user-pool-id" {
-  description = "Cognito User Pool ID"
-  value       = aws_cognito_user_pool.easydrive-user-pool.id
-}
-
-output "cognito-app-client-id" {
-  description = "Cognito App Client ID"
-  value       = aws_cognito_user_pool_client.easydrive-app-client.id
-}
-
 # SNS Output
 output "sns-topic-arn" {
   description = "ARN for SNS Download Alerts Topic"
