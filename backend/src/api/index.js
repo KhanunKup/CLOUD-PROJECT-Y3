@@ -154,6 +154,7 @@ const uploadCoordinator = new UploadCoordinator({
   s3Client,
   storageBucket: STORAGE_BUCKET,
   filesTable: FILES_TABLE,
+  usersTable: USERS_TABLE,
   docClient,
   // Must be the repository version: the module-level getUserStorage only reads in-memory mock data
   storageService: { getUserStorage: (uid) => fileRepo.getUserStorage(uid) },

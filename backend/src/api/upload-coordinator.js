@@ -33,6 +33,7 @@ class UploadCoordinator {
     s3Client = null,
     storageBucket = '',
     filesTable = '',
+    usersTable = '',
     docClient = null,
     storageService = null,
     mockStorage = null,
@@ -42,6 +43,7 @@ class UploadCoordinator {
     this.s3Client = s3Client;
     this.storageBucket = storageBucket;
     this.filesTable = filesTable;
+    this.usersTable = usersTable;
     this.docClient = docClient;
     this.storageService = storageService;
     this.mockStorage = mockStorage;
@@ -162,7 +164,7 @@ class UploadCoordinator {
           tags: [category, filename.split('.').pop().toLowerCase()],
           file_hash: incomingHash || crypto.randomBytes(32).toString('hex'),
           s3_key: s3Key,
-          status: 'pending',
+          status: 'active',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -305,7 +307,7 @@ class UploadCoordinator {
           tags: [category, filename.split('.').pop().toLowerCase()],
           file_hash: incomingHash || crypto.randomBytes(32).toString('hex'),
           s3_key: s3Key,
-          status: 'pending',
+          status: 'active',
           expires_at: Math.floor(Date.now() / 1000) + PENDING_TTL_SECONDS,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
@@ -322,6 +324,29 @@ class UploadCoordinator {
             failure.statusCode = 500;
             throw failure;
           });
+
+          if (this.usersTable && userId && userId !== 'unknown') {
+            try {
+              await this.docClient.send(new UpdateCommand({
+                TableName: this.usersTable,
+                Key: { user_id: userId },
+                UpdateExpression: `SET 
+                  totalUsed = if_not_exists(totalUsed, :zero) + :s,
+                  breakdown.#cat = if_not_exists(breakdown.#cat, :zero) + :s,
+                  updated_at = :up`,
+                ExpressionAttributeNames: {
+                  '#cat': category
+                },
+                ExpressionAttributeValues: {
+                  ':s': size,
+                  ':zero': 0,
+                  ':up': new Date().toISOString()
+                }
+              }));
+            } catch (quotaErr) {
+              console.warn('[UploadCoordinator] Failed to update user quota in DB:', quotaErr.message);
+            }
+          }
         }
 
         items.push({
