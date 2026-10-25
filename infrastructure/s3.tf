@@ -62,20 +62,22 @@ resource "aws_s3_bucket_cors_configuration" "easydrive-storage-cors" {
   }
 }
 
-# S3 Lifecycle Rule: Clean up files in trash/ after 30 days
+# S3 Lifecycle Rule: Expire noncurrent versions after 30 days & clean incomplete uploads
 resource "aws_s3_bucket_lifecycle_configuration" "easydrive-storage-lifecycle" {
   bucket = aws_s3_bucket.easydrive-storage.id
 
   rule {
-    id     = "delete-trash-after-30-days"
+    id     = "expire-noncurrent-versions-and-abort-uploads"
     status = "Enabled"
 
-    filter {
-      prefix = "trash/"
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
     }
 
-    expiration {
-      days = 30
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 }

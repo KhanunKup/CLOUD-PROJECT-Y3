@@ -3,6 +3,10 @@ resource "aws_api_gateway_rest_api" "easydrive-api" {
   name        = "easydrive-api"
   description = "EasyDrive REST API Gateway"
 
+  binary_media_types = [
+    "*/*"
+  ]
+
   endpoint_configuration {
     types = ["REGIONAL"]
   }

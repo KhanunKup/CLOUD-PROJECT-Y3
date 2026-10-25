@@ -3466,7 +3466,18 @@ app.get('/api/admin/audit', authMiddleware, (req, res) => {
 });
 
 // Export Lambda handler
-module.exports.handler = serverless(app);
+module.exports.handler = serverless(app, {
+  binary: [
+    'image/*',
+    'font/*',
+    'application/zip',
+    'application/pdf',
+    'application/octet-stream',
+    'font/ttf',
+    'font/woff',
+    'font/woff2'
+  ]
+});
 module.exports.app = app; // Export app for local runner
 module.exports.filterRootTrashedFiles = filterRootTrashedFiles;
 module.exports.getFolderDescendantIds = getFolderDescendantIds;
