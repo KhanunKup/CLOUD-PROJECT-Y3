@@ -21,8 +21,8 @@ output "easydrive-storage-bucket" {
 
 # API Gateway Output
 output "api-gateway-url" {
-  description = "Base URL for EasyDrive REST API"
-  value       = aws_api_gateway_stage.dev.invoke_url
+  description = "Base URL for EasyDrive HTTP API (Zero Stage Prefix)"
+  value       = aws_apigatewayv2_stage.default.invoke_url
 }
 
 # Cognito Outputs

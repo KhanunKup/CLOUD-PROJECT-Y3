@@ -84,6 +84,18 @@ resource "aws_dynamodb_table" "easydrive-users" {
     type = "S"
   }
 
+  attribute {
+    name = "email"
+    type = "S"
+  }
+
+  # Global Secondary Index for instant O(1) user lookup by email
+  global_secondary_index {
+    name            = "EmailIndex"
+    hash_key        = "email"
+    projection_type = "ALL"
+  }
+
   tags = {
     Name        = "easydrive-users-table"
     Environment = "Dev"

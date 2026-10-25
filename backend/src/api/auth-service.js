@@ -292,8 +292,71 @@ const inMemoryUsers = [
   }
 ];
 
+let bootstrapPromise = null;
+
+/**
+ * Bootstraps initial admin account in DynamoDB if empty/absent
+ */
+async function bootstrapAdminUser() {
+  if (authConfig.isMockMode || !authConfig.docClient || !authConfig.usersTable) return;
+  const { ScanCommand, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+  try {
+    let existingAdmin = null;
+    // Check via EmailIndex
+    try {
+      const qRes = await authConfig.docClient.send(new QueryCommand({
+        TableName: authConfig.usersTable,
+        IndexName: 'EmailIndex',
+        KeyConditionExpression: 'email = :email',
+        ExpressionAttributeValues: { ':email': 'admin@kmitl.ac.th' }
+      }));
+      if (qRes.Items && qRes.Items.length > 0) {
+        existingAdmin = qRes.Items[0];
+      }
+    } catch (_) {
+      // Fallback to ScanCommand if EmailIndex is not yet active
+      const scanRes = await authConfig.docClient.send(new ScanCommand({
+        TableName: authConfig.usersTable,
+        FilterExpression: 'email = :email OR #r = :role',
+        ExpressionAttributeNames: { '#r': 'role' },
+        ExpressionAttributeValues: { ':email': 'admin@kmitl.ac.th', ':role': 'admin' },
+        Limit: 1
+      }));
+      if (scanRes.Items && scanRes.Items.length > 0) {
+        existingAdmin = scanRes.Items[0];
+      }
+    }
+
+    if (!existingAdmin) {
+      const passwordHash = await bcrypt.hash('admin123', 10);
+      const adminItem = {
+        user_id: 'user-admin-01',
+        name: 'Admin User',
+        username: 'admin',
+        email: 'admin@kmitl.ac.th',
+        password_hash: passwordHash,
+        role: 'admin',
+        quota: 107374182400, // 100 GB
+        used_storage: 0,
+        status: 'active',
+        created_at: new Date().toISOString()
+      };
+      await authConfig.docClient.send(new PutCommand({
+        TableName: authConfig.usersTable,
+        Item: adminItem
+      }));
+      console.log('[EasyDrive Cloud] Initial admin user bootstrapped successfully in DynamoDB: admin@kmitl.ac.th');
+    }
+  } catch (err) {
+    console.error('[EasyDrive Cloud] Error bootstrapping initial admin user:', err.message);
+  }
+}
+
 function initAuthStore(config = {}) {
   authConfig = { ...authConfig, ...config };
+  if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
+    bootstrapPromise = bootstrapAdminUser();
+  }
 }
 
 async function registerUser({ username, email, password, role = 'user', quota = 15728640000 }) {
@@ -305,8 +368,30 @@ async function registerUser({ username, email, password, role = 'user', quota = 
   }
 
   if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
-    const { ScanCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+    if (bootstrapPromise) {
+      await bootstrapPromise;
+    }
+    const { ScanCommand, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
     try {
+      // 1. Fast O(1) email collision check via EmailIndex
+      let emailExists = false;
+      try {
+        const queryEmail = await authConfig.docClient.send(new QueryCommand({
+          TableName: authConfig.usersTable,
+          IndexName: 'EmailIndex',
+          KeyConditionExpression: 'email = :email',
+          ExpressionAttributeValues: { ':email': normEmail }
+        }));
+        if (queryEmail.Items && queryEmail.Items.length > 0) {
+          emailExists = true;
+        }
+      } catch (_) {}
+
+      if (emailExists) {
+        return { success: false, error: 'Username or email already exists' };
+      }
+
+      // 2. Check username collision via ScanCommand
       const scanRes = await authConfig.docClient.send(new ScanCommand({
         TableName: authConfig.usersTable,
         FilterExpression: 'email = :e OR username = :u',
@@ -392,14 +477,40 @@ async function authenticateUser({ identifier, password }) {
   }
 
   if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
-    const { ScanCommand } = require('@aws-sdk/lib-dynamodb');
+    if (bootstrapPromise) {
+      await bootstrapPromise;
+    }
+    const { ScanCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
     try {
-      const scanRes = await authConfig.docClient.send(new ScanCommand({
-        TableName: authConfig.usersTable,
-        FilterExpression: 'email = :ident OR username = :ident',
-        ExpressionAttributeValues: { ':ident': normIdent }
-      }));
-      const user = scanRes.Items && scanRes.Items[0];
+      let user = null;
+
+      // 1. Fast O(1) Lookup via EmailIndex if identifier is an email
+      if (normIdent.includes('@')) {
+        try {
+          const queryRes = await authConfig.docClient.send(new QueryCommand({
+            TableName: authConfig.usersTable,
+            IndexName: 'EmailIndex',
+            KeyConditionExpression: 'email = :email',
+            ExpressionAttributeValues: { ':email': normIdent }
+          }));
+          if (queryRes.Items && queryRes.Items.length > 0) {
+            user = queryRes.Items[0];
+          }
+        } catch (queryErr) {
+          // Fallback to table scan if EmailIndex is temporarily unavailable
+        }
+      }
+
+      // 2. Fallback to table scan if not found via index or identifier is username
+      if (!user) {
+        const scanRes = await authConfig.docClient.send(new ScanCommand({
+          TableName: authConfig.usersTable,
+          FilterExpression: 'email = :ident OR username = :ident',
+          ExpressionAttributeValues: { ':ident': normIdent }
+        }));
+        user = scanRes.Items && scanRes.Items[0];
+      }
+
       if (!user) {
         return { success: false, error: 'Invalid username/email or password' };
       }
@@ -482,6 +593,7 @@ async function getUserById(userId) {
 
 module.exports = {
   initAuthStore,
+  bootstrapAdminUser,
   registerUser,
   authenticateUser,
   getUserById,

@@ -83,6 +83,6 @@ resource "aws_lambda_permission" "allow_apigateway_to_call_api" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.easydrive-api.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.easydrive-api.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.easydrive-api.execution_arn}/*/*"
 }
 
