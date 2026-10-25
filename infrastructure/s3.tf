@@ -1,26 +1,4 @@
-# 1. S3 Bucket for Static Assets (CSS, JS, Fonts, Images for EJS Frontend)
-resource "aws_s3_bucket" "easydrive-host" {
-  bucket = "${var.bucket_prefix}-host"
-
-  tags = {
-    Name        = "easydrive-assets-host"
-    Environment = "Dev"
-  }
-}
-
-resource "aws_s3_bucket_website_configuration" "easydrive-host-website" {
-  bucket = aws_s3_bucket.easydrive-host.id
-
-  index_document {
-    suffix = "index.html"
-  }
-
-  error_document {
-    key = "index.html"
-  }
-}
-
-# 2. S3 Bucket for User File Storage (Private & Secure)
+# S3 Bucket for User File Storage (Private & Secure)
 resource "aws_s3_bucket" "easydrive-storage" {
   bucket = "${var.bucket_prefix}-storage"
 

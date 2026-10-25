@@ -500,6 +500,7 @@ function recordAuditLog({ user, action, level = 'info', details = '', metadata =
     timestamp: new Date().toISOString()
   };
   mockAuditLogs.unshift(logEntry);
+  console.log(`[AUDIT] ${JSON.stringify(logEntry)}`);
   return logEntry;
 }
 
@@ -3286,7 +3287,7 @@ app.post('/api/shares/:id/verify', async (req, res) => {
     const downloadUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 300 });
 
     // Send SNS Notification Alert to File Owner
-    if (SNS_TOPIC_ARN) {
+    if (!IS_MOCK_MODE && snsClient && SNS_TOPIC_ARN) {
       snsClient.send(new PublishCommand({
         TopicArn: SNS_TOPIC_ARN,
         Subject: `[EasyDrive Alert] ไฟล์ของคุณถูกดาวน์โหลด: ${file.filename}`,

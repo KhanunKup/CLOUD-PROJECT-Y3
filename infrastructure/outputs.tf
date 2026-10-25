@@ -3,17 +3,7 @@ output "region" {
   value       = var.region
 }
 
-# S3 Outputs
-output "easydrive-host-bucket" {
-  description = "S3 bucket name for hosting static assets (CSS, JS, Fonts, Images)"
-  value       = aws_s3_bucket.easydrive-host.id
-}
-
-output "easydrive-host-website-url" {
-  description = "URL endpoint for S3 Static Assets Hosting"
-  value       = aws_s3_bucket_website_configuration.easydrive-host-website.website_endpoint
-}
-
+# S3 Output
 output "easydrive-storage-bucket" {
   description = "S3 bucket name for private user file storage"
   value       = aws_s3_bucket.easydrive-storage.id
