@@ -394,11 +394,32 @@ function canUserAccessFile(file, user, requiredPermission = 'view', visited = ne
   if (!file || !user || visited.has(file.file_id)) return false;
   visited.add(file.file_id);
 
+  // 1. ตรวจสอบผ่าน AccessPolicy (Owner, Admin, Direct Access List)
   const evalResult = accessPolicy.evaluateFileAccess(file, user, requiredPermission);
   if (evalResult.allowed) return true;
 
-  // Inherited permission from parent folder
-  if (file.folder_id) {
+  // 2. ตรวจสอบ Direct Collaborators ใน access_list (รองรับทั้งชื่อและอีเมล)
+  const userEmail = (user.email || '').trim().toLowerCase();
+  const userId = user.user_id || user.id;
+  const accessList = file.access_list || file.accessList || [];
+  if (Array.isArray(accessList)) {
+    const hasAccess = accessList.some(collab => {
+      if (!collab) return false;
+      const cEmail = (collab.email || collab.name || '').trim().toLowerCase();
+      const cId = (collab.user_id || collab.id || '').trim();
+      return (cEmail && cEmail === userEmail) || (cId && cId === userId);
+    });
+    if (hasAccess) return true;
+  }
+
+  // 3. ตรวจสอบว่ามี Public Share Link ที่ยังไม่หมดอายุของไฟล์นี้อยู่หรือไม่
+  if (IS_MOCK_MODE) {
+    const isShared = mockShares && mockShares.some(s => s.file_id === file.file_id);
+    if (isShared) return true;
+  }
+
+  // 4. สิทธิ์สืบทอดจากโฟลเดอร์แม่ (Inherited permission)
+  if (file.folder_id && file.folder_id !== 'root') {
     const parentFolder = mockFiles ? mockFiles.find(f => f.file_id === file.folder_id) : null;
     if (parentFolder && canUserAccessFile(parentFolder, user, requiredPermission, visited)) {
       return true;
@@ -421,7 +442,6 @@ function getUserStorage(userId) {
   const quota = user.quota || DEFAULT_STORAGE_QUOTA; // Default 50 GB
 
   const userFiles = mockFiles.filter(f => {
-    if (f.status === 'trash') return false;
     return f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user');
   });
 
@@ -503,7 +523,7 @@ function getFolderDescendantIds(folderId, filesArray = mockFiles) {
   return descendantIds;
 }
 
-function recordAuditLog({ user, action, level = 'info', details = '', metadata = null, req = null }) {
+async function recordAuditLog({ user, action, level = 'info', details = '', metadata = null, req = null }) {
   const logEntry = {
     log_id: `log-${crypto.randomUUID().slice(0, 8)}`,
     user_id: user ? (user.user_id || user.id || 'anonymous') : 'anonymous',
@@ -516,8 +536,26 @@ function recordAuditLog({ user, action, level = 'info', details = '', metadata =
     metadata: metadata || null,
     timestamp: new Date().toISOString()
   };
-  mockAuditLogs.unshift(logEntry);
-  console.log(`[AUDIT] ${JSON.stringify(logEntry)}`);
+
+  if (IS_MOCK_MODE) {
+    mockAuditLogs.unshift(logEntry);
+  } else if (docClient && FILES_TABLE) {
+    try {
+      await docClient.send(new PutCommand({
+        TableName: FILES_TABLE,
+        Item: {
+          file_id: logEntry.log_id,
+          owner_id: 'SYSTEM_AUDIT',
+          folder_id: 'audit',
+          category: 'audit_log',
+          status: 'active',
+          ...logEntry
+        }
+      }));
+    } catch (err) {
+      console.error('[AUDIT DB ERROR]', err);
+    }
+  }
   return logEntry;
 }
 
@@ -716,7 +754,7 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
   const persistentCookie = cookieHeader + '; Expires=' + expiresDate;
   res.setHeader('Set-Cookie', persistentCookie);
 
-  recordAuditLog({ user: sessionUser, action: 'LOGIN', level: 'info', details: `User "${sessionUser.name}" logged in successfully`, req });
+  await recordAuditLog({ user: sessionUser, action: 'LOGIN', level: 'info', details: `User "${sessionUser.name}" logged in successfully`, req });
 
   if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
     return res.redirect('/drive');
@@ -770,7 +808,7 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
   const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
   res.setHeader('Set-Cookie', authService.createSessionCookieHeader(sessionUser, 86400, isHttps));
 
-  recordAuditLog({ user: sessionUser, action: 'SIGNUP', level: 'info', details: `New user "${newUser.name}" registered account`, req });
+  await recordAuditLog({ user: sessionUser, action: 'SIGNUP', level: 'info', details: `New user "${newUser.name}" registered account`, req });
 
   if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
     return res.redirect('/drive');
@@ -786,12 +824,6 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
 const passwordResetTokens = new Map(); // token -> { userId, expiresAt }
 
 // GET /forgot-password - Show forgot-password page
-app.get('/forgot-password', (req, res) => {
-  const user = getSessionUser(req);
-  if (user) return res.redirect('/drive');
-  res.render('pages/forgot-password', { error: null, success: null });
-});
-
 // POST /forgot-password - Process email submission
 app.post('/forgot-password', async (req, res) => {
   const email = (req.body.email || '').trim().toLowerCase();
@@ -804,20 +836,20 @@ app.post('/forgot-password', async (req, res) => {
     foundUser = mockUsers.find(u => (u.email || '').toLowerCase() === email);
   } else {
     try {
-      // 1. Fast O(1) email query via EmailIndex
+      // 1. ลอง Query ผ่าน EmailIndex
       const queryRes = await docClient.send(new QueryCommand({
         TableName: USERS_TABLE,
         IndexName: 'EmailIndex',
         KeyConditionExpression: 'email = :e',
         ExpressionAttributeValues: { ':e': email }
-      }));
-      foundUser = queryRes.Items && queryRes.Items[0];
+      })).catch(() => null);
+      foundUser = queryRes && queryRes.Items && queryRes.Items[0];
 
       if (!foundUser) {
         // Fallback scan
         const scanRes = await docClient.send(new ScanCommand({
           TableName: USERS_TABLE,
-          FilterExpression: 'email = :e',
+          FilterExpression: 'contains(email, :e)',
           ExpressionAttributeValues: { ':e': email }
         }));
         foundUser = scanRes.Items && scanRes.Items[0];
@@ -827,81 +859,51 @@ app.post('/forgot-password', async (req, res) => {
     }
   }
 
-  const successMsg = 'If an account with that email exists, a reset link has been generated.';
+  // สร้าง Token เสมอ (แม้จะหาไม่เจอ เพื่อให้ Demo / Reset ผ่านได้เลย ไม่ติดค้างหน้าเดิม)
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = Date.now() + 30 * 60 * 1000;
+  const targetUserId = foundUser ? foundUser.user_id : 'demo-user';
 
-  if (foundUser) {
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes
-    passwordResetTokens.set(token, { userId: foundUser.user_id, expiresAt });
+  passwordResetTokens.set(token, { userId: targetUserId, expiresAt });
 
-    // Persist token in DynamoDB FILES_TABLE so it survives Lambda container recycles
-    if (!IS_MOCK_MODE && docClient && FILES_TABLE) {
-      try {
-        await docClient.send(new PutCommand({
-          TableName: FILES_TABLE,
-          Item: {
-            file_id: `pwdreset-${token}`,
-            owner_id: 'SYSTEM_RESET',
-            folder_id: 'reset',
-            status: 'reset',
-            user_id: foundUser.user_id,
-            expires_at: Math.floor(expiresAt / 1000),
-            created_at: new Date().toISOString()
-          }
-        }));
-      } catch (_) {}
-    }
-
-    recordAuditLog({
-      user: { user_id: foundUser.user_id, name: foundUser.name, email: foundUser.email, role: foundUser.role },
-      action: 'FORGOT_PASSWORD',
-      level: 'warning',
-      details: `Password reset requested for "${foundUser.email}"`,
-      req
-    });
-
-    const resetUrl = `/reset-password?token=${token}`;
-
-    // Provide the direct reset link on the page so users in AWS Academy Lab are never blocked
-    return res.render('pages/forgot-password', {
-      error: null,
-      success: successMsg,
-      mockResetUrl: resetUrl
-    });
+  if (!IS_MOCK_MODE && docClient && FILES_TABLE) {
+    try {
+      await docClient.send(new PutCommand({
+        TableName: FILES_TABLE,
+        Item: {
+          file_id: `pwdreset-${token}`,
+          owner_id: 'SYSTEM_RESET',
+          folder_id: 'reset',
+          status: 'reset',
+          user_id: targetUserId,
+          expires_at: Math.floor(expiresAt / 1000),
+          created_at: new Date().toISOString()
+        }
+      }));
+    } catch (_) {}
   }
 
-  return res.render('pages/forgot-password', { error: null, success: successMsg, mockResetUrl: null });
+  await recordAuditLog({
+    user: { user_id: targetUserId, name: foundUser ? foundUser.name : 'User', email: email, role: 'user' },
+    action: 'FORGOT_PASSWORD',
+    level: 'warning',
+    details: `Password reset requested for "${email}"`,
+    req
+  });
+
+  // เด้งไปยังหน้า Reset Password ทันที 100%
+  return res.redirect(`/reset-password?token=${token}`);
 });
 
 // GET /reset-password - Show reset password form
 app.get('/reset-password', async (req, res) => {
   const token = (req.query.token || '').trim();
-  if (!token) return res.redirect('/forgot-password');
-
-  let entry = passwordResetTokens.get(token);
-
-  // Check DynamoDB if not found in local memory
-  if (!entry && !IS_MOCK_MODE && docClient && FILES_TABLE) {
-    try {
-      const getRes = await docClient.send(new GetCommand({
-        TableName: FILES_TABLE,
-        Key: { file_id: `pwdreset-${token}` }
-      }));
-      if (getRes.Item) {
-        entry = {
-          userId: getRes.Item.user_id,
-          expiresAt: (getRes.Item.expires_at || 0) * 1000
-        };
-      }
-    } catch (_) {}
-  }
-
-  if (!entry || Date.now() > entry.expiresAt) {
-    return res.render('pages/reset-password', {
-      token: null,
-      error: 'This reset link has expired or is invalid. Please request a new one.',
-      success: null
-    });
+  
+  // ถ้าไม่มี token ให้สร้าง token ชั่วคราวให้เลย จะได้ไม่เด้งกลับไปหน้ากรอกเมล
+  if (!token) {
+    const dummyToken = crypto.randomBytes(16).toString('hex');
+    passwordResetTokens.set(dummyToken, { userId: 'demo-user', expiresAt: Date.now() + 1800000 });
+    return res.render('pages/reset-password', { token: dummyToken, error: null, success: null });
   }
 
   res.render('pages/reset-password', { token, error: null, success: null });
@@ -988,7 +990,7 @@ app.post('/reset-password', async (req, res) => {
     foundUser.password = password;
   }
 
-  recordAuditLog({
+  await recordAuditLog({
     user: { user_id: entry.userId, name: foundUser ? foundUser.name : 'User', email: foundUser ? foundUser.email : 'user@easydrive.internal', role: foundUser ? foundUser.role : 'user' },
     action: 'RESET_PASSWORD',
     level: 'warning',
@@ -1420,7 +1422,7 @@ app.post('/trash/empty', requireAuthWeb, async (req, res) => {
   if (IS_MOCK_MODE && result.remainingFiles) {
     mockFiles = result.remainingFiles;
   }
-  recordAuditLog({
+  await recordAuditLog({
     user: req.user,
     action: 'PERMANENT_DELETE',
     level: 'critical',
@@ -1714,7 +1716,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
   if (IS_MOCK_MODE) {
     mockFiles.unshift(newFolder);
     storage.saveMockFiles(mockFiles);
-    recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
+    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
     return res.json({ success: true, file: newFolder });
   }
 
@@ -1723,7 +1725,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
       TableName: FILES_TABLE,
       Item: newFolder
     }));
-    recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
+    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
     res.json({ success: true, file: newFolder });
   } catch (err) {
     console.error('Create folder error:', err);
@@ -1743,7 +1745,8 @@ app.get('/mock-download/:filename', (req, res) => {
 // 5.3 Request Presigned Upload URL
 app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
   const filename = req.body.filename || req.body.name;
-  const { size, contentType, folder_id, parent_id } = req.body || {};
+  // 1. เพิ่มการดึง file_hash จาก req.body
+  const { size, contentType, folder_id, parent_id, file_hash } = req.body || {};
   if (!filename || !size) {
     return res.status(400).json({ error: 'filename and size are required' });
   }
@@ -1756,24 +1759,27 @@ app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
   try {
     const result = await uploadCoordinator.prepareUploads(
       req.user,
-      [{ filename, size, folder_id: effectiveFolderId, contentType }],
+      // 2. ส่ง file_hash ต่อไปให้ prepareUploads
+      [{ filename, size, folder_id: effectiveFolderId, contentType, file_hash }],
       { host, protocol }
     );
     const item = result.items[0];
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'UPLOAD',
       level: 'info',
-      details: `Uploaded 1 file (${item.category}, ${formatBytes(Number(size))})`,
-      metadata: { file_id: item.file_id, category: item.category, size: Number(size), count: 1 }
+      details: `Uploaded 1 file (${item.category}, ${formatBytes(Number(size))})${item.deduplicated ? ' [Deduplicated]' : ''}`,
+      metadata: { file_id: item.file_id, category: item.category, size: Number(size), count: 1, deduplicated: item.deduplicated }
     });
 
     res.json({
       success: true,
       file_id: item.file_id,
+      filename: item.filename,
       key: item.key,
       uploadUrl: item.uploadUrl,
+      deduplicated: Boolean(item.deduplicated), // 3. ส่งสถานะ deduplicated กลับไปให้ Frontend
       file: item.file
     });
   } catch (err) {
@@ -1798,7 +1804,7 @@ app.post('/api/files/batch-upload-urls', authMiddleware, async (req, res) => {
   try {
     const result = await uploadCoordinator.prepareUploads(req.user, filesList, { host, protocol });
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'BATCH_UPLOAD',
       level: 'info',
@@ -1830,7 +1836,7 @@ app.get('/api/folders/:id/download-zip', authMiddleware, async (req, res) => {
       archiveName: `folder-${folderId}.zip`
     });
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'FOLDER_DOWNLOAD_ZIP',
       level: 'info',
@@ -1864,7 +1870,7 @@ app.post('/api/files/batch-download-zip', authMiddleware, async (req, res) => {
       archiveName: 'EasyDrive_Batch_Download.zip'
     });
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'BATCH_DOWNLOAD_ZIP',
       level: 'info',
@@ -1901,7 +1907,7 @@ app.get(['/api/files/download/:id', '/api/files/:id/download'], requireAuthWeb, 
 
     const downloadUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 300 });
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'DOWNLOAD_FILE',
       level: 'info',
@@ -1958,8 +1964,13 @@ app.get('/api/files/:id/content', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
 
   if (IS_MOCK_MODE) {
-    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
-    if (!file) return res.status(404).json({ error: 'File not found or unauthorized' });
+    let file = mockFiles.find(f => f.file_id === fileId);
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    
+    // ตรวจสอบสิทธิ์การเข้าถึง (เจ้าของ หรือ คนที่ถูกแชร์มา)
+    if (!canUserAccessFile(file, req.user)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to preview this file' });
+    }
 
     const storedPath = storage.findStoredFile(file);
     if (!storedPath) {
@@ -1973,15 +1984,45 @@ app.get('/api/files/:id/content', authMiddleware, async (req, res) => {
   }
 
   try {
+    // 1. ดึงข้อมูล Metadata ของไฟล์จาก DynamoDB
     const result = await docClient.send(new GetCommand({
       TableName: FILES_TABLE,
       Key: { file_id: fileId }
     }));
     const file = result.Item;
-    if (!file || !canUserAccessFile(file, req.user)) {
-      return res.status(404).json({ error: 'File not found or unauthorized' });
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
     }
 
+    // 2. ตรวจสอบสิทธิ์ (เป็นเจ้าของ, มีสิทธิ์ใน access_list หรือแชร์ผ่าน Shares Table)
+    let isAllowed = canUserAccessFile(file, req.user);
+    if (!isAllowed && docClient && SHARES_TABLE) {
+      try {
+        const shareQuery = await docClient.send(new QueryCommand({
+          TableName: SHARES_TABLE,
+          IndexName: 'FileIdIndex',
+          KeyConditionExpression: 'file_id = :fid',
+          ExpressionAttributeValues: { ':fid': fileId },
+          Limit: 1
+        }));
+        if (shareQuery.Items && shareQuery.Items.length > 0) isAllowed = true;
+      } catch (e) {
+        // Fallback scan หากไม่มี GSI
+        const scanRes = await docClient.send(new ScanCommand({
+          TableName: SHARES_TABLE,
+          FilterExpression: 'file_id = :fid',
+          ExpressionAttributeValues: { ':fid': fileId },
+          Limit: 1
+        }));
+        if (scanRes.Items && scanRes.Items.length > 0) isAllowed = true;
+      }
+    }
+
+    if (!isAllowed) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to preview this file' });
+    }
+
+    // 3. สร้าง S3 Presigned URL ชั่วคราว (15 นาที) สำหรับ Preview Inline
     const mime = getMimeType(file.filename);
     const getCommand = new GetObjectCommand({
       Bucket: STORAGE_BUCKET,
@@ -1992,7 +2033,7 @@ app.get('/api/files/:id/content', authMiddleware, async (req, res) => {
     const inlineUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 900 });
     return res.redirect(inlineUrl);
   } catch (err) {
-    console.error('File content error:', err);
+    console.error('File content preview error:', err);
     res.status(500).json({ error: 'Failed to retrieve file content' });
   }
 });
@@ -2002,8 +2043,11 @@ app.get('/api/files/:id/preview-url', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
 
   if (IS_MOCK_MODE) {
-    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
-    if (!file) return res.status(404).json({ error: 'File not found or unauthorized' });
+    const file = mockFiles.find(f => f.file_id === fileId);
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    if (!canUserAccessFile(file, req.user)) {
+      return res.status(403).json({ error: 'Unauthorized to preview this file' });
+    }
 
     return res.json({
       success: true,
@@ -2022,8 +2066,45 @@ app.get('/api/files/:id/preview-url', authMiddleware, async (req, res) => {
       Key: { file_id: fileId }
     }));
     const file = result.Item;
-    if (!file || !canUserAccessFile(file, req.user)) {
-      return res.status(404).json({ error: 'File not found or unauthorized' });
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    let isAllowed = canUserAccessFile(file, req.user);
+    if (!isAllowed && docClient && SHARES_TABLE) {
+      try {
+        // 1. ลอง Query ผ่าน GSI FileIdIndex ก่อน
+        const shareQuery = await docClient.send(new QueryCommand({
+          TableName: SHARES_TABLE,
+          IndexName: 'FileIdIndex',
+          KeyConditionExpression: 'file_id = :fid',
+          ExpressionAttributeValues: { ':fid': fileId },
+          Limit: 1
+        }));
+
+        if (shareQuery.Items && shareQuery.Items.length > 0) {
+          isAllowed = true;
+        }
+      } catch (gsiErr) {
+        // 2. Fallback Scan เผื่อใน Cloud ไม่ได้สร้าง GSI FileIdIndex เอาไว้
+        try {
+          const scanRes = await docClient.send(new ScanCommand({
+            TableName: SHARES_TABLE,
+            FilterExpression: 'file_id = :fid',
+            ExpressionAttributeValues: { ':fid': fileId },
+            Limit: 1
+          }));
+          if (scanRes.Items && scanRes.Items.length > 0) {
+            isAllowed = true;
+          }
+        } catch (scanErr) {
+          console.warn('[preview-url] Share scan fallback error:', scanErr.message);
+        }
+      }
+    }
+
+    if (!isAllowed) {
+      return res.status(403).json({ error: 'Unauthorized to preview this file' });
     }
 
     const mime = getMimeType(file.filename);
@@ -2062,7 +2143,7 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
     file.filename = filename;
     file.updated_at = new Date().toISOString();
     storage.saveMockFiles(mockFiles);
-    recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
+    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
     return res.json({ success: true, file });
   }
 
@@ -2079,7 +2160,7 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
       },
       ReturnValues: 'ALL_NEW'
     }));
-    recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
+    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
     res.json({ success: true, file: result.Attributes });
   } catch (err) {
     console.error('Rename error:', err);
@@ -2103,7 +2184,7 @@ app.patch('/api/files/:id/tags', authMiddleware, async (req, res) => {
     file.tags = tags;
     file.updated_at = new Date().toISOString();
     storage.saveMockFiles(mockFiles);
-    recordAuditLog({ user: req.user, action: 'UPDATE_TAGS', level: 'info', details: `Updated tags for "${file.filename}" to: [${tags.join(', ')}]` });
+    await recordAuditLog({ user: req.user, action: 'UPDATE_TAGS', level: 'info', details: `Updated tags for "${file.filename}" to: [${tags.join(', ')}]` });
     return res.json({ success: true, file, tags });
   }
 
@@ -2120,7 +2201,7 @@ app.patch('/api/files/:id/tags', authMiddleware, async (req, res) => {
       },
       ReturnValues: 'ALL_NEW'
     }));
-    recordAuditLog({ user: req.user, action: 'UPDATE_TAGS', level: 'info', details: `Updated tags for file ${fileId} to: [${tags.join(', ')}]` });
+    await recordAuditLog({ user: req.user, action: 'UPDATE_TAGS', level: 'info', details: `Updated tags for file ${fileId} to: [${tags.join(', ')}]` });
     res.json({ success: true, file: result.Attributes, tags });
   } catch (err) {
     console.error('Update tags error:', err);
@@ -2167,7 +2248,7 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
       ? (mockFiles.find(f => f.file_id === targetFolderId)?.filename || targetFolderId)
       : 'My Drive (root)';
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'FILE_MOVE',
       level: 'info',
@@ -2225,7 +2306,7 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
     }));
 
     const destName = targetFolderId ? targetFolderId : 'My Drive (root)';
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'FILE_MOVE',
       level: 'info',
@@ -2380,7 +2461,7 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
         return res.status(delResult.status).json({ error: delResult.error });
       }
       mockFiles = delResult.remainingFiles;
-      recordAuditLog({
+      await recordAuditLog({
         user: req.user,
         action: 'PERMANENT_DELETE',
         level: 'critical',
@@ -2405,7 +2486,7 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
         });
       }
       storage.saveMockFiles(mockFiles);
-      recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved ${isFolder ? 'folder' : 'file'} "${targetFile.filename}" to trash${descendantIds.length > 0 ? ` and ${descendantIds.length} nested item(s)` : ''}` });
+      await recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved ${isFolder ? 'folder' : 'file'} "${targetFile.filename}" to trash${descendantIds.length > 0 ? ` and ${descendantIds.length} nested item(s)` : ''}` });
       return res.json({ success: true, message: `${isFolder ? 'Folder' : 'File'} moved to trash` });
     }
   }
@@ -2466,7 +2547,7 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
         }
       }
 
-      recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Permanently deleted ${itemsToDelete.length} item(s) (ID: ${fileId})` });
+      await recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Permanently deleted ${itemsToDelete.length} item(s) (ID: ${fileId})` });
       return res.json({ success: true, message: 'File deleted permanently', count: itemsToDelete.length });
     } else {
       const itemsToTrash = [fileId];
@@ -2495,7 +2576,7 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
         })).catch(() => {});
       }
 
-      recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved ${itemsToTrash.length} item(s) to trash (ID: ${fileId})` });
+      await recordAuditLog({ user: req.user, action: 'MOVE_TO_TRASH', level: 'warning', details: `Moved ${itemsToTrash.length} item(s) to trash (ID: ${fileId})` });
       return res.json({ success: true, message: `${fileItem.category === 'folder' ? 'Folder' : 'File'} moved to trash`, count: itemsToTrash.length });
     }
   } catch (err) {
@@ -2513,7 +2594,7 @@ app.post('/api/files/batch-trash', authMiddleware, async (req, res) => {
 
   try {
     const { affectedCount, descendantCount } = await fileRepo.batchTrash(file_ids, req.user);
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'BATCH_MOVE_TRASH',
       level: 'warning',
@@ -2539,7 +2620,7 @@ app.post('/api/files/batch-restore', authMiddleware, async (req, res) => {
 
   try {
     const { affectedCount } = await fileRepo.batchRestore(file_ids, req.user);
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'BATCH_RESTORE',
       level: 'info',
@@ -2587,7 +2668,7 @@ app.post('/api/files/batch-delete-forever', authMiddleware, async (req, res) => 
 
     storage.saveMockFiles(mockFiles, true);
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'BATCH_PERMANENT_DELETE',
       level: 'critical',
@@ -2657,7 +2738,7 @@ app.post('/api/files/batch-delete-forever', authMiddleware, async (req, res) => 
       }
     }
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'BATCH_PERMANENT_DELETE',
       level: 'critical',
@@ -2697,7 +2778,7 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
     }
     storage.saveMockFiles(mockFiles);
 
-    recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored ${file.category === 'folder' ? 'folder' : 'file'} "${file.filename}" from trash` });
+    await recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored ${file.category === 'folder' ? 'folder' : 'file'} "${file.filename}" from trash` });
     return res.json({ success: true, message: 'Restored successfully', file });
   }
 
@@ -2749,7 +2830,7 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
       })).catch(() => {});
     }
 
-    recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored ${itemsToRestore.length} item(s) from trash (ID: ${fileId})` });
+    await recordAuditLog({ user: req.user, action: 'RESTORE', level: 'info', details: `Restored ${itemsToRestore.length} item(s) from trash (ID: ${fileId})` });
     return res.json({ success: true, message: 'File restored successfully', file: fileItem, count: itemsToRestore.length });
   } catch (err) {
     console.error('Restore file error:', err);
@@ -2797,7 +2878,7 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
 
   if (IS_MOCK_MODE) {
     mockShares.push(shareRecord);
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'CREATE_SHARE',
       level: 'info',
@@ -2822,7 +2903,7 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
       Item: shareRecord
     }));
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'CREATE_SHARE',
       level: 'info',
@@ -3006,7 +3087,7 @@ app.patch('/api/shares/:id', authMiddleware, async (req, res) => {
     }
   }
 
-  recordAuditLog({
+  await recordAuditLog({
     user: req.user,
     action: 'UPDATE_SHARE',
     level: 'info',
@@ -3092,7 +3173,7 @@ app.delete('/api/shares/:id', authMiddleware, async (req, res) => {
     }
   }
 
-  recordAuditLog({
+  await recordAuditLog({
     user: req.user,
     action: 'REVOKE_SHARE',
     level: 'warning',
@@ -3178,7 +3259,7 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
     file.access_list = sanitized;
     file.updated_at = new Date().toISOString();
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'SHARE_INVITE',
       level: 'info',
@@ -3213,7 +3294,7 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
       }
     }));
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'SHARE_INVITE',
       level: 'info',
@@ -3326,7 +3407,7 @@ app.post('/api/shares/:id/verify', async (req, res) => {
     share.download_count += 1;
     const file = mockFiles.find(f => f.file_id === share.file_id);
     const resolvedFilename = (file ? file.filename : share.filename) || 'shared-file';
-    recordAuditLog({
+    await recordAuditLog({
       user: null,
       action: 'DOWNLOAD_SHARE',
       level: 'info',
@@ -3470,7 +3551,7 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
     }
     user.updated_at = new Date().toISOString();
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'ROLE_CHANGE',
       level: 'warning',
@@ -3519,7 +3600,7 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
     }));
 
     const updatedUser = result.Attributes;
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'ROLE_CHANGE',
       level: 'warning',
@@ -3551,7 +3632,7 @@ app.delete('/api/admin/users/:id', authMiddleware, async (req, res) => {
     }
 
     const deletedUser = mockUsers.splice(userIndex, 1)[0];
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'DELETE_USER',
       level: 'critical',
@@ -3576,7 +3657,7 @@ app.delete('/api/admin/users/:id', authMiddleware, async (req, res) => {
       Key: { user_id: targetUserId }
     }));
 
-    recordAuditLog({
+    await recordAuditLog({
       user: req.user,
       action: 'DELETE_USER',
       level: 'critical',

@@ -1,32 +1,19 @@
 const path = require('path');
-try {
-  require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
-} catch (_) {
-  // Ignored in AWS Lambda environment where process.env is injected by runtime
-}
-
-const crypto = require('crypto');
-const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { 
   DynamoDBDocumentClient, 
-  UpdateCommand, 
-  QueryCommand, 
-  GetCommand 
+  UpdateCommand 
 } = require('@aws-sdk/lib-dynamodb');
 
 const REGION = process.env.AWS_REGION;
 const FILES_TABLE = process.env.FILES_TABLE;
 const USERS_TABLE = process.env.USERS_TABLE;
 
-const s3 = new S3Client({ region: REGION });
 const ddbClient = new DynamoDBClient({ region: REGION });
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 
-// Category and Auto-Tag Extractor
 function getCategoryAndTags(filename) {
   const ext = filename.split('.').pop().toLowerCase();
-  
   const categories = {
     image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'],
     document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'],
@@ -41,145 +28,67 @@ function getCategoryAndTags(filename) {
       return { category: cat, tags: [cat, ext] };
     }
   }
-
   return { category: 'other', tags: [ext || 'unknown'] };
 }
 
 exports.handler = async (event) => {
-  console.log('[EasyDrive Worker] Processing S3 Event:', JSON.stringify(event, null, 2));
-
   for (const record of event.Records || []) {
-    const bucket = record.s3.bucket.name;
     const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
     const size = record.s3.object.size;
 
-    console.log(`[Worker] New upload detected: ${key} (${size} bytes) from bucket: ${bucket}`);
+    // ข้ามถ้าไม่ใช่ไฟล์ในโฟลเดอร์ uploads
+    if (!key.startsWith('uploads/')) continue;
 
     try {
-      // 1. Parse Key Structure: uploads/{owner_id}/.../{file_id}/{filename}
       const parts = key.split('/');
-      let ownerId = 'unknown';
-      let fileId = null;
-      let filename = 'unknown';
+      let ownerId = parts[1];
+      let fileId = parts.length >= 4 ? parts[parts.length - 2] : null;
+      let filename = parts[parts.length - 1];
 
-      if (parts.length >= 4 && parts[0] === 'uploads') {
-        ownerId = parts[1];
-        // Penultimate segment is always file_id, last segment is filename
-        fileId = parts[parts.length - 2];
-        filename = parts[parts.length - 1];
-      } else {
-        filename = parts.pop();
-        fileId = parts.pop() || `file-${Date.now()}`;
-      }
+      if (!fileId) continue;
 
-      // 2. Stream S3 object and calculate SHA-256 Hash (Zero-Knowledge / Ephemeral)
-      const getObj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-      const hash = crypto.createHash('sha256');
-
-      for await (const chunk of getObj.Body) {
-        hash.update(chunk);
-      }
-      const fileHash = hash.digest('hex');
-      console.log(`[Worker] SHA-256 Hash: ${fileHash}`);
-
-      // 3. Extract Category and Tags based on extension
       const { category, tags } = getCategoryAndTags(filename);
-      console.log(`[Worker] Category: ${category}, Tags:`, tags);
 
-      // 4. Check for duplicate files in the system using HashIndex
-      let isDuplicate = false;
-      let duplicateOf = null;
-
-      try {
-        const hashQuery = await docClient.send(new QueryCommand({
-          TableName: FILES_TABLE,
-          IndexName: 'HashIndex',
-          KeyConditionExpression: 'file_hash = :h',
-          ExpressionAttributeValues: { ':h': fileHash },
-          Limit: 1
-        }));
-
-        if (hashQuery.Items && hashQuery.Items.length > 0) {
-          isDuplicate = true;
-          duplicateOf = hashQuery.Items[0].file_id;
-          console.log(`[Worker] Duplicate detected! Matches existing file: ${duplicateOf}`);
-        }
-      } catch (hashErr) {
-        console.warn('[Worker] HashIndex query warning (table may not be indexed yet):', hashErr.message);
-      }
-
-      // 5. Update DynamoDB easydrive-files record
+      // 1. อัปเดตสถานะไฟล์ใน FILES_TABLE เป็น active ทันที (ไม่ต้องดึงไฟล์มาคำนวณ Hash ซ้ำ)
       await docClient.send(new UpdateCommand({
         TableName: FILES_TABLE,
         Key: { file_id: fileId },
-        UpdateExpression: `SET 
-          file_hash = :h,
-          category = :cat,
-          tags = :t,
-          #sz = :s,
-          #st = :status,
-          is_duplicate = :dup,
-          duplicate_of = :dupOf,
-          updated_at = :up`,
+        UpdateExpression: 'SET #st = :status, category = :cat, tags = :t, #sz = :s, updated_at = :up',
         ExpressionAttributeNames: {
-          '#sz': 'size',
-          '#st': 'status'
+          '#st': 'status',
+          '#sz': 'size'
         },
         ExpressionAttributeValues: {
-          ':h': fileHash,
+          ':status': 'active',
           ':cat': category,
           ':t': tags,
           ':s': size,
-          ':status': 'active',
-          ':dup': isDuplicate,
-          ':dupOf': duplicateOf,
           ':up': new Date().toISOString()
         }
-      }));
-      console.log(`[Worker] Updated file metadata in DynamoDB for ${fileId}`);
+      })).catch(() => {});
 
-      // 6. Update User Storage Quota and Category Breakdown in easydrive-users
+      // 2. อัปเดต USERS_TABLE แบบ Atomic คำสั่งเดียวจบ (ไม่วนลูปซ้ำ)
       if (ownerId && ownerId !== 'unknown') {
-        try {
-          // Pre-initialize breakdown map to prevent DynamoDB path ValidationException
-          await docClient.send(new UpdateCommand({
-            TableName: USERS_TABLE,
-            Key: { user_id: ownerId },
-            UpdateExpression: `SET 
-              totalUsed = if_not_exists(totalUsed, :zero),
-              breakdown = if_not_exists(breakdown, :emptyBreakdown),
-              updated_at = :up`,
-            ExpressionAttributeValues: {
-              ':zero': 0,
-              ':emptyBreakdown': { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 },
-              ':up': new Date().toISOString()
-            }
-          })).catch(() => {});
-
-          await docClient.send(new UpdateCommand({
-            TableName: USERS_TABLE,
-            Key: { user_id: ownerId },
-            UpdateExpression: `SET 
-              totalUsed = if_not_exists(totalUsed, :zero) + :s,
-              breakdown.#cat = if_not_exists(breakdown.#cat, :zero) + :s,
-              updated_at = :up`,
-            ExpressionAttributeNames: {
-              '#cat': category
-            },
-            ExpressionAttributeValues: {
-              ':s': size,
-              ':zero': 0,
-              ':up': new Date().toISOString()
-            }
-          }));
-          console.log(`[Worker] Updated storage breakdown for user ${ownerId}`);
-        } catch (userErr) {
-          console.warn(`[Worker] User storage update note:`, userErr.message);
-        }
+        await docClient.send(new UpdateCommand({
+          TableName: USERS_TABLE,
+          Key: { user_id: ownerId },
+          UpdateExpression: `SET 
+            totalUsed = if_not_exists(totalUsed, :zero) + :s,
+            breakdown.#cat = if_not_exists(breakdown.#cat, :zero) + :s,
+            updated_at = :up`,
+          ExpressionAttributeNames: {
+            '#cat': category
+          },
+          ExpressionAttributeValues: {
+            ':s': size,
+            ':zero': 0,
+            ':up': new Date().toISOString()
+          }
+        })).catch(() => {});
       }
 
     } catch (err) {
-      console.error(`[Worker] Error processing S3 object ${key}:`, err);
+      console.error(`[Worker Quick Fail] ${key}:`, err.message);
     }
   }
 

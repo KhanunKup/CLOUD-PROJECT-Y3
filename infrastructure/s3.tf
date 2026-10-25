@@ -56,13 +56,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "easydrive-storage-lifecycle" {
 }
 
 # S3 Event Notification to trigger Worker Lambda on file upload
-resource "aws_s3_bucket_notification" "easydrive-storage-notification" {
-  bucket = data.aws_s3_bucket.easydrive-storage.id
-
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.easydrive-worker.arn
-    events              = ["s3:ObjectCreated:*"]
-  }
-
-  depends_on = [aws_lambda_permission.allow_s3_to_call_worker]
-}
+#resource "aws_s3_bucket_notification" "easydrive-storage-notification" {
+#  bucket = data.aws_s3_bucket.easydrive-storage.id
+#
+#  lambda_function {
+#    lambda_function_arn = aws_lambda_function.easydrive-worker.arn
+#    events              = ["s3:ObjectCreated:*"]
+#  }
+#
+#  depends_on = [aws_lambda_permission.allow_s3_to_call_worker]
+#}
