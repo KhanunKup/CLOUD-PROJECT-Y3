@@ -4,7 +4,7 @@ resource "random_password" "session_secret" {
 }
 
 module "storage" {
-  source      = "./modules/storage"
+  source      = "./modules/storage2"
   bucket_name = "${var.bucket_prefix}-storage"
 }
 
