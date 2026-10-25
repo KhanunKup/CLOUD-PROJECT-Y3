@@ -650,7 +650,7 @@ app.get('/', (req, res) => {
 app.get('/signin', (req, res) => {
   const user = getSessionUser(req);
   if (user) return res.redirect('/drive');
-  res.render('pages/login', { error: null });
+  res.render('pages/login', { error: null, showDemoLogin: IS_MOCK_MODE });
 });
 
 app.get('/signup', (req, res) => {
@@ -671,7 +671,7 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
 
   if (!identifier || !password) {
     if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
-      return res.render('pages/login', { error: 'Please enter username/email and password' });
+      return res.render('pages/login', { error: 'Please enter username/email and password', showDemoLogin: IS_MOCK_MODE });
     }
     return res.status(400).json({ error: 'Username/Email and password are required' });
   }
@@ -679,7 +679,7 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
   const authRes = await authService.authenticateUser({ identifier, password });
   if (!authRes.success) {
     if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
-      return res.render('pages/login', { error: authRes.error || 'Invalid username/email or password' });
+      return res.render('pages/login', { error: authRes.error || 'Invalid username/email or password', showDemoLogin: IS_MOCK_MODE });
     }
     return res.status(401).json({ error: authRes.error || 'Invalid username/email or password' });
   }
@@ -983,7 +983,7 @@ app.get('/drive', requireAuthWeb, (req, res) => {
 
 function getSharedWithMeForUser(user) {
   const userEmail = (user.email || '').toLowerCase();
-  const defaultSharedWithMe = [
+  const defaultSharedWithMe = IS_MOCK_MODE ? [
     {
       id: 'demo-shared-doc',
       shareId: 'demo-share-doc',
@@ -1004,7 +1004,7 @@ function getSharedWithMeForUser(user) {
       remainingHours: 120,
       accessList: [{ name: 'Anan', permission: 'can view', timeRemaining: '5 days' }]
     }
-  ];
+  ] : [];
 
   const invitedFiles = mockFiles.filter(f => {
     if (f.status === 'trash') return false;
@@ -2158,7 +2158,7 @@ app.get('/api/files/:id/download-url', authMiddleware, async (req, res) => {
     return res.json({
       success: true,
       filename: file.filename,
-      downloadUrl: `http://localhost:3000/mock-download/${file.filename}`
+      downloadUrl: `/mock-download/${encodeURIComponent(file.filename)}`
     });
   }
 
@@ -3264,7 +3264,7 @@ app.post('/api/shares/:id/verify', async (req, res) => {
     return res.json({
       success: true,
       filename: resolvedFilename,
-      downloadUrl: `http://localhost:3000/mock-download/${encodeURIComponent(resolvedFilename)}`,
+      downloadUrl: `/mock-download/${encodeURIComponent(resolvedFilename)}`,
       downloadsRemaining: share.max_downloads > 0 ? (share.max_downloads - share.download_count) : 'unlimited'
     });
   }

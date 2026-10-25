@@ -70,7 +70,8 @@
                         </button>
                     </form>
 
-                    <!-- 1-Click Quick Demo Login Section -->
+                    <% if (typeof showDemoLogin !== 'undefined' && showDemoLogin) { %>
+                    <!-- 1-Click Quick Demo Login Section (Local Dev Mode Only) -->
                     <div class="demo-login-section" style="margin-top: 20px; padding-top: 14px; border-top: 1px dashed #d1c7b7; text-align: center;">
                         <p style="font-size: 12px; color: #736b5e; margin-bottom: 8px; font-weight: 600;">⚡ Quick 1-Click Demo Login (ทดสอบระบบทันที):</p>
                         <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
@@ -78,6 +79,7 @@
                             <button type="button" class="quick-demo-btn" data-user="user@kmitl.ac.th" data-pass="user123" style="background: #846145; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 5px;">👤 User (Morty)</button>
                         </div>
                     </div>
+                    <% } %>
 
                     <div class="signup-text" style="margin-top: 16px;">
                         Don't have an account?
@@ -100,6 +102,7 @@
             </section>
         </div>
     </main>
+    <% if (typeof showDemoLogin !== 'undefined' && showDemoLogin) { %>
     <script>
     document.querySelectorAll('.quick-demo-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -113,5 +116,6 @@
         });
     });
     </script>
+    <% } %>
 </body>
 </html>
