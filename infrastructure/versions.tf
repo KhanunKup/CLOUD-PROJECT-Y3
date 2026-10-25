@@ -17,5 +17,5 @@ terraform {
   }
 
   # Partial configuration: bucket/key/region come from backend.hcl (written by scripts/bootstrap.sh)
-  backend "s3" {}
+  # backend "s3" {}
 }

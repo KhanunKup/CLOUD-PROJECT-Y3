@@ -376,7 +376,7 @@ class FileRepository {
           } catch (_) {}
         }
 
-        // 2. Query active files belonging to this user to calculate real storage
+        // 2. Query ALL files belonging to this user (รวมทั้ง active และ trash) เพื่อคำนวณ Storage จริง
         const filesRes = await this.docClient.send(new QueryCommand({
           TableName: this.filesTable,
           IndexName: 'OwnerIndex',
@@ -391,11 +391,11 @@ class FileRepository {
           }
         })).catch(() => ({ Items: [] }));
 
-        const activeFiles = filesRes.Items || [];
+        const allUserFiles = filesRes.Items || [];
         const breakdown = { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 };
         let totalUsed = 0;
 
-        for (const f of activeFiles) {
+        for (const f of allUserFiles) {
           if (f.category !== 'folder') {
             const sz = Number(f.size) || 0;
             totalUsed += sz;
@@ -439,9 +439,9 @@ class FileRepository {
       }
     }
 
-    // Mock Mode fallback
+    // Mock Mode fallback: ไม่ตัดไฟล์สถานะ trash ออกแล้ว
     const files = this.storage ? this.storage.loadMockFiles() : [];
-    const userFiles = files.filter(f => f.status !== 'trash' && (f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user')));
+    const userFiles = files.filter(f => f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user'));
     const breakdown = { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 };
     let totalUsed = 0;
     for (const f of userFiles) {

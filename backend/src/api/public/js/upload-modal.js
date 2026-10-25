@@ -9,6 +9,20 @@ const formatBytes = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
+// ฟังก์ชันคำนวณ SHA-256 ของไฟล์
+async function calculateFileHash(file) {
+    if (!file || !window.crypto || !window.crypto.subtle) return null;
+    try {
+        const buffer = await file.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (err) {
+        console.warn('Could not calculate file hash:', err);
+        return null;
+    }
+}
+
 // ตรวจสอบชื่อโฟลเดอร์สำหรับพัฒนาโปรเจกต์ เช่น node_modules, .git
 function isDevDirectoryName(name) {
     if (!name || typeof name !== 'string') return false;
@@ -198,6 +212,7 @@ function readDirectoryEntry(entry, pathOrOptions = '', maybeOptions = {}) {
 
     return new Promise(async (resolve) => {
         if (!entry) return resolve({ rootFolderName: 'New Folder', files: [], totalSize: 0, fileCount: 0, skippedDevFolders: [] });
+
         const rootFolderName = entry.name || 'New Folder';
         const files = [];
         let totalBytes = 0;
@@ -437,12 +452,13 @@ async function uploadFolderRecursive({
                 const contentType = itemFile.type || (itemFile.file && itemFile.file.type) || 'application/octet-stream';
 
                 let uploadUrl;
-                let fileId = null;
+                let isDeduplicated = false;
                 const cached = urlMap.get(index);
                 if (cached && cached.uploadUrl) {
                     uploadUrl = cached.uploadUrl;
-                    fileId = cached.file_id || null;
+                    isDeduplicated = Boolean(cached.deduplicated);
                 } else {
+                    const fileHash = itemFile.file ? await calculateFileHash(itemFile.file) : null;
                     const urlRes = await safeFetchWithRetry('/api/files/upload-url', { apiFetch,
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -450,7 +466,8 @@ async function uploadFolderRecursive({
                             filename: filename,
                             size: fileSize,
                             contentType: contentType,
-                            folder_id: targetFolderId
+                            folder_id: targetFolderId,
+                            file_hash: fileHash
                         })
                     });
                     const urlData = await urlRes.json();
@@ -458,21 +475,21 @@ async function uploadFolderRecursive({
                         throw new Error(urlData.error || `Failed to get upload URL for "${filename}"`);
                     }
                     uploadUrl = urlData.uploadUrl;
-                    fileId = urlData.file_id;
+                    isDeduplicated = Boolean(urlData.deduplicated);
                 }
 
-                const uploadBody = itemFile.file || (typeof Blob !== 'undefined' ? new Blob(['EasyDrive Mock File Content'], { type: contentType }) : 'EasyDrive Mock File Content');
+                if (!isDeduplicated && uploadUrl) {
+                    const uploadBody = itemFile.file || (typeof Blob !== 'undefined' ? new Blob(['EasyDrive Mock File Content'], { type: contentType }) : 'EasyDrive Mock File Content');
 
-                const putRes = await safeFetchWithRetry(uploadUrl, { apiFetch,
-                    method: 'PUT',
-                    headers: { 'Content-Type': contentType },
-                    body: uploadBody
-                });
-                if (!putRes.ok) {
-                    throw new Error(`Failed to upload content for "${filename}"`);
+                    const putRes = await safeFetchWithRetry(uploadUrl, { apiFetch,
+                        method: 'PUT',
+                        headers: { 'Content-Type': contentType },
+                        body: uploadBody
+                    });
+                    if (!putRes.ok) {
+                        throw new Error(`Failed to upload content for "${filename}"`);
+                    }
                 }
-                if (fileId) uploadedIds.push(fileId);
-
                 completedCount++;
                 onProgress({
                     completed: completedCount,
@@ -499,24 +516,6 @@ async function uploadFolderRecursive({
 
     const workers = Array.from({ length: poolSize }, (_, id) => worker(id + 1));
     await Promise.all(workers);
-
-    // ยืนยันไฟล์ที่ PUT สำเร็จเป็นชุด (สูงสุด 100 ต่อคำขอ) เพื่อเปลี่ยน pending -> active
-    for (let i = 0; i < uploadedIds.length; i += 100) {
-        const chunk = uploadedIds.slice(i, i + 100);
-        try {
-            const completeRes = await safeFetchWithRetry('/api/files/batch-complete', { apiFetch,
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ file_ids: chunk })
-            });
-            const completeData = await completeRes.json().catch(() => ({}));
-            if (!completeRes.ok) throw new Error(completeData.error || 'batch-complete failed');
-            (completeData.failed || []).forEach((id) => errors.push({ file: id, error: 'Upload could not be confirmed' }));
-        } catch (err) {
-            console.error('Error confirming uploads:', err);
-            chunk.forEach((id) => errors.push({ file: id, error: err.message }));
-        }
-    }
 
     if (errors.length > 0 && completedCount === 0) {
         throw new Error(`Failed to upload files: ${errors[0].error}`);
@@ -789,15 +788,28 @@ async function processDroppedItems(dataTransfer, options = {}) {
     const readEntryFn = customReadEntry || (typeof readDirectoryEntry !== 'undefined' ? readDirectoryEntry : null);
 
     if (dataTransfer.items && dataTransfer.items.length > 0) {
+        // สำคัญมาก: ต้องดึง Entry และ File ออกจาก dataTransfer ทันทีแบบ Synchronous 
+        // ก่อนที่จะใช้ await มิฉะนั้นเบราว์เซอร์จะล้างค่า dataTransfer ทิ้ง!
+        const capturedItems = [];
         for (let i = 0; i < dataTransfer.items.length; i++) {
             const item = dataTransfer.items[i];
             if (item.kind !== 'file') continue;
 
-            // 1. ลองใช้ getAsFileSystemHandle() ของเบราว์เซอร์ยุคใหม่ก่อน (มี Parallel Streaming Batching)
+            capturedItems.push({
+                entry: typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null,
+                file: typeof item.getAsFile === 'function' ? item.getAsFile() : null,
+                handlePromise: typeof item.getAsFileSystemHandle === 'function' ? item.getAsFileSystemHandle().catch(() => null) : null
+            });
+        }
+
+        // วนลูปประมวลผลจากรายการที่เก็บไว้แล้ว
+        for (const captured of capturedItems) {
             let handled = false;
-            if (typeof item.getAsFileSystemHandle === 'function' && traverseFn) {
+
+            // 1. ลองใช้ FileSystemHandle ก่อน (ถ้ามีและเป็นโฟลเดอร์)
+            if (captured.handlePromise && traverseFn) {
                 try {
-                    const handle = await item.getAsFileSystemHandle();
+                    const handle = await captured.handlePromise;
                     if (handle && handle.kind === 'directory') {
                         onScanningState(true, { folderName: handle.name });
                         try {
@@ -817,8 +829,8 @@ async function processDroppedItems(dataTransfer, options = {}) {
             }
             if (handled) continue;
 
-            // 2. Fallback ไปยัง webkitGetAsEntry()
-            const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+            // 2. ใช้ webkitGetAsEntry เป็นตัวหลัก/Fallback
+            const entry = captured.entry;
             if (entry) {
                 if (entry.isDirectory && readEntryFn) {
                     onScanningState(true, { folderName: entry.name });
@@ -832,12 +844,15 @@ async function processDroppedItems(dataTransfer, options = {}) {
                         onScanningState(false);
                     }
                 } else if (entry.isFile) {
-                    const file = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
-                    onFileScanned(file, file ? file.name : entry.name);
+                    if (captured.file) {
+                        onFileScanned(captured.file, captured.file.name);
+                    } else {
+                        const f = await new Promise((res) => entry.file(res, () => res(null)));
+                        if (f) onFileScanned(f, f.name);
+                    }
                 }
-            } else if (typeof item.getAsFile === 'function') {
-                const file = item.getAsFile();
-                if (file) onFileScanned(file, file.name);
+            } else if (captured.file) {
+                onFileScanned(captured.file, captured.file.name);
             }
         }
     } else if (dataTransfer.files && dataTransfer.files.length > 0) {
@@ -846,6 +861,7 @@ async function processDroppedItems(dataTransfer, options = {}) {
         });
     }
 }
+
 
 // ส่งออก Helper functions เพื่อการทดสอบ
 if (typeof window !== 'undefined') {
@@ -1263,7 +1279,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             e.stopPropagation();
             uploadDropzone.classList.remove('dragover');
-
+            
             const skipDevFolders = uploadSkipDevFoldersCheckbox ? uploadSkipDevFoldersCheckbox.checked : true;
             await processDroppedItems(e.dataTransfer, {
                 skipDevFolders,
@@ -1275,6 +1291,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 readDirectoryEntry
             });
             renderQueue();
+        });
+        // เพิ่ม: ลากไฟล์จากคอมพิวเตอร์มาวางที่ไหนก็ได้บนหน้าเว็บเพื่อเปิด Upload Modal อัตโนมัติ
+        window.addEventListener('dragover', (e) => {
+            // เช็คว่าเป็นการลากไฟล์มาจากนอกเบราว์เซอร์ (ไม่ใช่การลากแถวตารางใน drag-move.js)
+            const isExternalFileDrag = e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files') && !document.querySelector('.dragging-active');
+            if (isExternalFileDrag) {
+                e.preventDefault();
+                if (uploadModal && uploadModal.style.display !== 'flex') {
+                    uploadModal.style.display = 'flex';
+                }
+            }
+        });
+
+        window.addEventListener('drop', async (e) => {
+            const isExternalFileDrag = e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files') && !document.querySelector('.dragging-active');
+            // ถ้าปล่อยเมาส์นอกกรอบ uploadDropzone แต่เปิด Modal อยู่ ให้รับไฟล์เข้าคิวด้วย
+            if (isExternalFileDrag && !e.target.closest('#uploadDropzone')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (uploadModal && uploadModal.style.display !== 'flex') {
+                    uploadModal.style.display = 'flex';
+                }
+                const skipDevFolders = uploadSkipDevFoldersCheckbox ? uploadSkipDevFoldersCheckbox.checked : true;
+                await processDroppedItems(e.dataTransfer, {
+                    skipDevFolders,
+                    onScanningState: (state, stats) => setScanningState(state, stats),
+                    onProgress: (p) => updateScanningProgress(p),
+                    onFolderScanned: (folderData) => addFolderItemToQueue(folderData),
+                    onFileScanned: (file, name) => addItemToQueue(name, 'file', file),
+                    traverseDirectoryHandle,
+                    readDirectoryEntry
+                });
+                renderQueue();
+            }
         });
     }
 
@@ -1363,9 +1413,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const isFolder = item.type === 'folder';
                     let fileId = `file-${Date.now()}`;
                     let uploadedFileRecord = null;
+                    let urlData = null; // ประกาศไว้ระดับลูป
 
                     if (isFolder) {
-                        // 1. กรณีเป็น Folder: เรียก uploadFolderRecursive สร้างโฟลเดอร์หลัก โฟลเดอร์ย่อย และอัปโหลดไฟล์ภายในทั้งหมด
+                        // 1. กรณีเป็น Folder
                         const shouldSkipDev = uploadSkipDevFoldersCheckbox ? uploadSkipDevFoldersCheckbox.checked : true;
                         applyDevFolderFilter(item, shouldSkipDev);
                         if (progressText) progressText.textContent = `Preparing folder: ${item.name}...`;
@@ -1392,10 +1443,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             updateOverallProgress(item.name);
                         }
                     } else {
-                        // 2. กรณีเป็นไฟล์: ขอ Presigned Upload URL
+                        // 2. กรณีเป็นไฟล์เดี่ยว
                         updateOverallProgress(item.name);
                         const fileSize = item.file ? item.file.size : 1024;
                         const contentType = item.file ? (item.file.type || 'application/octet-stream') : 'application/octet-stream';
+                        const fileHash = item.file ? await calculateFileHash(item.file) : null;
 
                         const urlRes = await fetch('/api/files/upload-url', {
                             method: 'POST',
@@ -1404,39 +1456,41 @@ document.addEventListener('DOMContentLoaded', () => {
                                 filename: item.name,
                                 size: fileSize,
                                 contentType: contentType,
-                                folder_id: currentFolderId
+                                folder_id: currentFolderId,
+                                file_hash: fileHash
                             })
                         });
 
-                        const urlData = await urlRes.json();
+                        // สำคัญ: กำหนดค่าลง urlData ตรงๆ ห้ามใส่ const urlData = ...
+                        urlData = await urlRes.json();
                         if (!urlRes.ok || !urlData.success) throw new Error(urlData.error || 'Failed to get upload URL');
 
                         fileId = urlData.file_id;
                         uploadedFileRecord = urlData.file;
-                        const uploadUrl = urlData.uploadUrl;
 
-                        // 3. PUT binary data ไปยัง S3 / Mock Storage
-                        const uploadBody = item.file || new Blob(['EasyDrive Mock File Content'], { type: contentType });
-                        const putRes = await fetch(uploadUrl, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': contentType },
-                            body: uploadBody
-                        });
-
-                        if (!putRes.ok) throw new Error('Failed to upload file content to storage');
-
-                        // ยืนยันการอัปโหลด: pending -> active (server ตรวจขนาดจริงจาก S3)
-                        const completeRes = await fetch('/api/files/batch-complete', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ file_ids: [fileId] })
-                        });
-                        const completeData = await completeRes.json().catch(() => ({}));
-                        if (!completeRes.ok || !(completeData.completed || []).includes(fileId)) {
-                            throw new Error('Upload could not be confirmed. Please try again.');
+                        // ==========================================
+                        // จัดการกรณีตรวจพบไฟล์ซ้ำ (Deduplicated)
+                        // ==========================================
+                        if (urlData.deduplicated) {
+                            const resolvedName = urlData.filename || (urlData.file && urlData.file.filename) || item.name;
+                            if (window.showToast) {
+                                window.showToast(`ตรวจพบไฟล์ซ้ำ: เพิ่มเป็น "${resolvedName}" โดยใช้พื้นที่เดิม`, 'info');
+                            }
                         }
+
+                        // 3. PUT binary data ไปยัง S3 / Mock Storage (เฉพาะไฟล์ใหม่ที่ไม่ซ้ำ)
+                        if (!urlData.deduplicated && urlData.uploadUrl) {
+                            const uploadBody = item.file || new Blob(['EasyDrive Mock File Content'], { type: contentType });
+                            const putRes = await fetch(urlData.uploadUrl, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': contentType },
+                                body: uploadBody
+                            });
+                            if (!putRes.ok) throw new Error('Failed to upload file content to storage');
+                        }
+
                         overallCompleted++;
-                        updateOverallProgress(item.name);
+                        updateOverallProgress(urlData.filename || item.name);
                     }
 
                     successCount++;
@@ -1449,12 +1503,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         } catch (e) {}
                     }
 
-                    // 4. แทรกแถวลงในหน้าจอ (Realtime DOM Update)
+                    // 4. แทรกแถวลงในหน้าจอ (สร้างเฉพาะกรณีที่ไม่ใช่ไฟล์ซ้ำเท่านั้น)
                     if (fileContainer) {
                         const emptyNotice = fileContainer.querySelector('.empty-state, p');
                         if (emptyNotice) emptyNotice.remove();
 
-                        const safeName = item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        const displayName = urlData?.filename || urlData?.file?.filename || item.name;
+                        const safeName = displayName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
                         const iconSvg = isFolder
                             ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1542,7 +1597,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                if (window.showToast) {
+                if (successCount > 0 && window.showToast) {
                     window.showToast(`Uploaded ${successCount} item(s) successfully!`, 'success');
                 }
 
@@ -1602,54 +1657,3 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 }
-
-
-    // Page-level drag and drop file upload overlay across whole drive
-    (function initGlobalPageDragDrop() {
-        let dragCounter = 0;
-        const overlay = document.createElement('div');
-        overlay.id = 'globalDragDropOverlay';
-        overlay.style.cssText = 'display: none; position: fixed; inset: 0; background: rgba(58, 38, 26, 0.75); backdrop-filter: blur(4px); z-index: 99999; justify-content: center; align-items: center; color: #FFF0DC; pointer-events: none; transition: opacity 0.2s ease;';
-        overlay.innerHTML = '<div style="background: #44362a; border: 2px dashed #e8c89b; border-radius: 20px; padding: 40px 60px; text-align: center; box-shadow: 0 12px 36px rgba(0,0,0,0.4);"><i class="fas fa-cloud-arrow-up" style="font-size: 54px; color: #eedebd; margin-bottom: 16px;"></i><h3 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 700;">Drop files to upload</h3><p style="margin: 0; font-size: 14px; opacity: 0.85;">Release anywhere to upload files to this folder</p></div>';
-        document.body.appendChild(overlay);
-
-        window.addEventListener('dragenter', (e) => {
-            if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
-                e.preventDefault();
-                dragCounter++;
-                overlay.style.display = 'flex';
-            }
-        });
-
-        window.addEventListener('dragover', (e) => {
-            if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'copy';
-                overlay.style.display = 'flex';
-            }
-        });
-
-        window.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            dragCounter = Math.max(0, dragCounter - 1);
-            if (dragCounter === 0) {
-                overlay.style.display = 'none';
-            }
-        });
-
-        window.addEventListener('drop', async (e) => {
-            if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
-                e.preventDefault();
-                e.stopPropagation();
-                dragCounter = 0;
-                overlay.style.display = 'none';
-
-                const urlParams = new URLSearchParams(window.location.search);
-                const currentFolderId = urlParams.get('folder') || null;
-
-                if (typeof processDroppedItems === 'function') {
-                    await processDroppedItems(e.dataTransfer, { parentId: currentFolderId });
-                }
-            }
-        });
-    })();

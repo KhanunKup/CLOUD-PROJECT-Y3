@@ -33,6 +33,7 @@ class UploadCoordinator {
     s3Client = null,
     storageBucket = '',
     filesTable = '',
+    usersTable = '',
     docClient = null,
     storageService = null,
     mockStorage = null,
@@ -42,6 +43,7 @@ class UploadCoordinator {
     this.s3Client = s3Client;
     this.storageBucket = storageBucket;
     this.filesTable = filesTable;
+    this.usersTable = usersTable;
     this.docClient = docClient;
     this.storageService = storageService;
     this.mockStorage = mockStorage;
@@ -80,6 +82,7 @@ class UploadCoordinator {
     for (const req of fileRequests) {
       const filename = req.filename || req.name;
       const size = Number(req.size) || 0;
+      const incomingHash = req.file_hash || req.hash || null; // รับค่า Hash จาก Frontend
       if (!filename || size <= 0) {
         const err = new Error('filename and positive size are required for all items');
         err.statusCode = 400;
@@ -88,13 +91,68 @@ class UploadCoordinator {
 
       const rawFolderId = req.folder_id || req.parent_id;
       const effectiveFolderId = (rawFolderId && rawFolderId !== 'root') ? rawFolderId : 'root';
-      const fileId = `file-${crypto.randomUUID()}`;
-      const s3Key = effectiveFolderId !== 'root'
-        ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
-        : `uploads/${userId}/${fileId}/${filename}`;
       const category = getCategoryFromExtension(filename);
 
+      // --- 1. ตรวจสอบ Deduplication บน Local Mock Mode ---
       if (this.isMockMode) {
+        const liveMockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
+        // ค้นหาไฟล์เดิมของผู้ใช้ที่มี Hash ตรงกัน
+        const duplicateFile = incomingHash 
+          ? liveMockFiles.find(f => f.owner_id === userId && f.status === 'active' && f.file_hash === incomingHash)
+          : null;
+
+        if (duplicateFile) {
+          const liveMockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
+          
+          // แยกชื่อไฟล์กับนามสกุลเพื่อเติม index เช่น "test.txt" -> base: "test", ext: ".txt"
+          const lastDotIndex = filename.lastIndexOf('.');
+          const baseName = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+          const extName = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+
+          // หาว่าในโฟลเดอร์เดียวกันนี้ของผู้ใช้ มีชื่อขึ้นต้นแบบนี้ไปแล้วกี่อัน
+          let index = 1;
+          let newFilename = `${baseName} (${index})${extName}`;
+          while (liveMockFiles.some(f => f.owner_id === userId && f.folder_id === effectiveFolderId && f.status === 'active' && f.filename === newFilename)) {
+            index++;
+            newFilename = `${baseName} (${index})${extName}`;
+          }
+
+          const newFileId = `file-${crypto.randomUUID()}`;
+          const newMockRecord = {
+            file_id: newFileId,
+            owner_id: userId,
+            folder_id: effectiveFolderId,
+            filename: newFilename, // ใช้ชื่อใหม่ที่มี index
+            size,
+            category,
+            tags: [category, newFilename.split('.').pop().toLowerCase()],
+            file_hash: incomingHash,
+            s3_key: duplicateFile.s3_key, // ใช้ไฟล์ binary เดิมบน S3
+            status: 'active',
+            is_duplicate: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+
+          newMockRecords.push(newMockRecord);
+          items.push({
+            file_id: newFileId,
+            filename: newFilename,
+            key: duplicateFile.s3_key,
+            s3Key: duplicateFile.s3_key,
+            category,
+            uploadUrl: null, // ไม่ต้อง PUT binary ขึ้น S3 ซ้ำ
+            deduplicated: true,
+            file: newMockRecord
+          });
+          continue;
+        }
+
+        // กรณีเป็นไฟล์ใหม่ (ไม่ซ้ำ)
+        const fileId = `file-${crypto.randomUUID()}`;
+        const s3Key = effectiveFolderId !== 'root'
+          ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
+          : `uploads/${userId}/${fileId}/${filename}`;
         const uploadUrl = `${protocol}://${host}/mock-upload?key=${encodeURIComponent(s3Key)}&filename=${encodeURIComponent(filename)}&folder_id=${encodeURIComponent(effectiveFolderId)}`;
         const mockFileRecord = {
           file_id: fileId,
@@ -104,8 +162,9 @@ class UploadCoordinator {
           size,
           category,
           tags: [category, filename.split('.').pop().toLowerCase()],
+          file_hash: incomingHash || crypto.randomBytes(32).toString('hex'),
           s3_key: s3Key,
-          status: 'pending',
+          status: 'active',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -118,10 +177,105 @@ class UploadCoordinator {
           s3Key,
           category,
           uploadUrl,
+          deduplicated: false,
           file: mockFileRecord
         });
       } else {
-        // AWS S3 Presigned URL Creation
+        // --- 2. ตรวจสอบ Deduplication บน AWS Cloud Mode (DynamoDB) ---
+        let duplicateCloudFile = null;
+        if (incomingHash && this.docClient && this.filesTable) {
+          try {
+            const { QueryCommand } = require('@aws-sdk/lib-dynamodb');
+            // ค้นหาไฟล์ของผู้ใช้ที่มีสถานะ active
+            const qRes = await this.docClient.send(new QueryCommand({
+              TableName: this.filesTable,
+              IndexName: 'OwnerIndex',
+              KeyConditionExpression: 'owner_id = :owner',
+              FilterExpression: '#st = :status AND file_hash = :hash',
+              ExpressionAttributeNames: { '#st': 'status' },
+              ExpressionAttributeValues: {
+                ':owner': userId,
+                ':status': 'active',
+                ':hash': incomingHash
+              }
+            }));
+            if (qRes.Items && qRes.Items.length > 0) {
+              duplicateCloudFile = qRes.Items[0];
+            }
+          } catch (dupErr) {
+            console.warn('[UploadCoordinator] Deduplication check skipped:', dupErr.message);
+          }
+        }
+
+        if (duplicateCloudFile) {
+          const lastDotIndex = filename.lastIndexOf('.');
+          const baseName = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+          const extName = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+
+          // ดึงไฟล์ทั้งหมดในโฟลเดอร์เพื่อหาเลข index ที่ไม่ซ้ำ
+          let nextIndex = 1;
+          let newFilename = `${baseName} (${nextIndex})${extName}`;
+          try {
+            const listRes = await this.docClient.send(new QueryCommand({
+              TableName: this.filesTable,
+              IndexName: 'OwnerIndex',
+              KeyConditionExpression: 'owner_id = :owner',
+              FilterExpression: '#st = :status AND folder_id = :fid',
+              ExpressionAttributeNames: { '#st': 'status' },
+              ExpressionAttributeValues: {
+                ':owner': userId,
+                ':status': 'active',
+                ':fid': effectiveFolderId
+              }
+            }));
+            const existingNames = new Set((listRes.Items || []).map(f => f.filename));
+            while (existingNames.has(newFilename)) {
+              nextIndex++;
+              newFilename = `${baseName} (${nextIndex})${extName}`;
+            }
+          } catch (_) {}
+
+          const newFileId = `file-${crypto.randomUUID()}`;
+          const cloudRecord = {
+            file_id: newFileId,
+            owner_id: userId,
+            folder_id: effectiveFolderId,
+            filename: newFilename,
+            size,
+            category,
+            tags: [category, newFilename.split('.').pop().toLowerCase()],
+            file_hash: incomingHash,
+            s3_key: duplicateCloudFile.s3_key,
+            status: 'active',
+            is_duplicate: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+
+          await this.docClient.send(new PutCommand({
+            TableName: this.filesTable,
+            Item: cloudRecord
+          }));
+
+          items.push({
+            file_id: newFileId,
+            filename: newFilename,
+            key: duplicateCloudFile.s3_key,
+            s3Key: duplicateCloudFile.s3_key,
+            category,
+            uploadUrl: null,
+            deduplicated: true,
+            file: cloudRecord
+          });
+          continue;
+        }
+
+        // กรณีไฟล์ใหม่: ออก S3 Presigned URL ตามปกติ
+        const fileId = `file-${crypto.randomUUID()}`;
+        const s3Key = effectiveFolderId !== 'root'
+          ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
+          : `uploads/${userId}/${fileId}/${filename}`;
+
         let uploadUrl = '';
         if (this.s3Client && this.storageBucket) {
           const command = new PutObjectCommand({
@@ -151,14 +305,16 @@ class UploadCoordinator {
           size,
           category,
           tags: [category, filename.split('.').pop().toLowerCase()],
+          file_hash: incomingHash || crypto.randomBytes(32).toString('hex'),
           s3_key: s3Key,
-          status: 'pending',
+          status: 'active',
           expires_at: Math.floor(Date.now() / 1000) + PENDING_TTL_SECONDS,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
 
         if (this.docClient && this.filesTable) {
+          const { PutCommand } = require('@aws-sdk/lib-dynamodb');
           await this.docClient.send(new PutCommand({
             TableName: this.filesTable,
             Item: cloudFileRecord
@@ -168,6 +324,29 @@ class UploadCoordinator {
             failure.statusCode = 500;
             throw failure;
           });
+
+          if (this.usersTable && userId && userId !== 'unknown') {
+            try {
+              await this.docClient.send(new UpdateCommand({
+                TableName: this.usersTable,
+                Key: { user_id: userId },
+                UpdateExpression: `SET 
+                  totalUsed = if_not_exists(totalUsed, :zero) + :s,
+                  breakdown.#cat = if_not_exists(breakdown.#cat, :zero) + :s,
+                  updated_at = :up`,
+                ExpressionAttributeNames: {
+                  '#cat': category
+                },
+                ExpressionAttributeValues: {
+                  ':s': size,
+                  ':zero': 0,
+                  ':up': new Date().toISOString()
+                }
+              }));
+            } catch (quotaErr) {
+              console.warn('[UploadCoordinator] Failed to update user quota in DB:', quotaErr.message);
+            }
+          }
         }
 
         items.push({
@@ -177,6 +356,7 @@ class UploadCoordinator {
           s3Key,
           category,
           uploadUrl,
+          deduplicated: false,
           file: cloudFileRecord
         });
       }
