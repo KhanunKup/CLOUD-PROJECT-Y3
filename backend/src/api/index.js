@@ -23,6 +23,7 @@ const {
 const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 const storage = require('./storage');
 const { createZipArchive } = require('./zip-packager');
+const authService = require('./auth-service');
 
 const app = express();
 app.use(cors());
@@ -531,80 +532,10 @@ function getMimeType(filename) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
-// Helper to parse cookies without extra dependencies
-function parseCookies(req) {
-  const list = {};
-  const rc = req.headers.cookie;
-  if (rc) {
-    rc.split(';').forEach(cookie => {
-      const parts = cookie.split('=');
-      list[parts.shift().trim()] = decodeURIComponent(parts.join('='));
-    });
-  }
-  return list;
-}
-
-// Helper to extract session user from Cookie or Authorization header
-function getSessionUser(req) {
-  const cookies = parseCookies(req);
-  if (cookies.easydrive_session) {
-    try {
-      const decoded = JSON.parse(Buffer.from(cookies.easydrive_session, 'base64').toString('utf-8'));
-      if (decoded && decoded.user_id) return decoded;
-    } catch (e) {}
-  }
-
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    try {
-      const token = authHeader.split(' ')[1];
-      const payloadBase64 = token.split('.')[1] || token;
-      const decoded = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf-8'));
-      if (decoded && (decoded.user_id || decoded.sub)) {
-        return {
-          user_id: decoded.user_id || decoded.sub || decoded['cognito:username'],
-          email: decoded.email,
-          name: decoded.name || decoded['cognito:username'] || 'User',
-          role: (decoded['cognito:groups'] && decoded['cognito:groups'].includes('Admin')) ? 'admin' : (decoded.role || 'user')
-        };
-      }
-    } catch (e) {}
-  }
-
-  return null;
-}
-
-// Authentication Middleware (API Endpoints)
-function authMiddleware(req, res, next) {
-  const user = getSessionUser(req);
-  if (user) {
-    req.user = user;
-    return next();
-  }
-
-  if (IS_MOCK_MODE) {
-    // Check if x-user-id header is provided (e.g. testing)
-    if (req.headers['x-user-id']) {
-      req.user = {
-        user_id: req.headers['x-user-id'],
-        email: 'demo@kmitl.ac.th',
-        name: 'Demo User',
-        role: req.headers['x-user-role'] || 'user'
-      };
-      return next();
-    }
-    // Default fallback to first preset user for headless API calls
-    req.user = {
-      user_id: mockUsers[0].user_id,
-      email: mockUsers[0].email,
-      name: mockUsers[0].name,
-      role: mockUsers[0].role
-    };
-    return next();
-  }
-
-  return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
-}
+// Delegate to Deep AuthService Engine
+const parseCookies = authService.parseCookies;
+const getSessionUser = authService.getSessionUser;
+const authMiddleware = authService.authMiddleware;
 
 // Authentication Guards for Web SSR routes
 function requireAuthWeb(req, res, next) {
@@ -692,7 +623,7 @@ app.get('/signup', (req, res) => {
 });
 
 app.get('/logout', (req, res) => {
-  res.setHeader('Set-Cookie', 'easydrive_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+  res.setHeader('Set-Cookie', authService.clearSessionCookieHeader());
   res.redirect('/signin');
 });
 
@@ -726,9 +657,9 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
     email: user.email,
     role: user.role
   };
-  const sessionToken = Buffer.from(JSON.stringify(sessionUser)).toString('base64');
   const cookieMaxAge = (remember === 'on' || remember === 'true' || remember === true) ? 2592000 : 86400; // 30 days or 1 day
-  res.setHeader('Set-Cookie', `easydrive_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${cookieMaxAge}`);
+  const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie', authService.createSessionCookieHeader(sessionUser, cookieMaxAge, isHttps));
 
   recordAuditLog({ user: sessionUser, action: 'LOGIN', level: 'info', details: `User "${sessionUser.name}" logged in successfully`, req });
 
@@ -786,8 +717,8 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
     email: newUser.email,
     role: newUser.role
   };
-  const sessionToken = Buffer.from(JSON.stringify(sessionUser)).toString('base64');
-  res.setHeader('Set-Cookie', `easydrive_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+  const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+  res.setHeader('Set-Cookie', authService.createSessionCookieHeader(sessionUser, 86400, isHttps));
 
   recordAuditLog({ user: sessionUser, action: 'SIGNUP', level: 'info', details: `New user "${newUser.name}" registered account`, req });
 
