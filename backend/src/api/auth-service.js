@@ -236,7 +236,256 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
+
+const bcrypt = require('bcryptjs');
+
+let authConfig = {
+  isMockMode: true,
+  docClient: null,
+  usersTable: process.env.USERS_TABLE || 'easydrive-users'
+};
+
+const inMemoryUsers = [
+  {
+    user_id: 'user-admin-01',
+    name: 'Admin User',
+    username: 'admin',
+    email: 'admin@kmitl.ac.th',
+    password: 'admin123',
+    password_hash: null,
+    role: 'admin',
+    quota: 107374182400,
+    status: 'active'
+  },
+  {
+    user_id: 'user-admin-01-internal',
+    name: 'Admin User Internal',
+    username: 'admin-internal',
+    email: 'admin@easydrive.internal',
+    password: 'adminpassword123',
+    password_hash: null,
+    role: 'admin',
+    quota: 107374182400,
+    status: 'active'
+  },
+  {
+    user_id: 'user-normal-01',
+    name: 'Normal User',
+    username: 'user',
+    email: 'user@kmitl.ac.th',
+    password: 'user123',
+    password_hash: null,
+    role: 'user',
+    quota: 15728640000,
+    status: 'active'
+  },
+  {
+    user_id: 'user-normal-01-internal',
+    name: 'Normal User Internal',
+    username: 'user-internal',
+    email: 'user@easydrive.internal',
+    password: 'userpassword123',
+    password_hash: null,
+    role: 'user',
+    quota: 15728640000,
+    status: 'active'
+  }
+];
+
+function initAuthStore(config = {}) {
+  authConfig = { ...authConfig, ...config };
+}
+
+async function registerUser({ username, email, password, role = 'user', quota = 15728640000 }) {
+  const normEmail = (email || '').trim().toLowerCase();
+  const normUsername = (username || '').trim().toLowerCase();
+
+  if (!normEmail || !normUsername || !password) {
+    return { success: false, error: 'Username, email, and password are required' };
+  }
+
+  if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
+    const { ScanCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
+    try {
+      const scanRes = await authConfig.docClient.send(new ScanCommand({
+        TableName: authConfig.usersTable,
+        FilterExpression: 'email = :e OR username = :u',
+        ExpressionAttributeValues: { ':e': normEmail, ':u': normUsername }
+      }));
+      if (scanRes.Items && scanRes.Items.length > 0) {
+        return { success: false, error: 'Username or email already exists' };
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      const userId = 'user-' + crypto.randomUUID().slice(0, 8);
+      const newUser = {
+        user_id: userId,
+        name: username.trim(),
+        username: normUsername,
+        email: normEmail,
+        password_hash: passwordHash,
+        role,
+        quota,
+        used_storage: 0,
+        status: 'active',
+        created_at: new Date().toISOString()
+      };
+
+      await authConfig.docClient.send(new PutCommand({
+        TableName: authConfig.usersTable,
+        Item: newUser
+      }));
+
+      return {
+        success: true,
+        user: {
+          user_id: newUser.user_id,
+          name: newUser.name,
+          username: newUser.username,
+          email: newUser.email,
+          role: newUser.role
+        }
+      };
+    } catch (err) {
+      console.error('[AuthService Register Error]:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  const existing = inMemoryUsers.find(u => u.email === normEmail || u.username === normUsername);
+  if (existing) {
+    return { success: false, error: 'Username or email already exists' };
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const userId = 'user-' + crypto.randomUUID().slice(0, 8);
+  const newUser = {
+    user_id: userId,
+    name: username.trim(),
+    username: normUsername,
+    email: normEmail,
+    password_hash: passwordHash,
+    role,
+    quota,
+    used_storage: 0,
+    status: 'active',
+    created_at: new Date().toISOString()
+  };
+  inMemoryUsers.push(newUser);
+
+  return {
+    success: true,
+    user: {
+      user_id: newUser.user_id,
+      name: newUser.name,
+      username: newUser.username,
+      email: newUser.email,
+      role: newUser.role
+    }
+  };
+}
+
+async function authenticateUser({ identifier, password }) {
+  const normIdent = (identifier || '').trim().toLowerCase();
+  if (!normIdent || !password) {
+    return { success: false, error: 'Identifier and password are required' };
+  }
+
+  if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
+    const { ScanCommand } = require('@aws-sdk/lib-dynamodb');
+    try {
+      const scanRes = await authConfig.docClient.send(new ScanCommand({
+        TableName: authConfig.usersTable,
+        FilterExpression: 'email = :ident OR username = :ident',
+        ExpressionAttributeValues: { ':ident': normIdent }
+      }));
+      const user = scanRes.Items && scanRes.Items[0];
+      if (!user) {
+        return { success: false, error: 'Invalid username/email or password' };
+      }
+      if (user.status === 'disabled') {
+        return { success: false, error: 'Account has been disabled' };
+      }
+
+      let match = false;
+      if (user.password_hash) {
+        match = await bcrypt.compare(password, user.password_hash);
+      } else if (user.password) {
+        match = (user.password === password);
+      }
+
+      if (!match) {
+        return { success: false, error: 'Invalid username/email or password' };
+      }
+
+      return {
+        success: true,
+        user: {
+          user_id: user.user_id,
+          name: user.name || user.username,
+          email: user.email,
+          role: user.role || 'user'
+        }
+      };
+    } catch (err) {
+      console.error('[AuthService Authenticate Error]:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  const user = inMemoryUsers.find(u => u.email === normIdent || u.username === normIdent);
+  if (!user) {
+    return { success: false, error: 'Invalid username/email or password' };
+  }
+  if (user.status === 'disabled') {
+    return { success: false, error: 'Account has been disabled' };
+  }
+
+  let match = false;
+  if (user.password_hash) {
+    match = await bcrypt.compare(password, user.password_hash);
+  } else if (user.password) {
+    match = (user.password === password);
+  }
+
+  if (!match) {
+    return { success: false, error: 'Invalid username/email or password' };
+  }
+
+  return {
+    success: true,
+    user: {
+      user_id: user.user_id,
+      name: user.name || user.username,
+      email: user.email,
+      role: user.role || 'user'
+    }
+  };
+}
+
+async function getUserById(userId) {
+  if (!userId) return null;
+  if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
+    const { GetCommand } = require('@aws-sdk/lib-dynamodb');
+    try {
+      const res = await authConfig.docClient.send(new GetCommand({
+        TableName: authConfig.usersTable,
+        Key: { user_id: userId }
+      }));
+      return res.Item || null;
+    } catch (_) {
+      return null;
+    }
+  }
+  return inMemoryUsers.find(u => u.user_id === userId) || null;
+}
+
 module.exports = {
+  initAuthStore,
+  registerUser,
+  authenticateUser,
+  getUserById,
+  inMemoryUsers,
   parseCookies,
   signSessionPayload,
   verifySessionToken,

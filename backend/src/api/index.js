@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const crypto = require('crypto');
@@ -40,6 +41,15 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Static Asset Delivery Pipeline (Serves bundled public for Lambda & local fallback)
+const apiPublicDir = path.join(__dirname, 'public');
+const rootPublicDir = path.resolve(__dirname, '../../../frontend/public');
+if (fs.existsSync(apiPublicDir)) {
+  app.use(express.static(apiPublicDir));
+} else if (fs.existsSync(rootPublicDir)) {
+  app.use(express.static(rootPublicDir));
+}
 
 // Raw binary/mock upload endpoint mounted BEFORE body-parsers so arbitrary file uploads
 // (including JSON with comments like tsconfig.json, raw binary, or large files) are not parsed as JSON
@@ -106,6 +116,12 @@ const fileRepo = new FileRepository({
   storage,
   docClient,
   filesTable: FILES_TABLE
+});
+
+authService.initAuthStore({
+  isMockMode: IS_MOCK_MODE,
+  docClient,
+  usersTable: USERS_TABLE
 });
 
 // ==========================================
@@ -660,23 +676,19 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
     return res.status(400).json({ error: 'Username/Email and password are required' });
   }
 
-  const user = mockUsers.find(u => 
-    u.email.toLowerCase() === identifier || 
-    u.username.toLowerCase() === identifier
-  );
-
-  if (!user || user.password !== password) {
+  const authRes = await authService.authenticateUser({ identifier, password });
+  if (!authRes.success) {
     if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
-      return res.render('pages/login', { error: 'Invalid username/email or password' });
+      return res.render('pages/login', { error: authRes.error || 'Invalid username/email or password' });
     }
-    return res.status(401).json({ error: 'Invalid username/email or password' });
+    return res.status(401).json({ error: authRes.error || 'Invalid username/email or password' });
   }
 
   const sessionUser = {
-    user_id: user.user_id,
-    name: user.name,
-    email: user.email,
-    role: user.role
+    user_id: authRes.user.user_id,
+    name: authRes.user.name,
+    email: authRes.user.email,
+    role: authRes.user.role
   };
   const cookieMaxAge = (remember === 'on' || remember === 'true' || remember === true) ? 2592000 : 86400; // 30 days or 1 day
   const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
@@ -708,28 +720,23 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
     return res.status(400).json({ error: 'Passwords do not match' });
   }
 
-  const existing = mockUsers.find(u => 
-    u.email.toLowerCase() === email.trim().toLowerCase() ||
-    u.username.toLowerCase() === username.trim().toLowerCase()
-  );
+  const regRes = await authService.registerUser({
+    username: username.trim(),
+    email: email.trim(),
+    password,
+    role: 'user',
+    quota: DEFAULT_STORAGE_QUOTA
+  });
 
-  if (existing) {
+  if (!regRes.success) {
     if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
-      return res.render('pages/signup', { error: 'Username or email already exists' });
+      return res.render('pages/signup', { error: regRes.error || 'Failed to register account' });
     }
-    return res.status(409).json({ error: 'Username or email already exists' });
+    const status = regRes.error?.includes('exists') ? 409 : 400;
+    return res.status(status).json({ error: regRes.error || 'Failed to register account' });
   }
 
-  const newUser = {
-    user_id: `user-${crypto.randomUUID().slice(0, 8)}`,
-    name: username.trim(),
-    username: username.trim().toLowerCase(),
-    email: email.trim().toLowerCase(),
-    password: password,
-    role: 'user',
-    quota: DEFAULT_STORAGE_QUOTA,
-    created_at: new Date().toISOString()
-  };
+  const newUser = regRes.user;
   mockUsers.push(newUser);
 
   const sessionUser = {
@@ -2931,7 +2938,27 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
 // 5.8.1 Get Share By File ID
 app.get('/api/shares/by-file/:file_id', authMiddleware, async (req, res) => {
   const fileId = req.params.file_id;
-  const share = mockShares.find(s => s.file_id === fileId);
+  let share = null;
+
+  if (IS_MOCK_MODE) {
+    share = mockShares.find(s => s.file_id === fileId);
+  } else {
+    try {
+      const queryRes = await docClient.send(new QueryCommand({
+        TableName: SHARES_TABLE,
+        IndexName: 'FileIdIndex',
+        KeyConditionExpression: 'file_id = :fid',
+        ExpressionAttributeValues: { ':fid': fileId },
+        Limit: 1
+      }));
+      if (queryRes.Items && queryRes.Items.length > 0) {
+        share = queryRes.Items[0];
+      }
+    } catch (err) {
+      console.error('[DynamoDB Share Query Error]:', err);
+    }
+  }
+
   if (!share) {
     return res.json({ success: true, isShared: false, share: null });
   }
@@ -3110,25 +3137,82 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
 
 // 5.8.5 Shared With Me Endpoints
 app.get('/api/shares/shared-with-me', authMiddleware, async (req, res) => {
-  const sharedWithMe = getSharedWithMeForUser(req.user);
-  res.json({ success: true, sharedWithMe });
+  if (IS_MOCK_MODE) {
+    const sharedWithMe = getSharedWithMeForUser(req.user);
+    return res.json({ success: true, sharedWithMe });
+  }
+
+  try {
+    const userEmail = (req.user.email || '').toLowerCase();
+    const userId = req.user.user_id;
+
+    const scanRes = await docClient.send(new ScanCommand({
+      TableName: FILES_TABLE,
+      FilterExpression: 'contains(access_list, :email) OR contains(access_list, :uid)',
+      ExpressionAttributeValues: { ':email': userEmail, ':uid': userId }
+    }));
+
+    const files = (scanRes.Items || []).filter(f => {
+      const dismissed = f.dismissed_by || [];
+      return !dismissed.includes(userId) && !dismissed.includes(userEmail);
+    }).map(f => ({
+      id: f.file_id,
+      shareId: f.share_id || f.file_id,
+      name: f.filename,
+      size: f.size || 0,
+      category: f.category || 'file',
+      tags: f.tags || [],
+      type: f.category === 'folder' ? 'folder' : 'file',
+      owner: f.owner_name || f.owner_id || 'Owner',
+      ownerId: f.owner_id,
+      isOwner: f.owner_id === userId,
+      uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown',
+      shareUrl: `/share/${f.share_id || f.file_id}`,
+      maxDownloads: 0,
+      downloadsLeft: 'Unlimited',
+      downloadCount: f.download_count || 0,
+      hasPassword: false,
+      remainingHours: null
+    }));
+
+    return res.json({ success: true, sharedWithMe: files });
+  } catch (err) {
+    console.error('Shared-with-me DynamoDB error:', err);
+    return res.json({ success: true, sharedWithMe: [] });
+  }
 });
 
 app.delete('/api/shares/shared-with-me/:file_id', authMiddleware, async (req, res) => {
   const fileId = req.params.file_id;
   const userEmail = (req.user.email || '').toLowerCase();
-  const file = mockFiles.find(f => f.file_id === fileId);
-  if (file) {
-    file.dismissed_by = file.dismissed_by || [];
-    if (!file.dismissed_by.includes(req.user.user_id)) {
-      file.dismissed_by.push(req.user.user_id);
+  const userId = req.user.user_id;
+
+  if (IS_MOCK_MODE) {
+    const file = mockFiles.find(f => f.file_id === fileId);
+    if (file) {
+      file.dismissed_by = file.dismissed_by || [];
+      if (!file.dismissed_by.includes(userId)) file.dismissed_by.push(userId);
+      if (!file.dismissed_by.includes(userEmail)) file.dismissed_by.push(userEmail);
+      return res.json({ success: true, message: 'File dismissed from Shared with me' });
     }
-    if (!file.dismissed_by.includes(userEmail)) {
-      file.dismissed_by.push(userEmail);
-    }
-    return res.json({ success: true, message: 'File dismissed from Shared with me' });
+    return res.json({ success: true, message: 'Removed from Shared with me' });
   }
-  res.json({ success: true, message: 'Removed from Shared with me' });
+
+  try {
+    await docClient.send(new UpdateCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId },
+      UpdateExpression: 'SET dismissed_by = list_append(if_not_exists(dismissed_by, :empty), :vals)',
+      ExpressionAttributeValues: {
+        ':empty': [],
+        ':vals': [userId, userEmail]
+      }
+    }));
+    return res.json({ success: true, message: 'File dismissed from Shared with me' });
+  } catch (err) {
+    console.error('Dismiss shared file error:', err);
+    return res.status(500).json({ error: 'Failed to dismiss shared file' });
+  }
 });
 
 // 5.9 Verify Password & Download Shared File (Burn-After-Read Check & SNS Alert)

@@ -15,3 +15,10 @@ variable "alert_email" {
   type        = string
   default     = ""
 }
+
+variable "session_secret" {
+  description = "Secret key for HMAC session cookie signing"
+  type        = string
+  default     = "easydrive-cloud-production-secret-key-kmitl"
+  sensitive   = true
+}

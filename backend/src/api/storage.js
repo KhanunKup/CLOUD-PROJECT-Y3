@@ -195,11 +195,7 @@ function seedDefaultFiles() {
     if (!fs.existsSync(targetPath)) {
       fs.writeFileSync(targetPath, item.data);
     }
-    // Also ensure a copy at the direct basename in storage for easy lookup
-    const baseNamePath = getStoragePath(path.basename(item.key));
-    if (!fs.existsSync(baseNamePath)) {
-      fs.writeFileSync(baseNamePath, item.data);
-    }
+
   }
 }
 

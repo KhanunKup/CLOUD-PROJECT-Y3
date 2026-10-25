@@ -50,6 +50,17 @@ resource "aws_dynamodb_table" "easydrive-shares" {
     type = "S"
   }
 
+  attribute {
+    name = "file_id"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "FileIdIndex"
+    hash_key        = "file_id"
+    projection_type = "ALL"
+  }
+
   # Automatic deletion of expired share links via DynamoDB TTL
   ttl {
     attribute_name = "expires_at"

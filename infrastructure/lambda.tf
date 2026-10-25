@@ -24,6 +24,8 @@ resource "aws_lambda_function" "easydrive-api" {
 
   environment {
     variables = {
+      NODE_ENV       = "production"
+      SESSION_SECRET = var.session_secret
       FILES_TABLE    = aws_dynamodb_table.easydrive-files.name
       SHARES_TABLE   = aws_dynamodb_table.easydrive-shares.name
       USERS_TABLE    = aws_dynamodb_table.easydrive-users.name
