@@ -6,10 +6,12 @@ const crypto = require('crypto');
 const { GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 
 class FileRepository {
-  constructor({ isMockMode, storage, docClient, filesTable, usersTable, defaultQuota = 53687091200 }) {
+  constructor({ isMockMode, storage, docClient, s3Client, storageBucket, filesTable, usersTable, defaultQuota = 53687091200 }) {
     this.isMockMode = isMockMode;
     this.storage = storage;
     this.docClient = docClient;
+    this.s3Client = s3Client;
+    this.storageBucket = storageBucket;
     this.filesTable = filesTable;
     this.usersTable = usersTable || process.env.USERS_TABLE || "easydrive-users";
     this.defaultQuota = defaultQuota;
@@ -515,6 +517,106 @@ class FileRepository {
     });
 
     return trashedFiles;
+  }
+  // ==========================================
+  // 9. Empty User Trash Bin (DynamoDB, S3 & Quota Reclamation)
+  // ==========================================
+  async emptyUserTrash({ userId, userStorage = null, files = null, storageModule = null }) {
+    if (this.isMockMode) {
+      const allFiles = files || (this.storage ? this.storage.loadMockFiles() : []);
+      const trashedItems = allFiles.filter(f => {
+        if (f.status !== 'trash') return false;
+        return f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user');
+      });
+
+      let totalSizeFreed = 0;
+      const categoryFreed = {};
+      trashedItems.forEach(item => {
+        if (item.category !== 'folder') {
+          const sz = Number(item.size) || 0;
+          if (sz > 0) {
+            totalSizeFreed += sz;
+            const cat = item.category || 'document';
+            categoryFreed[cat] = (categoryFreed[cat] || 0) + sz;
+          }
+        }
+      });
+
+      const remainingFiles = allFiles.filter(f => !trashedItems.some(t => t.file_id === f.file_id));
+      if (this.storage && this.storage.saveMockFiles) {
+        this.storage.saveMockFiles(remainingFiles, false);
+      }
+      return { purgedCount: trashedItems.length, totalSizeFreed, remainingFiles };
+    }
+
+    // Cloud Mode (DynamoDB + S3)
+    let purgedCount = 0;
+    let totalSizeFreed = 0;
+    const categoryFreed = {};
+
+    try {
+      const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+      // 1. Fetch all trashed items for user
+      const queryRes = await this.docClient.send(new QueryCommand({
+        TableName: this.filesTable,
+        IndexName: 'OwnerIndex',
+        KeyConditionExpression: 'owner_id = :owner',
+        FilterExpression: '#st = :status',
+        ExpressionAttributeNames: { '#st': 'status' },
+        ExpressionAttributeValues: {
+          ':owner': userId,
+          ':status': 'trash'
+        }
+      }));
+
+      const trashedItems = queryRes.Items || [];
+
+      // 2. Delete each item from S3 and DynamoDB
+      for (const item of trashedItems) {
+        if (item.s3_key && this.s3Client && this.storageBucket) {
+          await this.s3Client.send(new DeleteObjectCommand({
+            Bucket: this.storageBucket,
+            Key: item.s3_key
+          })).catch(() => {});
+        }
+
+        await this.docClient.send(new DeleteCommand({
+          TableName: this.filesTable,
+          Key: { file_id: item.file_id }
+        })).catch(() => {});
+
+        purgedCount++;
+        const sz = Number(item.size) || 0;
+        if (sz > 0) {
+          totalSizeFreed += sz;
+          const cat = item.category || 'other';
+          categoryFreed[cat] = (categoryFreed[cat] || 0) + sz;
+        }
+      }
+
+      // 3. Atomically decrement totalUsed and category breakdown on USERS_TABLE
+      if (totalSizeFreed > 0 && this.usersTable) {
+        for (const [cat, freed] of Object.entries(categoryFreed)) {
+          if (freed > 0) {
+            await this.docClient.send(new UpdateCommand({
+              TableName: this.usersTable,
+              Key: { user_id: userId },
+              UpdateExpression: 'SET totalUsed = if_not_exists(totalUsed, :zero) - :s, breakdown.#cat = if_not_exists(breakdown.#cat, :zero) - :s, updated_at = :up',
+              ExpressionAttributeNames: { '#cat': cat },
+              ExpressionAttributeValues: {
+                ':s': freed,
+                ':zero': 0,
+                ':up': new Date().toISOString()
+              }
+            })).catch(() => {});
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[FileRepository.emptyUserTrash Cloud Error]:', err);
+    }
+
+    return { purgedCount, totalSizeFreed };
   }
 }
 

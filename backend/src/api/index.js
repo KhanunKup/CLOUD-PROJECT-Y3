@@ -115,6 +115,8 @@ const fileRepo = new FileRepository({
   isMockMode: IS_MOCK_MODE,
   storage,
   docClient,
+  s3Client,
+  storageBucket: STORAGE_BUCKET,
   filesTable: FILES_TABLE,
   usersTable: USERS_TABLE
 });
@@ -1279,18 +1281,22 @@ function emptyUserTrash({ files = mockFiles, userStorage = mockUserStorage, user
   };
 }
 
-app.post('/trash/empty', requireAuthWeb, (req, res) => {
-  let result = { purgedCount: 0, totalSizeFreed: 0 };
-  if (IS_MOCK_MODE) {
-    result = emptyUserTrash({
-      files: mockFiles,
-      userStorage: mockUserStorage,
-      userId: req.user.user_id,
-      storageModule: storage
-    });
+app.post('/trash/empty', requireAuthWeb, async (req, res) => {
+  const result = await fileRepo.emptyUserTrash({
+    userId: req.user.user_id,
+    files: mockFiles,
+    userStorage: mockUserStorage,
+    storageModule: storage
+  });
+  if (IS_MOCK_MODE && result.remainingFiles) {
     mockFiles = result.remainingFiles;
-    recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Emptied entire trash bin (${result.purgedCount} items purged)` });
   }
+  recordAuditLog({
+    user: req.user,
+    action: 'PERMANENT_DELETE',
+    level: 'critical',
+    details: `Emptied entire trash bin (${result.purgedCount} items purged${result.totalSizeFreed > 0 ? `, freed ${formatBytes(result.totalSizeFreed)}` : ''})`
+  });
 
   const wantsJson = (req.headers.accept && req.headers.accept.includes('application/json')) || req.xhr;
   if (wantsJson) {
@@ -1442,7 +1448,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'folderName is required' });
   }
 
-  const parentFolderId = folder_id || parent_id || null;
+  const parentFolderId = folder_id || parent_id || 'root';
 
   if (reuseExisting) {
     if (IS_MOCK_MODE) {
@@ -1549,8 +1555,9 @@ app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
   }
 
   const fileId = `file-${crypto.randomUUID()}`;
-  const s3Key = parentFolderId
-    ? `uploads/${req.user.user_id}/${parentFolderId}/${fileId}/${filename}`
+  const effectiveFolderId = (parentFolderId && parentFolderId !== 'root') ? parentFolderId : 'root';
+  const s3Key = effectiveFolderId !== 'root'
+    ? `uploads/${req.user.user_id}/${effectiveFolderId}/${fileId}/${filename}`
     : `uploads/${req.user.user_id}/${fileId}/${filename}`;
   const category = getCategoryFromExtension(filename);
 
@@ -1558,7 +1565,7 @@ app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
     const mockFileRecord = {
       file_id: fileId,
       owner_id: req.user.user_id,
-      folder_id: parentFolderId,
+      folder_id: effectiveFolderId,
       filename,
       size: Number(size),
       category,
@@ -1660,9 +1667,9 @@ app.post('/api/files/batch-upload-urls', authMiddleware, async (req, res) => {
     for (const fileItem of filesList) {
       const filename = fileItem.filename || fileItem.name;
       const size = Number(fileItem.size) || 0;
-      const parentFolderId = fileItem.folder_id || fileItem.parent_id || null;
+      const parentFolderId = fileItem.folder_id || fileItem.parent_id || 'root';
       const fileId = `file-${crypto.randomUUID()}`;
-      const s3Key = parentFolderId
+      const s3Key = (parentFolderId && parentFolderId !== 'root')
         ? `uploads/${req.user.user_id}/${parentFolderId}/${fileId}/${filename}`
         : `uploads/${req.user.user_id}/${fileId}/${filename}`;
       const category = getCategoryFromExtension(filename);
@@ -2636,12 +2643,26 @@ app.delete('/api/files/:id', authMiddleware, async (req, res) => {
 
   try {
     if (isPermanent) {
-      // Get file to know S3 key
       const getRes = await docClient.send(new GetCommand({ TableName: FILES_TABLE, Key: { file_id: fileId } }));
-      if (getRes.Item && getRes.Item.s3_key) {
-        await s3Client.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: getRes.Item.s3_key }));
+      const fileItem = getRes.Item;
+      if (fileItem && fileItem.s3_key) {
+        await s3Client.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: fileItem.s3_key })).catch(() => {});
       }
       await docClient.send(new DeleteCommand({ TableName: FILES_TABLE, Key: { file_id: fileId } }));
+
+      // Reclaim storage quota in USERS_TABLE
+      if (fileItem && Number(fileItem.size) > 0 && fileItem.owner_id) {
+        const freedSize = Number(fileItem.size);
+        const cat = fileItem.category || 'other';
+        await docClient.send(new UpdateCommand({
+          TableName: USERS_TABLE,
+          Key: { user_id: fileItem.owner_id },
+          UpdateExpression: 'SET totalUsed = if_not_exists(totalUsed, :zero) - :s, breakdown.#cat = if_not_exists(breakdown.#cat, :zero) - :s, updated_at = :up',
+          ExpressionAttributeNames: { '#cat': cat },
+          ExpressionAttributeValues: { ':s': freedSize, ':zero': 0, ':up': new Date().toISOString() }
+        })).catch(() => {});
+      }
+
       recordAuditLog({ user: req.user, action: 'PERMANENT_DELETE', level: 'critical', details: `Permanently deleted file ID: ${fileId}` });
       res.json({ success: true, message: 'File deleted permanently' });
     } else {
@@ -2768,24 +2789,40 @@ app.post('/api/files/batch-delete-forever', authMiddleware, async (req, res) => 
   try {
     for (const fileId of file_ids) {
       const getRes = await docClient.send(new GetCommand({ TableName: FILES_TABLE, Key: { file_id: fileId } }));
-      if (getRes.Item && getRes.Item.s3_key) {
-        await s3Client.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: getRes.Item.s3_key })).catch(() => {});
+      const fileItem = getRes.Item;
+      if (fileItem && fileItem.s3_key) {
+        await s3Client.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: fileItem.s3_key })).catch(() => {});
       }
       await docClient.send(new DeleteCommand({ TableName: FILES_TABLE, Key: { file_id: fileId } })).catch(() => {});
       totalDeleted++;
+
+      // Reclaim storage quota
+      if (fileItem && Number(fileItem.size) > 0 && fileItem.owner_id) {
+        const freedSize = Number(fileItem.size);
+        totalFreed += freedSize;
+        const cat = fileItem.category || 'other';
+        await docClient.send(new UpdateCommand({
+          TableName: USERS_TABLE,
+          Key: { user_id: fileItem.owner_id },
+          UpdateExpression: 'SET totalUsed = if_not_exists(totalUsed, :zero) - :s, breakdown.#cat = if_not_exists(breakdown.#cat, :zero) - :s, updated_at = :up',
+          ExpressionAttributeNames: { '#cat': cat },
+          ExpressionAttributeValues: { ':s': freedSize, ':zero': 0, ':up': new Date().toISOString() }
+        })).catch(() => {});
+      }
     }
 
     recordAuditLog({
       user: req.user,
       action: 'BATCH_PERMANENT_DELETE',
       level: 'critical',
-      details: `Permanently deleted ${totalDeleted} item(s)`
+      details: `Permanently deleted ${totalDeleted} item(s)${totalFreed > 0 ? ` (${formatBytes(totalFreed)})` : ''}`
     });
 
     res.json({
       success: true,
       message: `Permanently deleted ${totalDeleted} item(s)`,
-      deletedCount: totalDeleted
+      deletedCount: totalDeleted,
+      totalSizeFreed: totalFreed
     });
   } catch (err) {
     console.error('Batch permanent delete error:', err);
