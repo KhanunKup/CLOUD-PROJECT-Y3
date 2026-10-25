@@ -7,7 +7,7 @@ variable "region" {
 variable "bucket_prefix" {
   description = "Prefix for S3 bucket names (lowercase). The data bucket is <prefix>-storage and is created by scripts/bootstrap.sh."
   type        = string
-  default     = "easydrive-itkmitl-dev"
+  default     = "easydrive-itkmitl-test"
 }
 
 variable "alert_email" {
