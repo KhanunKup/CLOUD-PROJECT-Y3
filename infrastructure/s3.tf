@@ -18,7 +18,7 @@ resource "aws_s3_bucket_versioning" "easydrive-storage-versioning" {
   bucket = data.aws_s3_bucket.easydrive-storage.id
 
   versioning_configuration {
-    status = "Enabled"
+    status = "Suspended"
   }
 }
 
@@ -46,11 +46,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "easydrive-storage-lifecycle" {
     filter {}
 
     noncurrent_version_expiration {
-      noncurrent_days = 30
+      noncurrent_days = 1
     }
 
     abort_incomplete_multipart_upload {
-      days_after_initiation = 7
+      days_after_initiation = 1
     }
   }
 }
@@ -62,6 +62,7 @@ resource "aws_s3_bucket_notification" "easydrive-storage-notification" {
   lambda_function {
     lambda_function_arn = aws_lambda_function.easydrive-worker.arn
     events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "uploads/"
   }
 
   depends_on = [aws_lambda_permission.allow_s3_to_call_worker]

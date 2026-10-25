@@ -43,7 +43,7 @@ resource "aws_dynamodb_table" "easydrive-files" {
   global_secondary_index {
     name            = "HashIndex"
     hash_key        = "file_hash"
-    projection_type = "ALL"
+    projection_type = "KEYS_ONLY"
   }
 
   tags = {

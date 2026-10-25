@@ -47,10 +47,14 @@ app.use((req, res, next) => {
 // Static Asset Delivery Pipeline (Serves bundled public for Lambda & local fallback)
 const apiPublicDir = path.join(__dirname, 'public');
 const rootPublicDir = path.resolve(__dirname, '../../../frontend/public');
+const staticOptions = {
+  maxAge: '1d',
+  etag: true
+};
 if (fs.existsSync(apiPublicDir)) {
-  app.use(express.static(apiPublicDir));
+  app.use(express.static(apiPublicDir, staticOptions));
 } else if (fs.existsSync(rootPublicDir)) {
-  app.use(express.static(rootPublicDir));
+  app.use(express.static(rootPublicDir, staticOptions));
 }
 
 // Raw binary/mock upload endpoint mounted BEFORE body-parsers so arbitrary file uploads
