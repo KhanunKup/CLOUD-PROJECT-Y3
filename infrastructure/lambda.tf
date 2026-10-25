@@ -31,7 +31,7 @@ resource "aws_lambda_function" "easydrive-api" {
       FILES_TABLE    = aws_dynamodb_table.easydrive-files.name
       SHARES_TABLE   = aws_dynamodb_table.easydrive-shares.name
       USERS_TABLE    = aws_dynamodb_table.easydrive-users.name
-      STORAGE_BUCKET = aws_s3_bucket.easydrive-storage.id
+      STORAGE_BUCKET = data.aws_s3_bucket.easydrive-storage.id
       SNS_TOPIC_ARN  = aws_sns_topic.easydrive-download-alerts.arn
     }
   }
@@ -58,7 +58,7 @@ resource "aws_lambda_function" "easydrive-worker" {
       AWS_REGION     = var.region
       FILES_TABLE    = aws_dynamodb_table.easydrive-files.name
       USERS_TABLE    = aws_dynamodb_table.easydrive-users.name
-      STORAGE_BUCKET = aws_s3_bucket.easydrive-storage.id
+      STORAGE_BUCKET = data.aws_s3_bucket.easydrive-storage.id
     }
   }
 
@@ -74,7 +74,7 @@ resource "aws_lambda_permission" "allow_s3_to_call_worker" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.easydrive-worker.function_name
   principal     = "s3.amazonaws.com"
-  source_arn    = aws_s3_bucket.easydrive-storage.arn
+  source_arn    = data.aws_s3_bucket.easydrive-storage.arn
 }
 
 # Permission for API Gateway to invoke API Lambda
