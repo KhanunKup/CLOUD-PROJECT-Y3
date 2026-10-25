@@ -30,13 +30,15 @@ class FileRepository {
   // ==========================================
   // 1. Single Item Fetch & Access Control
   // ==========================================
-  async findById(fileId, user = null) {
+  // options.activeOnly hides pending (upload not confirmed) and trashed records
+  async findById(fileId, user = null, { activeOnly = false } = {}) {
     if (!fileId) return null;
 
     if (this.isMockMode) {
       const files = this.storage.loadMockFiles();
       const file = files.find(f => f.file_id === fileId);
       if (!file) return null;
+      if (activeOnly && file.status && file.status !== 'active') return null;
       if (user && !this.canAccess(file, user)) return null;
       return file;
     }
@@ -48,6 +50,7 @@ class FileRepository {
       }));
       const file = res.Item;
       if (!file) return null;
+      if (activeOnly && file.status && file.status !== 'active') return null;
       if (user && !this.canAccess(file, user)) return null;
       return file;
     } catch (err) {
@@ -378,8 +381,13 @@ class FileRepository {
           TableName: this.filesTable,
           IndexName: 'OwnerIndex',
           KeyConditionExpression: 'owner_id = :owner',
+          // pending uploads reserve space so parallel uploads cannot overshoot the quota
+          FilterExpression: '#st IN (:active, :pending)',
+          ExpressionAttributeNames: { '#st': 'status' },
           ExpressionAttributeValues: {
-            ':owner': userId
+            ':owner': userId,
+            ':active': 'active',
+            ':pending': 'pending'
           }
         })).catch(() => ({ Items: [] }));
 
@@ -752,24 +760,7 @@ class FileRepository {
         }
       }
 
-      // 3. Atomically decrement totalUsed and category breakdown on USERS_TABLE
-      if (totalSizeFreed > 0 && this.usersTable) {
-        for (const [cat, freed] of Object.entries(categoryFreed)) {
-          if (freed > 0) {
-            await this.docClient.send(new UpdateCommand({
-              TableName: this.usersTable,
-              Key: { user_id: userId },
-              UpdateExpression: 'SET totalUsed = if_not_exists(totalUsed, :zero) - :s, breakdown.#cat = if_not_exists(breakdown.#cat, :zero) - :s, updated_at = :up',
-              ExpressionAttributeNames: { '#cat': cat },
-              ExpressionAttributeValues: {
-                ':s': freed,
-                ':zero': 0,
-                ':up': new Date().toISOString()
-              }
-            })).catch(() => {});
-          }
-        }
-      }
+      // Quota is computed live from the files table (getUserStorage), so deleting the records frees the space
     } catch (err) {
       console.error('[FileRepository.emptyUserTrash Cloud Error]:', err);
     }

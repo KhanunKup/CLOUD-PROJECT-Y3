@@ -47,10 +47,14 @@ app.use((req, res, next) => {
 // Static Asset Delivery Pipeline (Serves bundled public for Lambda & local fallback)
 const apiPublicDir = path.join(__dirname, 'public');
 const rootPublicDir = path.resolve(__dirname, '../../../frontend/public');
+const staticOptions = {
+  maxAge: '1d',
+  etag: true
+};
 if (fs.existsSync(apiPublicDir)) {
-  app.use(express.static(apiPublicDir));
+  app.use(express.static(apiPublicDir, staticOptions));
 } else if (fs.existsSync(rootPublicDir)) {
-  app.use(express.static(rootPublicDir));
+  app.use(express.static(rootPublicDir, staticOptions));
 }
 
 // Raw binary/mock upload endpoint mounted BEFORE body-parsers so arbitrary file uploads
@@ -151,7 +155,8 @@ const uploadCoordinator = new UploadCoordinator({
   storageBucket: STORAGE_BUCKET,
   filesTable: FILES_TABLE,
   docClient,
-  storageService: { getUserStorage: (uid) => getUserStorage(uid) },
+  // Must be the repository version: the module-level getUserStorage only reads in-memory mock data
+  storageService: { getUserStorage: (uid) => fileRepo.getUserStorage(uid) },
   mockStorage: storage,
   mockFilesRef: () => (typeof mockFiles !== 'undefined' ? mockFiles : [])
 });
@@ -182,7 +187,6 @@ const initialMockFiles = [
     category: 'document',
     tags: ['document', 'pdf', 'final'],
     s3_key: 'folders/user-normal-01/file-001/Project_Proposal.pdf',
-    file_hash: 'a1b2c3d4e5f67890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 2).toISOString()
@@ -196,7 +200,6 @@ const initialMockFiles = [
     category: 'image',
     tags: ['image', 'png', 'diagram'],
     s3_key: 'folders/user-normal-01/file-002/Architecture_Diagram.png',
-    file_hash: 'b2c3d4e5f6a17890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000).toISOString(),
     updated_at: new Date(Date.now() - 86400000).toISOString()
@@ -210,7 +213,6 @@ const initialMockFiles = [
     category: 'document',
     tags: ['document', 'docx', 'notes'],
     s3_key: 'folders/user-normal-01/folder-001/file-004/Meeting_Notes.docx',
-    file_hash: 'd4e5f6a1b2c37890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
@@ -223,7 +225,6 @@ const initialMockFiles = [
     size: 45000000,
     category: 'archive',
     tags: ['archive', 'zip'],
-    file_hash: 'c3d4e5f6a1b27890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'trash',
     trashed_at: new Date().toISOString(),
     created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
@@ -250,7 +251,6 @@ const initialMockFiles = [
     size: 3200000,
     category: 'document',
     tags: ['document', 'policy', 'admin'],
-    file_hash: 'f1e2d3c4b5a67890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 3).toISOString()
@@ -263,7 +263,6 @@ const initialMockFiles = [
     size: 4800000,
     category: 'image',
     tags: ['image', 'architecture', 'diagram'],
-    file_hash: 'e2d3c4b5a6f17890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 2).toISOString()
@@ -276,7 +275,6 @@ const initialMockFiles = [
     size: 45000,
     category: 'code',
     tags: ['code', 'yaml', 'deployment'],
-    file_hash: 'd3c4b5a6f1e27890123456789abcdef0123456789abcdef0123456789abcdef0',
     status: 'active',
     created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
     updated_at: new Date(Date.now() - 86400000 * 1).toISOString()
@@ -1025,9 +1023,10 @@ app.get('/drive', requireAuthWeb, async (req, res) => {
   const fileSharesMap = {};
   if (!IS_MOCK_MODE && docClient && SHARES_TABLE) {
     try {
-      const shareScan = await docClient.send(new ScanCommand({
+      const shareScan = await docClient.send(new QueryCommand({
         TableName: SHARES_TABLE,
-        FilterExpression: 'owner_id = :owner',
+        IndexName: 'OwnerIndex',
+        KeyConditionExpression: 'owner_id = :owner',
         ExpressionAttributeValues: { ':owner': req.user.user_id }
       }));
       (shareScan.Items || []).forEach(s => {
@@ -1052,7 +1051,6 @@ app.get('/drive', requireAuthWeb, async (req, res) => {
         name: f.filename,
         type: f.category === 'folder' ? 'folder' : 'file',
         size: f.size || 0,
-        file_hash: f.file_hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
         createdAt: f.created_at || f.createdAt,
         updatedAt: f.updated_at || f.updatedAt,
         folderId: f.folder_id || null,
@@ -1220,8 +1218,12 @@ app.get('/shared', requireAuthWeb, async (req, res) => {
   } else {
     // Cloud Mode: query DynamoDB SHARES_TABLE
     try {
-      const scanRes = await docClient.send(new ScanCommand({
-        TableName: SHARES_TABLE
+      // Only the caller's own shares: the old unfiltered Scan listed every user's links
+      const scanRes = await docClient.send(new QueryCommand({
+        TableName: SHARES_TABLE,
+        IndexName: 'OwnerIndex',
+        KeyConditionExpression: 'owner_id = :owner',
+        ExpressionAttributeValues: { ':owner': req.user.user_id }
       }));
       const rawShares = scanRes.Items || [];
 
@@ -1460,15 +1462,17 @@ app.get(['/management', '/admin'], requireAdminWeb, async (req, res) => {
   const userCount = totalUsers - adminCount;
   const storage = await fileRepo.getUserStorage(req.user.user_id);
 
-  const formattedUsers = allUsers.map(u => {
-    const usedBytes = u.totalUsed || u.used_storage || 0;
+  // Usage is computed live from the files table (admin-only page, one OwnerIndex query per user)
+  const formattedUsers = await Promise.all(allUsers.map(async (u) => {
+    const userStorage = await fileRepo.getUserStorage(u.user_id);
+    const usedBytes = (userStorage && userStorage.totalUsed) || 0;
     return {
       ...u,
       storageFormatted: formatBytes(usedBytes),
       quotaFormatted: formatBytes(u.quota || 53687091200),
       createdAtFormatted: u.created_at ? new Date(u.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently'
     };
-  });
+  }));
 
   res.render('pages/usermanagement', {
     user: req.user,
@@ -1613,6 +1617,7 @@ app.get('/api/health', (req, res) => {
 // 5.2 List Files (Supports ?status=active|trash and ?category=image|document)
 app.get('/api/files', authMiddleware, async (req, res) => {
   const statusFilter = req.query.status || 'active';
+  if (statusFilter === 'pending') return res.status(400).json({ error: 'Invalid status filter' });
   const categoryFilter = req.query.category;
 
   if (IS_MOCK_MODE) {
@@ -1822,6 +1827,36 @@ app.post('/api/files/batch-upload-urls', authMiddleware, async (req, res) => {
   }
 });
 
+// 5.3.2 Confirm uploads: flips pending files to active after the browser PUT them to S3
+app.post('/api/files/batch-complete', authMiddleware, async (req, res) => {
+  const fileIds = req.body && req.body.file_ids;
+  if (!Array.isArray(fileIds) || fileIds.length === 0) {
+    return res.status(400).json({ error: 'file_ids array is required and must not be empty' });
+  }
+
+  try {
+    const result = await uploadCoordinator.completeUploads(req.user, fileIds);
+
+    if (result.completed.length > 0) {
+      recordAuditLog({
+        user: req.user,
+        action: 'UPLOAD',
+        level: 'info',
+        details: `Uploaded ${result.completed.length} file(s)`,
+        metadata: { count: result.completed.length, file_ids: result.completed }
+      });
+    }
+
+    res.json({ success: true, ...result });
+  } catch (err) {
+    if (err.statusCode === 400) {
+      return res.status(400).json({ error: err.message });
+    }
+    console.error('Batch complete error:', err);
+    res.status(500).json({ error: 'Failed to confirm uploads' });
+  }
+});
+
 // 5.3.9 Download Entire Folder as ZIP Archive
 app.get('/api/folders/:id/download-zip', authMiddleware, async (req, res) => {
   const folderId = req.params.id;
@@ -1889,7 +1924,7 @@ app.post('/api/files/batch-download-zip', authMiddleware, async (req, res) => {
 app.get(['/api/files/download/:id', '/api/files/:id/download'], requireAuthWeb, async (req, res) => {
   const fileId = req.params.id;
   try {
-    const file = await fileRepo.findById(fileId, req.user);
+    const file = await fileRepo.findById(fileId, req.user, { activeOnly: true });
     if (!file) {
       return res.status(404).send('File not found or access denied');
     }
@@ -1941,7 +1976,7 @@ app.get('/api/files/:id/download-url', authMiddleware, async (req, res) => {
       Key: { file_id: fileId }
     }));
     const file = result.Item;
-    if (!file || !canUserAccessFile(file, req.user)) {
+    if (!file || file.status === 'pending' || !canUserAccessFile(file, req.user)) {
       return res.status(404).json({ error: 'File not found or unauthorized' });
     }
 
@@ -2282,9 +2317,10 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
         if (targetFolderId === file.file_id) {
           return res.status(400).json({ error: 'Cannot move folder into itself' });
         }
-        const scanRes = await docClient.send(new ScanCommand({
+        const scanRes = await docClient.send(new QueryCommand({
           TableName: FILES_TABLE,
-          FilterExpression: 'owner_id = :owner',
+          IndexName: 'OwnerIndex',
+          KeyConditionExpression: 'owner_id = :owner',
           ExpressionAttributeValues: { ':owner': req.user.user_id }
         }));
         const descendants = getFolderDescendantIds(file.file_id, scanRes.Items || []);
@@ -2851,6 +2887,7 @@ app.post('/api/shares', authMiddleware, async (req, res) => {
     try {
       const getFileRes = await docClient.send(new GetCommand({ TableName: FILES_TABLE, Key: { file_id } }));
       fileInfo = getFileRes.Item;
+      if (fileInfo && fileInfo.status === 'pending') fileInfo = null;
     } catch (e) {}
   }
 
@@ -3498,8 +3535,9 @@ app.get('/api/admin/users', authMiddleware, async (req, res) => {
 
   try {
     const result = await docClient.send(new ScanCommand({ TableName: USERS_TABLE }));
-    const users = (result.Items || []).map(u => {
-      const usedBytes = u.totalUsed || u.used_storage || 0;
+    const users = await Promise.all((result.Items || []).map(async (u) => {
+      const userStorage = await fileRepo.getUserStorage(u.user_id);
+      const usedBytes = (userStorage && userStorage.totalUsed) || 0;
       const quotaBytes = u.quota || DEFAULT_STORAGE_QUOTA;
       return {
         ...u,
@@ -3512,7 +3550,7 @@ app.get('/api/admin/users', authMiddleware, async (req, res) => {
           formattedQuota: formatBytes(quotaBytes)
         }
       };
-    });
+    }));
     res.json({ success: true, users });
   } catch (err) {
     console.error('Admin users error:', err);
