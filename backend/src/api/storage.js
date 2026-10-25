@@ -2,11 +2,22 @@
 const fs = require('fs');
 const path = require('path');
 
-const STORAGE_DIR = path.resolve(__dirname, '../../storage');
+const isLambda = !!(process.env.AWS_EXECUTION_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const isCloudMode = process.env.USE_MOCK !== 'true' && !process.env.LOCAL_RUNNER;
+
+// In Lambda or read-only environments, fallback safely to /tmp/storage
+const STORAGE_DIR = process.env.LOCAL_STORAGE_DIR || (isLambda ? path.join('/tmp', 'storage') : path.resolve(__dirname, '../../storage'));
 
 function ensureStorageDir() {
+  if (isCloudMode && isLambda) {
+    return;
+  }
   if (!fs.existsSync(STORAGE_DIR)) {
-    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+    try {
+      fs.mkdirSync(STORAGE_DIR, { recursive: true });
+    } catch (e) {
+      console.warn('[Storage Warning] Could not create local storage directory:', e.message);
+    }
   }
 }
 
@@ -153,6 +164,9 @@ function createMinimalPngBuffer() {
 }
 
 function seedDefaultFiles() {
+  if (isCloudMode && isLambda) {
+    return;
+  }
   ensureStorageDir();
 
   const seedFiles = [
@@ -200,13 +214,18 @@ function seedDefaultFiles() {
 }
 
 // Seed upon module loading
-seedDefaultFiles();
+if (!isCloudMode && !isLambda) {
+  seedDefaultFiles();
+}
 
 const METADATA_FILE = path.join(STORAGE_DIR, 'mock-files.json');
 let saveTimeout = null;
 let pendingFilesToSave = null;
 
 function loadMockFiles(defaultFiles = []) {
+  if (isCloudMode && isLambda) {
+    return defaultFiles || [];
+  }
   ensureStorageDir();
   try {
     if (fs.existsSync(METADATA_FILE)) {
@@ -238,6 +257,7 @@ function loadMockFiles(defaultFiles = []) {
 }
 
 function flushMockFilesSync() {
+  if (isCloudMode && isLambda) return;
   if (!pendingFilesToSave) return;
   ensureStorageDir();
   try {
@@ -255,6 +275,7 @@ function flushMockFilesSync() {
 }
 
 function saveMockFiles(files = [], immediate = false) {
+  if (isCloudMode && isLambda) return;
   ensureStorageDir();
   pendingFilesToSave = files;
 

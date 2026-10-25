@@ -117,5 +117,31 @@
     });
     </script>
     <% } %>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const usernameInput = document.getElementById('usernameInput');
+        const rememberCheckbox = document.querySelector('input[name="remember"]');
+        const loginForm = document.getElementById('loginForm');
+
+        // Restore remembered username/email
+        const savedUser = localStorage.getItem('easydrive_remember_user');
+        if (savedUser && usernameInput) {
+            usernameInput.value = savedUser;
+            if (rememberCheckbox) rememberCheckbox.checked = true;
+        }
+
+        // Save or clear on submission
+        if (loginForm && usernameInput && rememberCheckbox) {
+            loginForm.addEventListener('submit', () => {
+                if (rememberCheckbox.checked) {
+                    localStorage.setItem('easydrive_remember_user', usernameInput.value.trim());
+                } else {
+                    localStorage.removeItem('easydrive_remember_user');
+                }
+            });
+        }
+    });
+    </script>
 </body>
 </html>

@@ -1568,3 +1568,54 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 }
+
+
+    // Page-level drag and drop file upload overlay across whole drive
+    (function initGlobalPageDragDrop() {
+        let dragCounter = 0;
+        const overlay = document.createElement('div');
+        overlay.id = 'globalDragDropOverlay';
+        overlay.style.cssText = 'display: none; position: fixed; inset: 0; background: rgba(58, 38, 26, 0.75); backdrop-filter: blur(4px); z-index: 99999; justify-content: center; align-items: center; color: #FFF0DC; pointer-events: none; transition: opacity 0.2s ease;';
+        overlay.innerHTML = '<div style="background: #44362a; border: 2px dashed #e8c89b; border-radius: 20px; padding: 40px 60px; text-align: center; box-shadow: 0 12px 36px rgba(0,0,0,0.4);"><i class="fas fa-cloud-arrow-up" style="font-size: 54px; color: #eedebd; margin-bottom: 16px;"></i><h3 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 700;">Drop files to upload</h3><p style="margin: 0; font-size: 14px; opacity: 0.85;">Release anywhere to upload files to this folder</p></div>';
+        document.body.appendChild(overlay);
+
+        window.addEventListener('dragenter', (e) => {
+            if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                e.preventDefault();
+                dragCounter++;
+                overlay.style.display = 'flex';
+            }
+        });
+
+        window.addEventListener('dragover', (e) => {
+            if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                overlay.style.display = 'flex';
+            }
+        });
+
+        window.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dragCounter = Math.max(0, dragCounter - 1);
+            if (dragCounter === 0) {
+                overlay.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('drop', async (e) => {
+            if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                e.preventDefault();
+                e.stopPropagation();
+                dragCounter = 0;
+                overlay.style.display = 'none';
+
+                const urlParams = new URLSearchParams(window.location.search);
+                const currentFolderId = urlParams.get('folder') || null;
+
+                if (typeof processDroppedItems === 'function') {
+                    await processDroppedItems(e.dataTransfer, { parentId: currentFolderId });
+                }
+            }
+        });
+    })();

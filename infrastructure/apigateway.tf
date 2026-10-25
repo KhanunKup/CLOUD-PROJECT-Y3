@@ -21,7 +21,8 @@ resource "aws_apigatewayv2_api" "easydrive-api" {
 resource "aws_apigatewayv2_integration" "lambda" {
   api_id                 = aws_apigatewayv2_api.easydrive-api.id
   integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.easydrive-api.arn
+  integration_method     = "POST"
+  integration_uri        = aws_lambda_function.easydrive-api.invoke_arn
   payload_format_version = "2.0"
 }
 

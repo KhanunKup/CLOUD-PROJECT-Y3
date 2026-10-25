@@ -198,6 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function handleCreateShareLink() {
         const isEdit = document.getElementById('shareModeInput') && document.getElementById('shareModeInput').value === 'edit';
         const shareId = document.getElementById('shareIdInput') ? document.getElementById('shareIdInput').value : null;
+        // Guarded window.activeShareFileBtn fallback
         const fileId = window.activeShareFileBtn ? window.activeShareFileBtn.dataset.id : null;
 
         if (!isEdit && !fileId) {

@@ -14,7 +14,7 @@
     flex-direction: column;
     gap: 6px;
     z-index: 100;
-    width: 170px;
+    min-width: 195px; width: max-content; max-width: 260px; box-sizing: border-box; overflow-x: hidden;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     max-height: calc(100vh - 24px);
     overflow-y: auto;
@@ -82,7 +82,7 @@
     flex-direction: column;
     gap: 6px;
     z-index: 1050;
-    width: 180px;
+    min-width: 195px; width: max-content; max-width: 260px; box-sizing: border-box; overflow-x: hidden;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     box-sizing: border-box;
     max-height: calc(100vh - 24px);

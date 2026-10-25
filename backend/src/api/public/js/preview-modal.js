@@ -458,8 +458,28 @@
                 const shareModal = document.getElementById('shareModal');
                 if (shareModal) {
                     shareModal.style.display = 'flex';
+                    // Fallback synthetic trigger so share modal has file metadata even if not in DOM
+                    let triggerBtn = document.querySelector(`.file-row[data-id="${fileId}"] .open-share-modal, .open-share-modal[data-id="${fileId}"]`);
+                    if (!triggerBtn) {
+                        triggerBtn = {
+                            dataset: {
+                                id: fileId,
+                                filename: activeFile.name || activeFile.filename || 'Selected File',
+                                type: activeFile.type || 'file',
+                                category: activeFile.category || 'file',
+                                mode: activeFile.isShared ? 'edit' : 'create',
+                                shareId: activeFile.shareId || '',
+                                shareUrl: activeFile.shareUrl || '',
+                                expireHours: activeFile.shareExpireHours || '24',
+                                maxDownloads: activeFile.shareMaxDownloads !== undefined ? String(activeFile.shareMaxDownloads) : '0',
+                                hasPassword: activeFile.hasPassword ? 'true' : 'false',
+                                access: encodeURIComponent(JSON.stringify(activeFile.accessList || []))
+                            },
+                            closest: () => null
+                        };
+                    }
+                    window.activeShareFileBtn = triggerBtn;
                     if (window.renderAccessList) {
-                        const triggerBtn = document.querySelector(`.file-row[data-id="${fileId}"] .open-share-modal, .open-share-modal[data-id="${fileId}"]`);
                         window.renderAccessList(activeFile.accessList || [], triggerBtn);
                     }
                 }

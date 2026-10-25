@@ -578,6 +578,25 @@ async function authenticateUser({ identifier, password }) {
   };
 }
 
+async function listUsers() {
+  if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
+    if (bootstrapPromise) {
+      await bootstrapPromise;
+    }
+    const { ScanCommand } = require('@aws-sdk/lib-dynamodb');
+    try {
+      const res = await authConfig.docClient.send(new ScanCommand({
+        TableName: authConfig.usersTable
+      }));
+      return res.Items || [];
+    } catch (err) {
+      console.error('[AuthService listUsers Error]:', err);
+      return [];
+    }
+  }
+  return inMemoryUsers;
+}
+
 async function getUserById(userId) {
   if (!userId) return null;
   if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
@@ -601,6 +620,7 @@ module.exports = {
   registerUser,
   authenticateUser,
   getUserById,
+  listUsers,
   inMemoryUsers,
   parseCookies,
   signSessionPayload,

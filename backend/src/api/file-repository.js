@@ -191,25 +191,59 @@ class FileRepository {
     }
 
     // AWS Cloud Mode
-    for (const id of fileIds) {
-      try {
-        await this.docClient.send(new UpdateCommand({
-          TableName: this.filesTable,
-          Key: { file_id: id },
-          ConditionExpression: 'owner_id = :owner',
-          UpdateExpression: 'SET #st = :trash, trashed_at = :t',
-          ExpressionAttributeNames: { '#st': 'status' },
-          ExpressionAttributeValues: {
-            ':trash': 'trash',
-            ':t': trashedAt,
-            ':owner': user.user_id
+    let descendantCount = 0;
+    try {
+      const userFilesRes = await this.docClient.send(new QueryCommand({
+        TableName: this.filesTable,
+        IndexName: 'OwnerIndex',
+        KeyConditionExpression: 'owner_id = :owner',
+        ExpressionAttributeValues: { ':owner': user.user_id }
+      })).catch(() => ({ Items: [] }));
+      const userFiles = userFilesRes.Items || [];
+
+      const allDescendantIds = new Set();
+      userFiles.forEach(f => {
+        if (idSet.has(f.file_id) && f.category === 'folder') {
+          const queue = [f.file_id];
+          while (queue.length > 0) {
+            const pid = queue.shift();
+            userFiles.forEach(child => {
+              if (child.folder_id === pid && !idSet.has(child.file_id)) {
+                allDescendantIds.add(child.file_id);
+                if (child.category === 'folder') queue.push(child.file_id);
+              }
+            });
           }
-        }));
-        affectedCount++;
-      } catch (_) {}
+        }
+      });
+
+      const itemsToTrash = [...fileIds, ...allDescendantIds];
+      descendantCount = allDescendantIds.size;
+
+      for (const id of itemsToTrash) {
+        try {
+          await this.docClient.send(new UpdateCommand({
+            TableName: this.filesTable,
+            Key: { file_id: id },
+            ConditionExpression: 'owner_id = :owner',
+            UpdateExpression: 'SET #st = :trash, trashed_at = :t',
+            ExpressionAttributeNames: { '#st': 'status' },
+            ExpressionAttributeValues: {
+              ':trash': 'trash',
+              ':t': trashedAt,
+              ':owner': user.user_id
+            }
+          }));
+          if (idSet.has(id)) {
+            affectedCount++;
+          }
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.error('[FileRepository.batchTrash Cloud Error]:', err);
     }
 
-    return { affectedCount, descendantCount: 0 };
+    return { affectedCount, descendantCount };
   }
 
   // ==========================================
@@ -241,21 +275,68 @@ class FileRepository {
     }
 
     // AWS Cloud Mode
-    for (const id of fileIds) {
-      try {
-        await this.docClient.send(new UpdateCommand({
-          TableName: this.filesTable,
-          Key: { file_id: id },
-          ConditionExpression: 'owner_id = :owner',
-          UpdateExpression: 'SET #st = :active REMOVE trashed_at',
-          ExpressionAttributeNames: { '#st': 'status' },
-          ExpressionAttributeValues: {
-            ':active': 'active',
-            ':owner': user.user_id
+    try {
+      const userFilesRes = await this.docClient.send(new QueryCommand({
+        TableName: this.filesTable,
+        IndexName: 'OwnerIndex',
+        KeyConditionExpression: 'owner_id = :owner',
+        ExpressionAttributeValues: { ':owner': user.user_id }
+      })).catch(() => ({ Items: [] }));
+      const userFiles = userFilesRes.Items || [];
+
+      // Find active folder IDs
+      const activeFolderIds = new Set(userFiles.filter(f => f.status === 'active' && f.category === 'folder').map(f => f.file_id));
+      userFiles.forEach(f => {
+        if (idSet.has(f.file_id) && f.category === 'folder') {
+          activeFolderIds.add(f.file_id);
+        }
+      });
+
+      const allDescendantsToRestore = new Set();
+      userFiles.forEach(f => {
+        if (idSet.has(f.file_id) && f.category === 'folder') {
+          const queue = [f.file_id];
+          while (queue.length > 0) {
+            const pid = queue.shift();
+            userFiles.forEach(child => {
+              if (child.folder_id === pid && child.status === 'trash' && !idSet.has(child.file_id)) {
+                allDescendantsToRestore.add(child.file_id);
+                if (child.category === 'folder') queue.push(child.file_id);
+              }
+            });
           }
-        }));
-        affectedCount++;
-      } catch (_) {}
+        }
+      });
+
+      const itemsToRestore = [...fileIds, ...allDescendantsToRestore];
+
+      for (const id of itemsToRestore) {
+        try {
+          const item = userFiles.find(f => f.file_id === id);
+          let targetFolderId = item && item.folder_id ? item.folder_id : 'root';
+          if (targetFolderId !== 'root' && !activeFolderIds.has(targetFolderId)) {
+            targetFolderId = 'root';
+          }
+
+          await this.docClient.send(new UpdateCommand({
+            TableName: this.filesTable,
+            Key: { file_id: id },
+            ConditionExpression: 'owner_id = :owner',
+            UpdateExpression: 'SET #st = :active, folder_id = :fid REMOVE trashed_at',
+            ExpressionAttributeNames: { '#st': 'status' },
+            ExpressionAttributeValues: {
+              ':active': 'active',
+              ':fid': targetFolderId,
+              ':owner': user.user_id
+            }
+          }));
+          if (idSet.has(id)) {
+            affectedCount++;
+          }
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.error('[FileRepository.batchRestore Cloud Error]:', err);
     }
 
     return { affectedCount };
@@ -273,32 +354,80 @@ class FileRepository {
       return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     };
 
-    if (!this.isMockMode && this.docClient && this.usersTable) {
+    if (!this.isMockMode && this.docClient && this.filesTable) {
       try {
-        const res = await this.docClient.send(new GetCommand({
-          TableName: this.usersTable,
-          Key: { user_id: userId }
-        }));
-        const item = res.Item || {};
-        const quota = item.quota || DEFAULT_STORAGE_QUOTA;
-        const totalUsed = item.totalUsed || item.used_storage || 0;
+        let quota = DEFAULT_STORAGE_QUOTA;
+        let userEmail = '';
+
+        // 1. Fetch user quota from USERS_TABLE
+        if (this.usersTable) {
+          try {
+            const userRes = await this.docClient.send(new GetCommand({
+              TableName: this.usersTable,
+              Key: { user_id: userId }
+            }));
+            if (userRes.Item) {
+              quota = userRes.Item.quota || DEFAULT_STORAGE_QUOTA;
+              userEmail = userRes.Item.email || '';
+            }
+          } catch (_) {}
+        }
+
+        // 2. Query active files belonging to this user to calculate real storage
+        const filesRes = await this.docClient.send(new QueryCommand({
+          TableName: this.filesTable,
+          IndexName: 'OwnerIndex',
+          KeyConditionExpression: 'owner_id = :owner',
+          FilterExpression: '#st = :status',
+          ExpressionAttributeNames: { '#st': 'status' },
+          ExpressionAttributeValues: {
+            ':owner': userId,
+            ':status': 'active'
+          }
+        })).catch(() => ({ Items: [] }));
+
+        const activeFiles = filesRes.Items || [];
+        const breakdown = { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 };
+        let totalUsed = 0;
+
+        for (const f of activeFiles) {
+          if (f.category !== 'folder') {
+            const sz = Number(f.size) || 0;
+            totalUsed += sz;
+            const cat = f.category || 'other';
+            breakdown[cat] = (breakdown[cat] || 0) + sz;
+          }
+        }
+
         const free = Math.max(0, quota - totalUsed);
-        const percentUsed = Math.min(100, Math.round((totalUsed / quota) * 100));
-        const breakdown = item.breakdown || {
-          document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0
-        };
+        const percent = quota > 0 ? parseFloat(Math.min(100, (totalUsed / quota) * 100).toFixed(1)) : 0;
+
+        const breakdownFormatted = {};
+        const breakdownPercent = {};
+        for (const [cat, bytes] of Object.entries(breakdown)) {
+          breakdownFormatted[cat] = formatBytes(bytes);
+          const rawPct = quota > 0 ? (bytes / quota) * 100 : 0;
+          breakdownPercent[cat] = bytes > 0 ? Math.max(2, parseFloat(rawPct.toFixed(1))) : 0;
+        }
 
         return {
           user_id: userId,
-          email: item.email || '',
+          email: userEmail,
           quota,
+          quotaBytes: quota,
           totalUsed,
+          usedBytes: totalUsed,
           free,
+          freeBytes: free,
+          percent,
+          percentUsed: percent,
           formattedQuota: formatBytes(quota),
+          formattedUsed: formatBytes(totalUsed),
           formattedTotalUsed: formatBytes(totalUsed),
           formattedFree: formatBytes(free),
-          percentUsed,
-          breakdown
+          breakdown,
+          breakdownFormatted,
+          breakdownPercent
         };
       } catch (err) {
         console.error('[FileRepository.getUserStorage Error]:', err);
@@ -320,16 +449,33 @@ class FileRepository {
     }
     const quota = DEFAULT_STORAGE_QUOTA;
     const free = Math.max(0, quota - totalUsed);
+    const percent = quota > 0 ? parseFloat(Math.min(100, (totalUsed / quota) * 100).toFixed(1)) : 0;
+
+    const breakdownFormatted = {};
+    const breakdownPercent = {};
+    for (const [cat, bytes] of Object.entries(breakdown)) {
+      breakdownFormatted[cat] = formatBytes(bytes);
+      const rawPct = quota > 0 ? (bytes / quota) * 100 : 0;
+      breakdownPercent[cat] = bytes > 0 ? Math.max(2, parseFloat(rawPct.toFixed(1))) : 0;
+    }
+
     return {
       user_id: userId,
       quota,
+      quotaBytes: quota,
       totalUsed,
+      usedBytes: totalUsed,
       free,
+      freeBytes: free,
+      percent,
+      percentUsed: percent,
       formattedQuota: formatBytes(quota),
+      formattedUsed: formatBytes(totalUsed),
       formattedTotalUsed: formatBytes(totalUsed),
       formattedFree: formatBytes(free),
-      percentUsed: Math.min(100, Math.round((totalUsed / quota) * 100)),
-      breakdown
+      breakdown,
+      breakdownFormatted,
+      breakdownPercent
     };
   }
 
@@ -370,6 +516,21 @@ class FileRepository {
           };
           const res = await this.docClient.send(new QueryCommand(queryParams));
           activeFiles = res.Items || [];
+          if (activeFiles.length === 0 && (!folderId || folderId === 'root')) {
+            const fallbackRes = await this.docClient.send(new QueryCommand({
+              TableName: this.filesTable,
+              IndexName: 'OwnerIndex',
+              KeyConditionExpression: 'owner_id = :owner',
+              FilterExpression: '#st = :status',
+              ExpressionAttributeNames: { '#st': 'status' },
+              ExpressionAttributeValues: {
+                ':owner': userId,
+                ':status': 'active'
+              }
+            }));
+            const allItems = fallbackRes.Items || [];
+            activeFiles = allItems.filter(f => !f.folder_id || f.folder_id === 'root');
+          }
         } catch (_) {
           const res = await this.docClient.send(new QueryCommand({
             TableName: this.filesTable,

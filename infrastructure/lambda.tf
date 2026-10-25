@@ -18,7 +18,7 @@ resource "aws_lambda_function" "easydrive-api" {
   function_name    = "easydrive-api-handler"
   role             = data.aws_iam_role.lab_role.arn
   handler          = "index.handler"
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   source_code_hash = data.archive_file.api_zip.output_base64sha256
   timeout          = 30
   memory_size      = 512
@@ -27,7 +27,6 @@ resource "aws_lambda_function" "easydrive-api" {
     variables = {
       NODE_ENV       = "production"
       SESSION_SECRET = var.session_secret
-      AWS_REGION     = var.region
       FILES_TABLE    = aws_dynamodb_table.easydrive-files.name
       SHARES_TABLE   = aws_dynamodb_table.easydrive-shares.name
       USERS_TABLE    = aws_dynamodb_table.easydrive-users.name
@@ -48,14 +47,13 @@ resource "aws_lambda_function" "easydrive-worker" {
   function_name    = "easydrive-worker-handler"
   role             = data.aws_iam_role.lab_role.arn
   handler          = "index.handler"
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   source_code_hash = data.archive_file.worker_zip.output_base64sha256
   timeout          = 60
   memory_size      = 512
 
   environment {
     variables = {
-      AWS_REGION     = var.region
       FILES_TABLE    = aws_dynamodb_table.easydrive-files.name
       USERS_TABLE    = aws_dynamodb_table.easydrive-users.name
       STORAGE_BUCKET = data.aws_s3_bucket.easydrive-storage.id
