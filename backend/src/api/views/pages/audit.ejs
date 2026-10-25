@@ -1,40 +1,34 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EASYDRIVE - Audit Log</title>
+    <title>Audit Log — EasyDrive</title>
+    
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Core styles & theme -->
+    <link rel="stylesheet" href="/css/menu.css">
+    <link rel="stylesheet" href="/css/homepage.css">
+
     <style>
-        @font-face {
-        font-family: 'EnglishFont'; /* ตั้งชื่อฟอนต์ตามต้องการ */
-        src: url('/fonts/Kanit-Bold.ttf') format('truetype'); 
-        /* หมายเหตุ: ไม่ต้องใส่ /public นำหน้า เพราะใน server.js เราตั้ง static folder ไว้แล้ว */
-        }
-
-        @font-face {
-            font-family: 'ThaiFont'; /* ตั้งชื่อฟอนต์ตามต้องการ */
-            src: url('/fonts/Outfit-VariableFont_wght.ttf') format('truetype'); 
-            /* หมายเหตุ: ไม่ต้องใส่ /public นำหน้า เพราะใน server.js เราตั้ง static folder ไว้แล้ว */
-        }
         body {
-            margin:0%;
-            font-family: 'EnglishFont', 'ThaiFont', sans-serif;
+            font-family: 'Outfit', 'Kanit', sans-serif;
+            background-color: #CEB59E;
+            margin: 0;
+            min-height: 100vh;
         }
 
-        /* ─── Main Container & Card ─── */
-        .main-container {
-            flex: 1;
-            padding: 40px;
-            display: flex;
-            justify-content: center;
-        }
+        /* ─── Main Content & Card ─── */
         .content-card {
-            background-color: #f2ede7;
+            background-color: #f5f0eb;
+            border: 1px solid rgba(132, 97, 69, 0.16);
             border-radius: 20px;
             width: 100%;
-            max-width: 1200px;
             padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            box-shadow: 0 10px 30px rgba(58, 38, 26, 0.08);
+            box-sizing: border-box;
         }
 
         /* ─── Card Header ─── */
@@ -44,212 +38,321 @@
             align-items: flex-start;
             border-bottom: 2px solid #e2d5ca;
             padding-bottom: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
-        .page-title h1 {
-            font-size: 2.2rem;
-            color: #222;
-            margin-bottom: 5px;
+
+        .card-title-group h1 {
+            font-family: 'Outfit', 'Kanit', sans-serif;
+            font-size: 32px;
+            font-weight: 800;
+            color: #423E3B;
+            margin: 0 0 6px 0;
+            line-height: 1.2;
+            letter-spacing: -0.5px;
         }
-        .page-title p {
-            color: #555;
-            font-size: 1rem;
+
+        .card-title-group p {
+            font-family: 'Outfit', 'Kanit', sans-serif;
+            color: #7a6552;
+            font-size: 14px;
+            margin: 0;
         }
-        .header-icon svg { width: 50px; height: 50px; fill: #333; }
+
+        .header-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            background: rgba(125, 85, 52, 0.08);
+            border: 1.5px solid rgba(125, 85, 52, 0.15);
+        }
+
+        .header-icon svg {
+            width: 28px;
+            height: 28px;
+            stroke: #7d5534;
+        }
 
         /* ─── Toolbar (Search, Filters, Stats) ─── */
         .toolbar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 24px;
         }
+
         .filter-section {
             display: flex;
             flex-direction: column;
             gap: 10px;
-            width: 40%;
+            flex: 1;
+            min-width: 280px;
+            max-width: 480px;
         }
+
         .filter-section input {
             padding: 12px 20px;
-            border-radius: 10px;
-            border: 1px solid #d1bdae;
+            border-radius: 12px;
+            border: 1.5px solid #d1bdae;
             background-color: #fff;
             width: 100%;
-            font-size: 1rem;
+            font-family: 'Outfit', 'Kanit', sans-serif;
+            font-size: 14px;
+            color: #44362A;
             box-sizing: border-box;
             outline: none;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
+
         .filter-section input:focus {
-            border-color: #7d5534;
-            box-shadow: 0 0 0 2px rgba(125, 85, 52, 0.2);
+            border-color: #c4a071;
+            box-shadow: 0 0 0 2px rgba(196, 160, 113, 0.25);
         }
-        .filter-buttons { display: flex; gap: 10px; }
+
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
         .filter-dropdown {
             padding: 8px 16px;
             border-radius: 20px;
-            border: 1px solid #d1bdae;
+            border: 1.5px solid #d1bdae;
             background-color: #fff;
             cursor: pointer;
-            font-size: 0.85rem;
-            color: #444;
+            font-size: 13px;
+            color: #554335;
             font-weight: 600;
-            font-family: inherit;
+            font-family: 'Outfit', 'Kanit', sans-serif;
             outline: none;
             box-shadow: 0 2px 5px rgba(0,0,0,0.02);
             transition: border-color 0.2s, box-shadow 0.2s;
         }
+
         .filter-dropdown:focus {
-            border-color: #7d5534;
-            box-shadow: 0 0 0 2px rgba(125, 85, 52, 0.2);
+            border-color: #c4a071;
+            box-shadow: 0 0 0 2px rgba(196, 160, 113, 0.25);
         }
 
+        /* ─── Stats Section ─── */
         .stats-section {
             display: flex;
             gap: 15px;
             flex-wrap: wrap;
         }
+
         .stat-box {
             background-color: #fff;
-            border-radius: 15px;
-            padding: 12px 20px;
+            border: 1px solid rgba(132, 97, 69, 0.12);
+            border-radius: 14px;
+            padding: 14px 22px;
             display: flex;
             align-items: center;
-            gap: 15px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.04);
-            min-width: 160px;
+            gap: 14px;
+            box-shadow: 0 4px 10px rgba(58, 38, 26, 0.04);
+            min-width: 140px;
         }
-        .stat-icon-wrapper svg { width: 32px; height: 32px; }
-        .stat-info { text-align: center; flex: 1;}
-        .stat-number { font-size: 1.6rem; font-weight: 700; line-height: 1; }
-        .stat-label { font-size: 0.75rem; color: #555; margin-top: 4px; font-weight: 600; }
 
-        .text-orange { color: #f26b21; }
-        .text-yellow { color: #f59e0b; }
-        .text-red { color: #e53935; }
+        .stat-icon-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-        /* ─── Table ─── */
+        .stat-icon-wrapper svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .stat-info {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #7a6552;
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        .text-orange { color: #d96523; }
+        .text-warning { color: #f57c00; }
+        .text-danger { color: #c62828; }
+
+        /* ─── Data Table ─── */
         .table-container {
-            background-color: #f9f7f5;
-            border-radius: 15px;
-            overflow: hidden;
-            border: 1px solid #e2d5ca;
+            background-color: #fff;
+            border: 1px solid rgba(132, 97, 69, 0.15);
+            border-radius: 14px;
+            overflow-x: auto;
+            box-shadow: 0 4px 14px rgba(58, 38, 26, 0.03);
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
+            font-family: 'Outfit', 'Kanit', sans-serif;
         }
+
         th, td {
-            padding: 12px 20px;
-            text-align: center;
-            border-bottom: 1px solid #eae2dc;
-            vertical-align: middle;
+            padding: 14px 18px;
+            text-align: left;
+            border-bottom: 1px solid #eee5dc;
+            font-size: 14px;
         }
+
         th {
+            background-color: #f8f4ef;
+            color: #5a3e26;
             font-weight: 700;
-            font-size: 0.85rem;
-            color: #333;
-            padding-top: 15px;
-            padding-bottom: 15px;
-        }
-        td { font-size: 0.9rem; }
-        
-        th:first-child, td:first-child { text-align: left; }
-
-        /* User Cell */
-        .user-cell { display: flex; align-items: center; gap: 12px; }
-        .user-avatar {
-            width: 36px; height: 36px; background-color: #e3f2fd;
-            border-radius: 50%; display: flex; justify-content: center; align-items: center;
-        }
-        .user-avatar svg { width: 20px; height: 20px; fill: #2196f3; }
-        .user-name-email { display: flex; flex-direction: column; }
-        .user-name-email strong { color: #111; font-size: 0.9rem; font-weight: 600;}
-        .user-name-email span { color: #777; font-size: 0.75rem;}
-
-        /* Role Badge */
-        .badge-role {
-            padding: 4px 16px; border-radius: 20px; font-size: 0.8rem;
-            font-weight: 700; border: 1px solid #ddd; background-color: #fff;
-            display: inline-block; min-width: 70px;
-        }
-        .role-admin { color: #e53935; }
-        .role-user { color: #333; }
-
-        /* Time & Date */
-        .datetime-cell {
-            display: flex; flex-direction: column; font-weight: 700; font-size: 0.85rem; color: #111;
+            font-size: 13px;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
         }
 
-        /* Event Levels */
-        .level-text { font-weight: 700; font-size: 0.85rem; }
-        .level-info { color: #1976d2; }
-        .level-warning { color: #f57c00; }
-        .level-critical { color: #d32f2f; }
-
-        /* Action Badges */
-        .badge-action {
-            padding: 6px 16px; border-radius: 20px; font-size: 0.8rem;
-            font-weight: 600; color: #fff; display: inline-block; min-width: 90px;
-            text-align: center; background-color: #5c6bc0;
+        tr.audit-row {
+            transition: background-color 0.15s;
         }
-        .action-login { background-color: #7b1fa2; color: #fff; }
-        .action-signup { background-color: #2e7d32; color: #fff; }
-        .action-upload { background-color: #1976d2; color: #fff; }
-        .action-create_folder { background-color: #0288d1; color: #fff; }
-        .action-rename { background-color: #f57c00; color: #fff; }
-        .action-move_to_trash { background-color: #e65100; color: #fff; }
-        .action-restore { background-color: #388e3c; color: #fff; }
-        .action-permanent_delete { background-color: #c62828; color: #fff; }
-        .action-create_share { background-color: #00897b; color: #fff; }
-        .action-download_share { background-color: #00acc1; color: #fff; }
-        .action-role_change { background-color: #ef6c00; color: #fff; }
-        .action-delete_user { background-color: #b71c1c; color: #fff; }
 
-        /* Detail Button */
-        .btn-detail {
-            padding: 6px 16px; border-radius: 20px; border: none;
-            background-color: #43a047; color: white; font-size: 0.8rem;
-            font-weight: 600; cursor: pointer; transition: background 0.2s;
+        tr.audit-row:hover {
+            background-color: #fdfaf6;
         }
-        .btn-detail:hover { background-color: #2e7d32; }
+
+        /* ─── Badges (Action & Level) ─── */
+        .action-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            background-color: #f5f0eb;
+            color: #554335;
+            border: 1px solid #d8c7b8;
+        }
+
+        .level-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: capitalize;
+        }
+
+        .level-badge.level-info {
+            background-color: #e8f4fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+        }
+
+        .level-badge.level-warning {
+            background-color: #fff8e1;
+            color: #f57c00;
+            border: 1px solid #ffe082;
+        }
+
+        .level-badge.level-critical {
+            background-color: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+
+        .btn-view-detail {
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 1.5px solid #d1bdae;
+            background-color: #fff;
+            color: #554335;
+            font-family: 'Outfit', 'Kanit', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, transform 0.1s;
+        }
+
+        .btn-view-detail:hover {
+            background-color: #7d5534;
+            color: #fff;
+            border-color: #7d5534;
+            transform: translateY(-1px);
+        }
 
         /* ─── Pagination ─── */
         .pagination {
-            display: flex; justify-content: flex-end; align-items: center;
-            padding: 20px 0 0 0; gap: 6px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 20px 0 0 0;
+            gap: 6px;
         }
-        .page-btn, .page-num {
-            padding: 6px 14px; border-radius: 20px; background-color: #fff;
-            border: 1px solid #ddd; cursor: pointer; font-size: 0.85rem;
-            color: #333; font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        }
-        .page-num.active { background-color: #e0e0e0; border-color: #ccc; }
 
+        .page-btn, .page-num {
+            padding: 6px 14px;
+            border-radius: 10px;
+            background-color: #fff;
+            border: 1.5px solid #d1bdae;
+            cursor: pointer;
+            font-family: 'Outfit', 'Kanit', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            color: #554335;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .page-btn:hover, .page-num:hover {
+            border-color: #c4a071;
+            background-color: #faf6f0;
+        }
+
+        .page-num.active {
+            background-color: #7d5534;
+            color: #fff;
+            border-color: #7d5534;
+        }
     </style>
 </head>
 <body>
-    <!-- แถบเมนูด้านบน -->
-    <div class="nav">
-        <%- include('../partials/nav/topbar-admin.ejs') %>
-    </div>
+
+<div class="page-layout">
+
+    <!-- Left Navigation Sidebar -->
+    <%- include('../partials/nav/sidebar', { currentPage: 'audit', user: typeof user !== 'undefined' ? user : null }) %>
+    <div class="sidebar-spacer"></div>
 
     <!-- ─── Main Content ─── -->
-    <main class="main-container">
+    <main class="main-content">
         <div class="content-card">
             
             <!-- Card Header -->
             <div class="card-header">
-                <div class="page-title">
+                <div class="card-title-group">
                     <h1>Audit Log</h1>
-                    <p>บันทึกกิจกรรมและการเปลี่ยนแปลงทั้งหมดในระบบ</p>
+                    <p>Track all system events, security logs, and file activities</p>
                 </div>
-                <div class="header-icon">
-                    <!-- ไอคอนม้วนเอกสาร (Scroll) -->
-                    <svg viewBox="0 0 24 24">
-                        <path d="M19 3H7c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 14H7v-2h10v2zm0-4H7v-2h10v2zm0-4H7V7h10v2z"/>
-                        <path d="M4 7h1v12H4zM2 9h1v8H2z"/>
+                <!-- Correct Audit Log Document Icon (matching Sidebar & Theme) -->
+                <div class="header-icon" title="Audit Log">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
                     </svg>
                 </div>
             </div>
@@ -257,10 +360,10 @@
             <!-- Toolbar & Stats -->
             <div class="toolbar">
                 <div class="filter-section">
-                    <input type="text" id="auditSearchInput" placeholder="ค้นหาบันทึกกิจกรรม...">
+                    <input type="text" id="auditSearchInput" placeholder="Search audit logs by actor, email, or details...">
                     <div class="filter-buttons">
                         <select id="actionFilter" class="filter-dropdown">
-                            <option value="All">ACTION: ทั้งหมด</option>
+                            <option value="All">ACTION: All</option>
                             <option value="LOGIN">ACTION: LOGIN</option>
                             <option value="SIGNUP">ACTION: SIGNUP</option>
                             <option value="UPLOAD">ACTION: UPLOAD</option>
@@ -275,7 +378,7 @@
                             <option value="DELETE_USER">ACTION: DELETE_USER</option>
                         </select>
                         <select id="levelFilter" class="filter-dropdown">
-                            <option value="All">LEVEL: ทั้งหมด</option>
+                            <option value="All">LEVEL: All</option>
                             <option value="info">LEVEL: Info</option>
                             <option value="warning">LEVEL: Warning</option>
                             <option value="critical">LEVEL: Critical</option>
@@ -287,77 +390,88 @@
                     <!-- Total Events -->
                     <div class="stat-box">
                         <div class="stat-icon-wrapper">
-                            <svg viewBox="0 0 24 24" fill="#333"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 14.59L14.59 18l-2.12-2.12c-.56.34-1.2.53-1.88.53-1.93 0-3.5-1.57-3.5-3.5S8.66 9.41 10.59 9.41s3.5 1.57 3.5 3.5c0 .68-.19 1.32-.53 1.88L16 16.59zM10.59 10.91c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="#7d5534" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                            </svg>
                         </div>
                         <div class="stat-info">
                             <div class="stat-number text-orange" id="totalEventsStat"><%= typeof stats !== 'undefined' ? stats.totalEvents : (typeof logs !== 'undefined' ? logs.length : 0) %></div>
-                            <div class="stat-label">เหตุการณ์ทั้งหมด</div>
+                            <div class="stat-label">Total Events</div>
                         </div>
                     </div>
                     <!-- Warning -->
                     <div class="stat-box">
                         <div class="stat-icon-wrapper">
-                            <svg viewBox="0 0 24 24" fill="#f5b041"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+                            <svg viewBox="0 0 24 24" fill="#f57c00"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-number text-yellow" id="warningStat"><%= typeof stats !== 'undefined' ? stats.warningCount : 0 %></div>
-                            <div class="stat-label">Warning</div>
+                            <div class="stat-number text-warning" id="warningEventsStat"><%= typeof stats !== 'undefined' ? stats.warningCount : 0 %></div>
+                            <div class="stat-label">Warnings</div>
                         </div>
                     </div>
                     <!-- Critical -->
                     <div class="stat-box">
                         <div class="stat-icon-wrapper">
-                            <svg viewBox="0 0 24 24" fill="#e74c3c"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                            <svg viewBox="0 0 24 24" fill="#c62828"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-number text-red" id="criticalStat"><%= typeof stats !== 'undefined' ? stats.criticalCount : 0 %></div>
-                            <div class="stat-label">Critical</div>
+                            <div class="stat-number text-danger" id="criticalEventsStat"><%= typeof stats !== 'undefined' ? stats.criticalCount : 0 %></div>
+                            <div class="stat-label">Critical Alerts</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Data Table -->
+            <!-- Table -->
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>ผู้ใช้</th>
-                            <th>ROLE</th>
-                            <th>เวลา</th>
-                            <th>ระดับเหตุการณ์</th>
+                            <th>Timestamp</th>
+                            <th>Actor</th>
                             <th>Action</th>
-                            <th></th>
+                            <th>Level</th>
+                            <th>Details</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="auditTableBody">
                         <% if (typeof logs !== 'undefined' && logs && logs.length > 0) { %>
                             <% logs.forEach(function(log) { %>
-                                <tr class="audit-row" data-action="<%= log.action %>" data-level="<%= log.level %>" data-user="<%= (log.user_name || '').toLowerCase() %>" data-email="<%= (log.user_email || '').toLowerCase() %>" data-details="<%= (log.details || '').toLowerCase() %>">
+                                <tr class="audit-row" data-action="<%= log.action %>" data-level="<%= log.level %>" data-text="<%= (log.user_name + ' ' + log.user_email + ' ' + log.details + ' ' + log.action).toLowerCase() %>">
+                                    <td style="white-space: nowrap; font-size: 13px; color: #554335;">
+                                        <%= new Date(log.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) %>
+                                    </td>
                                     <td>
-                                        <div class="user-cell">
-                                            <div class="user-avatar"><svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-                                            <div class="user-name-email">
-                                                <strong><%= log.user_name %></strong>
-                                                <span><%= log.user_email %></span>
-                                            </div>
+                                        <div style="display: flex; flex-direction: column;">
+                                            <strong style="color: #3b2c20; font-size: 14px;"><%= log.user_name %></strong>
+                                            <span style="color: #8c7b6d; font-size: 12px;"><%= log.user_email %></span>
                                         </div>
                                     </td>
-                                    <td><span class="badge-role role-<%= log.role === 'admin' ? 'admin' : 'user' %>"><%= log.role === 'admin' ? 'Admin' : 'User' %></span></td>
                                     <td>
-                                        <div class="datetime-cell">
-                                            <span><%= new Date(log.timestamp).toLocaleTimeString('en-GB') %></span>
-                                            <span><%= new Date(log.timestamp).toLocaleDateString('en-GB') %></span>
-                                        </div>
+                                        <span class="action-badge"><%= log.action %></span>
                                     </td>
-                                    <td class="level-text level-<%= log.level %>"><%= log.level %></td>
-                                    <td><span class="badge-action action-<%= log.action.toLowerCase() %>"><%= log.action %></span></td>
-                                    <td><button type="button" class="btn-detail view-log-detail-btn" data-log="<%= encodeURIComponent(JSON.stringify(log)) %>">ดูรายละเอียด</button></td>
+                                    <td>
+                                        <span class="level-badge level-<%= log.level %>">
+                                            <%= log.level %>
+                                        </span>
+                                    </td>
+                                    <td style="color: #554335; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="<%= log.details %>">
+                                        <%= log.details %>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn-view-detail view-log-detail-btn" data-log="<%= encodeURIComponent(JSON.stringify(log)) %>">
+                                            View Details
+                                        </button>
+                                    </td>
                                 </tr>
                             <% }); %>
                         <% } else { %>
                             <tr>
-                                <td colspan="6" style="text-align: center; padding: 30px; color: #888;">ไม่พบบันทึกเหตุการณ์ในระบบ</td>
+                                <td colspan="6" style="text-align: center; padding: 30px; color: #888;">No audit records found in the system</td>
                             </tr>
                         <% } %>
                     </tbody>
@@ -366,119 +480,129 @@
 
             <!-- Pagination -->
             <div class="pagination">
-                <span id="auditCountSpan" style="margin-right: auto; font-size: 0.85rem; color: #777;">
-                    แสดง <%= typeof logs !== 'undefined' ? logs.length : 0 %> เหตุการณ์
+                <span id="auditCountSpan" style="margin-right: auto; font-size: 13px; color: #7a6552; font-weight: 500;">
+                    Showing <%= typeof logs !== 'undefined' ? logs.length : 0 %> events
                 </span>
-                <button class="page-btn">ก่อนหน้า</button>
+                <button class="page-btn">Previous</button>
                 <button class="page-num active">1</button>
-                <button class="page-btn">ถัดไป</button>
+                <button class="page-btn">Next</button>
             </div>
 
         </div>
     </main>
+</div>
 
-    <!-- Modal ดูรายละเอียด Log -->
-    <div id="logDetailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: #fff; width: 500px; max-width: 90%; border-radius: 16px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 12px;">
-                <h3 style="margin: 0; color: #222; font-size: 1.2rem;">รายละเอียดเหตุการณ์ (Audit Log)</h3>
-                <button type="button" id="closeLogModalBtn" style="background: none; border: none; font-size: 22px; cursor: pointer; color: #888;">&times;</button>
-            </div>
+<!-- Modal for Viewing Log Details -->
+<div id="logDetailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: #fff; width: 560px; max-width: 90%; border-radius: 16px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); font-family: 'Outfit', 'Kanit', sans-serif;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee5dc; padding-bottom: 12px;">
+            <h3 style="margin: 0; color: #423E3B; font-size: 18px; font-weight: 700;">Audit Log Details</h3>
+            <button type="button" id="closeLogModalBtn" style="background: none; border: none; font-size: 22px; cursor: pointer; color: #888;">&times;</button>
+        </div>
+        
+        <div id="logDetailContent" style="display: flex; flex-direction: column; gap: 12px; font-size: 14px;">
+            <!-- Populated via JavaScript -->
+        </div>
 
-            <div id="logDetailContent" style="display: flex; flex-direction: column; gap: 12px; font-size: 0.95rem;">
-                <!-- Content injected dynamically via JS -->
-            </div>
-
-            <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
-                <button type="button" id="dismissLogModalBtn" style="padding: 8px 24px; border-radius: 20px; border: none; background: #333; color: white; cursor: pointer; font-weight: 600;">ปิด</button>
-            </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 25px; border-top: 1px solid #eee5dc; padding-top: 15px;">
+            <button type="button" id="dismissLogModalBtn" style="padding: 8px 22px; border-radius: 20px; border: 1.5px solid #d1bdae; background: #fff; cursor: pointer; font-family: inherit; font-weight: 600; color: #554335;">Close</button>
         </div>
     </div>
+</div>
 
-    <!-- Scripts: Search, Filter, Modal -->
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const searchInput = document.getElementById('auditSearchInput') || document.querySelector('.filter-section input');
-        const actionSelect = document.getElementById('actionFilter');
-        const levelSelect = document.getElementById('levelFilter');
-        const auditRows = document.querySelectorAll('.audit-row');
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('auditSearchInput');
+    const actionSelect = document.getElementById('actionFilter');
+    const levelSelect = document.getElementById('levelFilter');
+    const rows = document.querySelectorAll('.audit-row');
 
-        function applyFilters() {
-            const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-            const selectedAction = actionSelect ? actionSelect.value : 'All';
-            const selectedLevel = levelSelect ? levelSelect.value : 'All';
+    function applyFilters() {
+        const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const action = actionSelect ? actionSelect.value : 'All';
+        const level = levelSelect ? levelSelect.value : 'All';
+        let visibleCount = 0;
 
-            let visibleCount = 0;
+        rows.forEach(row => {
+            const rowAction = row.dataset.action;
+            const rowLevel = row.dataset.level;
+            const rowText = row.dataset.text;
 
-            auditRows.forEach(row => {
-                const action = row.dataset.action || '';
-                const level = row.dataset.level || '';
-                const user = row.dataset.user || '';
-                const email = row.dataset.email || '';
-                const details = row.dataset.details || '';
+            const matchesAction = (action === 'All' || rowAction === action);
+            const matchesLevel = (level === 'All' || rowLevel === level);
+            const matchesQuery = (!query || rowText.includes(query));
 
-                const matchesQuery = !query || user.includes(query) || email.includes(query) || action.toLowerCase().includes(query) || details.includes(query);
-                const matchesAction = selectedAction === 'All' || action.toLowerCase() === selectedAction.toLowerCase();
-                const matchesLevel = selectedLevel === 'All' || level.toLowerCase() === selectedLevel.toLowerCase();
-
-                if (matchesQuery && matchesAction && matchesLevel) {
-                    row.style.display = '';
-                    visibleCount++;
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-
-            const countEl = document.getElementById('auditCountSpan');
-            if (countEl) countEl.textContent = `แสดง ${visibleCount} เหตุการณ์`;
-        }
-
-        if (searchInput) searchInput.addEventListener('input', applyFilters);
-        if (actionSelect) actionSelect.addEventListener('change', applyFilters);
-        if (levelSelect) levelSelect.addEventListener('change', applyFilters);
-
-        // Log Detail Modal
-        const modal = document.getElementById('logDetailModal');
-        const contentBox = document.getElementById('logDetailContent');
-        const closeBtn = document.getElementById('closeLogModalBtn');
-        const dismissBtn = document.getElementById('dismissLogModalBtn');
-
-        function closeModal() {
-            if (modal) modal.style.display = 'none';
-        }
-
-        document.querySelectorAll('.view-log-detail-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                try {
-                    const log = JSON.parse(decodeURIComponent(btn.dataset.log));
-                    contentBox.innerHTML = `
-                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">Log ID:</strong> <span>${log.log_id}</span></div>
-                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">ผู้ดำเนินการ:</strong> <span>${log.user_name} (${log.user_email})</span></div>
-                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">Role:</strong> <span style="font-weight: bold; text-transform: uppercase;">${log.role}</span></div>
-                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">Action:</strong> <span style="background: #eee; padding: 2px 8px; border-radius: 4px; font-weight: bold;">${log.action}</span></div>
-                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">ระดับความรุนแรง:</strong> <span style="font-weight: bold; text-transform: uppercase;">${log.level}</span></div>
-                        <div style="display: flex; justify-content: space-between;"><strong style="color: #666;">วันเวลา:</strong> <span>${new Date(log.timestamp).toLocaleString('th-TH')}</span></div>
-                        <div style="margin-top: 8px; padding: 12px; background: #fdfbf7; border: 1px solid #ecd8c6; border-radius: 8px;">
-                            <strong style="display: block; margin-bottom: 4px; color: #44362A;">รายละเอียดเพิ่มเติม:</strong>
-                            <span style="color: #555;">${log.details || 'ไม่มีรายละเอียดเพิ่มเติม'}</span>
-                        </div>
-                    `;
-                    if (modal) modal.style.display = 'flex';
-                } catch (e) {
-                    console.error('Failed to parse log detail', e);
-                }
-            });
+            if (matchesAction && matchesLevel && matchesQuery) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
         });
 
-        if (closeBtn) closeBtn.addEventListener('click', closeModal);
-        if (dismissBtn) dismissBtn.addEventListener('click', closeModal);
-        if (modal) {
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) closeModal();
-            });
-        }
-    });
-    </script>
+        const countEl = document.getElementById('auditCountSpan');
+        if (countEl) countEl.textContent = `Showing ${visibleCount} events`;
+    }
 
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+    if (actionSelect) actionSelect.addEventListener('change', applyFilters);
+    if (levelSelect) levelSelect.addEventListener('change', applyFilters);
+
+    // Log Detail Modal
+    const modal = document.getElementById('logDetailModal');
+    const contentBox = document.getElementById('logDetailContent');
+    const closeBtn = document.getElementById('closeLogModalBtn');
+    const dismissBtn = document.getElementById('dismissLogModalBtn');
+
+    function closeModal() {
+        if (modal) modal.style.display = 'none';
+    }
+
+    document.querySelectorAll('.view-log-detail-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            try {
+                const log = JSON.parse(decodeURIComponent(btn.dataset.log));
+                contentBox.innerHTML = `
+                    <div style="display: flex; justify-content: space-between;"><strong style="color: #7a6552;">Log ID:</strong> <span style="font-family: monospace; font-size: 13px;">${log.log_id}</span></div>
+                    <div style="display: flex; justify-content: space-between;"><strong style="color: #7a6552;">Actor:</strong> <span>${log.user_name} (${log.user_email})</span></div>
+                    <div style="display: flex; justify-content: space-between;"><strong style="color: #7a6552;">Role:</strong> <span style="font-weight: 700; text-transform: uppercase;">${log.role}</span></div>
+                    <div style="display: flex; justify-content: space-between;"><strong style="color: #7a6552;">Action:</strong> <span class="action-badge">${log.action}</span></div>
+                    <div style="display: flex; justify-content: space-between;"><strong style="color: #7a6552;">Severity Level:</strong> <span class="level-badge level-${log.level}">${log.level}</span></div>
+                    <div style="display: flex; justify-content: space-between;"><strong style="color: #7a6552;">Timestamp:</strong> <span>${new Date(log.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></div>
+                    <div style="margin-top: 8px; padding: 12px; background: #fdfaf6; border: 1px solid #e8ded4; border-radius: 10px;">
+                        <strong style="display: block; margin-bottom: 4px; color: #423E3B;">Event Details:</strong>
+                        <span style="color: #554335;">${log.details || 'No additional details available'}</span>
+                    ${log.metadata ? `
+                    <div style="margin-top: 10px; padding: 12px; background: #f5f8fa; border: 1px solid #d0e2ec; border-radius: 8px;">
+                        <strong style="display: block; margin-bottom: 6px; color: #2c4960; font-size: 13px;">Technical Metadata:</strong>
+                        <div style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #456;">
+                            ${log.metadata.file_id ? `<div><strong>File ID:</strong> <code>${log.metadata.file_id}</code></div>` : ''}
+                            ${log.metadata.category ? `<div><strong>Category:</strong> <span style="text-transform: capitalize;">${log.metadata.category}</span></div>` : ''}
+                            ${log.metadata.count ? `<div><strong>Count:</strong> ${log.metadata.count} files</div>` : ''}
+                            ${log.metadata.file_ids && Array.isArray(log.metadata.file_ids) ? `<div><strong>File IDs:</strong> <code>${log.metadata.file_ids.join(', ')}</code></div>` : ''}
+                            ${log.metadata.total_bytes ? `<div><strong>Total Volume:</strong> ${log.metadata.total_bytes} bytes</div>` : ''}
+                        </div>
+                    </div>` : ''}
+                    </div>
+                `;
+                if (modal) modal.style.display = 'flex';
+            } catch (e) {
+                console.error('Failed to parse log detail', e);
+            }
+        });
+    });
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (dismissBtn) dismissBtn.addEventListener('click', closeModal);
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+    }
+});
+</script>
+
+<%- include('../modals/storage-modal') %>
+<script src="/js/storage-modal.js"></script>
 </body>
 </html>

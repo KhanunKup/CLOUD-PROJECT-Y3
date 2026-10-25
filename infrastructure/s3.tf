@@ -1,38 +1,11 @@
-# 1. S3 Bucket for Static Assets (CSS, JS, Fonts, Images for EJS Frontend)
-resource "aws_s3_bucket" "easydrive-host" {
-  bucket = "${var.bucket_prefix}-host"
-
-  tags = {
-    Name        = "easydrive-assets-host"
-    Environment = "Dev"
-  }
-}
-
-resource "aws_s3_bucket_website_configuration" "easydrive-host-website" {
-  bucket = aws_s3_bucket.easydrive-host.id
-
-  index_document {
-    suffix = "index.html"
-  }
-
-  error_document {
-    key = "index.html"
-  }
-}
-
-# 2. S3 Bucket for User File Storage (Private & Secure)
-resource "aws_s3_bucket" "easydrive-storage" {
+# Reference existing S3 Bucket (avoids SCP s3:GetBucketObjectLockConfiguration restriction in AWS Academy)
+data "aws_s3_bucket" "easydrive-storage" {
   bucket = "${var.bucket_prefix}-storage"
-
-  tags = {
-    Name        = "easydrive-file-storage"
-    Environment = "Dev"
-  }
 }
 
 # Block all public access for storage bucket (Private Zone)
 resource "aws_s3_bucket_public_access_block" "easydrive-storage-privacy" {
-  bucket = aws_s3_bucket.easydrive-storage.id
+  bucket = data.aws_s3_bucket.easydrive-storage.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -42,16 +15,16 @@ resource "aws_s3_bucket_public_access_block" "easydrive-storage-privacy" {
 
 # Enable versioning for point-in-time recovery
 resource "aws_s3_bucket_versioning" "easydrive-storage-versioning" {
-  bucket = aws_s3_bucket.easydrive-storage.id
+  bucket = data.aws_s3_bucket.easydrive-storage.id
 
   versioning_configuration {
-    status = "Enabled"
+    status = "Suspended"
   }
 }
 
 # CORS Configuration for direct browser upload via Presigned URLs
 resource "aws_s3_bucket_cors_configuration" "easydrive-storage-cors" {
-  bucket = aws_s3_bucket.easydrive-storage.id
+  bucket = data.aws_s3_bucket.easydrive-storage.id
 
   cors_rule {
     allowed_headers = ["*"]
@@ -62,31 +35,34 @@ resource "aws_s3_bucket_cors_configuration" "easydrive-storage-cors" {
   }
 }
 
-# S3 Lifecycle Rule: Clean up files in trash/ after 30 days
+# S3 Lifecycle Rule: Expire noncurrent versions after 30 days & clean incomplete uploads
 resource "aws_s3_bucket_lifecycle_configuration" "easydrive-storage-lifecycle" {
-  bucket = aws_s3_bucket.easydrive-storage.id
+  bucket = data.aws_s3_bucket.easydrive-storage.id
 
   rule {
-    id     = "delete-trash-after-30-days"
+    id     = "expire-noncurrent-versions-and-abort-uploads"
     status = "Enabled"
 
-    filter {
-      prefix = "trash/"
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
     }
 
-    expiration {
-      days = 30
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
     }
   }
 }
 
 # S3 Event Notification to trigger Worker Lambda on file upload
 resource "aws_s3_bucket_notification" "easydrive-storage-notification" {
-  bucket = aws_s3_bucket.easydrive-storage.id
+  bucket = data.aws_s3_bucket.easydrive-storage.id
 
   lambda_function {
     lambda_function_arn = aws_lambda_function.easydrive-worker.arn
     events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "uploads/"
   }
 
   depends_on = [aws_lambda_permission.allow_s3_to_call_worker]

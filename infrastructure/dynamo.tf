@@ -19,6 +19,11 @@ resource "aws_dynamodb_table" "easydrive-files" {
     type = "S"
   }
 
+  attribute {
+    name = "folder_id"
+    type = "S"
+  }
+
   # Index to list files belonging to a specific user
   global_secondary_index {
     name            = "OwnerIndex"
@@ -26,11 +31,19 @@ resource "aws_dynamodb_table" "easydrive-files" {
     projection_type = "ALL"
   }
 
+  # Composite index to list files in a folder for a user in O(1)
+  global_secondary_index {
+    name            = "OwnerFolderIndex"
+    hash_key        = "owner_id"
+    range_key       = "folder_id"
+    projection_type = "ALL"
+  }
+
   # Index to check for duplicate file hashes instantly
   global_secondary_index {
     name            = "HashIndex"
     hash_key        = "file_hash"
-    projection_type = "ALL"
+    projection_type = "KEYS_ONLY"
   }
 
   tags = {
@@ -48,6 +61,17 @@ resource "aws_dynamodb_table" "easydrive-shares" {
   attribute {
     name = "share_id"
     type = "S"
+  }
+
+  attribute {
+    name = "file_id"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "FileIdIndex"
+    hash_key        = "file_id"
+    projection_type = "ALL"
   }
 
   # Automatic deletion of expired share links via DynamoDB TTL
@@ -71,6 +95,18 @@ resource "aws_dynamodb_table" "easydrive-users" {
   attribute {
     name = "user_id"
     type = "S"
+  }
+
+  attribute {
+    name = "email"
+    type = "S"
+  }
+
+  # Global Secondary Index for instant O(1) user lookup by email
+  global_secondary_index {
+    name            = "EmailIndex"
+    hash_key        = "email"
+    projection_type = "ALL"
   }
 
   tags = {

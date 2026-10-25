@@ -265,7 +265,8 @@
 }
 
 /* Footer */
-.modal-footer {
+.share-modal-footer,
+.share-modal .modal-footer {
     display: flex;
     justify-content: flex-end;
     gap: 15px;

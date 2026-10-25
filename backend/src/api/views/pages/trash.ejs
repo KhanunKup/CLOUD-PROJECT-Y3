@@ -26,9 +26,10 @@
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
         <input class="search-input" type="text" placeholder="Search in Drive" />
+        <button type="button" class="search-clear-btn" id="searchClearBtn" aria-label="Clear search" title="Clear search" style="display: none;">&times;</button>
       </div>
       <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
-      <form action="/trash/empty" method="POST" style="margin-left:auto;">
+      <form action="/trash/empty" method="POST" style="margin-left:auto;" id="emptyTrashForm" onsubmit="event.preventDefault(); if (window.executeOptimisticEmptyTrash) { window.executeOptimisticEmptyTrash(); } else { this.submit(); }">
         <button class="btn-empty-trash" type="submit">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -50,17 +51,18 @@
     <!-- File Table — Trash has extra Restore action column -->
     <div class="file-table-container trash-table">
       <div class="file-table-header">
-        <span>Name</span>
-        <span>Owner</span>
-        <span>Date Trashed</span>  <!-- Figma: "Date Trashed" (not Uploaded) -->
+        <span class="file-header-name-col"><input type="checkbox" id="selectAllCheckbox" class="row-select-checkbox master-select-checkbox" aria-label="Select all trashed files"><span class="sortable-col" data-sort="name">Name <span class="sort-icon"><i class="fas fa-sort"></i></span></span></span>
+        <span class="sortable-col" data-sort="owner">Owner <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+        <span class="sortable-col sort-active" data-sort="date">Date Trashed <span class="sort-icon"><i class="fas fa-arrow-down"></i></span></span>
         <span>Restore</span>
         <span></span>
       </div>
 
       <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
         <% files.forEach(function(file) { %>
-        <div class="file-row">
+        <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %>" data-id="<%= file.id %>" data-name="<%= file.name %>" data-type="<%= file.type %>" data-date="<%= file.trashedAt || file.createdAt || file.uploadedAt || '' %>">
           <div class="file-name">
+            <input type="checkbox" class="row-select-checkbox" data-id="<%= file.id %>" aria-label="Select <%= file.name %>">
             <% if (file.type === 'folder') { %>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -116,10 +118,14 @@
 
 <!-- ดึง Modal สำหรับยืนยันการทำงาน (Restore / Delete Forever) -->
 <%- include('../modals/confirm-modal') %>
+<%- include('../modals/storage-modal') %>
+<%- include('../partials/floating-batch-bar') %>
 
 <!-- เรียกใช้ JS ของ Menu Dropdown -->
 <script src="/js/toast.js"></script>
 <script src="/js/menu.js"></script>
+<script src="/js/storage-modal.js"></script>
+<script src="/js/batch-actions.js"></script>
 </body>
 </html>
 

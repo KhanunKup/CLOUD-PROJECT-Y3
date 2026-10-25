@@ -58,13 +58,15 @@
 }
 
 .confirm-modal-message {
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 .confirm-highlight {
     font-weight: 700;
     color: #2e3425;
-    word-break: break-all;
+    word-break: normal;
+    overflow-wrap: break-word;
 }
 
 .confirm-modal-warning {

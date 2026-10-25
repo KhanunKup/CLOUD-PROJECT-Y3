@@ -25,6 +25,62 @@
         ]
     };
 
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function renderTextContent(text, isCode, ext, filename) {
+        if (!previewBodyContainer) return;
+        previewBodyContainer.innerHTML = '';
+
+        const MAX_PREVIEW_BYTES = 2 * 1024 * 1024; // 2 MB
+        let isTruncated = false;
+        let displayContent = text || '';
+
+        if (displayContent.length > MAX_PREVIEW_BYTES) {
+            displayContent = displayContent.slice(0, MAX_PREVIEW_BYTES);
+            isTruncated = true;
+        }
+
+        const fragment = (document.createDocumentFragment ? document.createDocumentFragment() : document.createElement('div'));
+
+        if (isTruncated) {
+            const warningEl = document.createElement('div');
+            warningEl.className = 'preview-truncation-badge';
+            warningEl.style.cssText = 'background:#fff3cd;color:#856404;border:1px solid #ffeeba;padding:10px 14px;border-radius:6px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;gap:8px;';
+            warningEl.innerHTML = `<i class="fas fa-exclamation-triangle"></i><span><strong>Large file:</strong> Preview truncated to 2 MB for performance. Download file for complete content.</span>`;
+            fragment.appendChild(warningEl);
+        }
+
+        if (isCode) {
+            const codeWrapper = document.createElement('div');
+            codeWrapper.className = 'preview-code-block';
+            const pre = document.createElement('pre');
+            pre.style.cssText = 'margin:0;font-family:Consolas,Monaco,"Courier New",monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word;';
+            const code = document.createElement('code');
+            code.textContent = displayContent;
+            pre.appendChild(code);
+            codeWrapper.appendChild(pre);
+            fragment.appendChild(codeWrapper);
+        } else {
+            const textWrapper = document.createElement('div');
+            textWrapper.className = 'preview-text-content';
+            const pre = document.createElement('pre');
+            pre.style.cssText = 'font-family:inherit;white-space:pre-wrap;word-break:break-word;margin:0;color:#333;font-size:14px;line-height:1.6;';
+            pre.textContent = displayContent;
+            textWrapper.appendChild(pre);
+            fragment.appendChild(textWrapper);
+        }
+
+        previewBodyContainer.appendChild(fragment);
+    }
+
     function initElements() {
         previewModal = document.getElementById('previewModal');
         previewFilename = document.getElementById('previewFilename');
@@ -65,6 +121,7 @@
             previewContentCard.className = 'preview-content-card';
         }
 
+        const fileId = file.id || file.file_id || '';
         const filename = file.name || file.filename || 'Untitled';
         const ext = filename.split('.').pop().toLowerCase();
         const category = file.category || '';
@@ -73,40 +130,52 @@
         const codeExts = ['py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'json', 'sh', 'bash', 'sql', 'java', 'c', 'cpp', 'cs', 'php', 'rb', 'go', 'rs', 'yaml', 'yml', 'xml', 'env'];
         const textExts = ['txt', 'md', 'csv', 'log', ...codeExts];
         if (textExts.includes(ext) || category === 'code' || (category === 'document' && (ext === 'txt' || ext === 'md'))) {
-            if ((filename.toLowerCase().includes('file1') || ext === 'txt') && category !== 'code' && !codeExts.includes(ext)) {
-                // Render Figma Document Content
-                const textWrapper = document.createElement('div');
-                textWrapper.className = 'preview-text-content';
+            const isCode = codeExts.includes(ext) || category === 'code';
+            if (isCode && previewContentCard) previewContentCard.classList.add('preview-card-code');
 
-                const h3 = document.createElement('h3');
-                h3.className = 'preview-text-title';
-                h3.textContent = FIGMA_DEMO_TEXT.title;
-                textWrapper.appendChild(h3);
-
-                FIGMA_DEMO_TEXT.paragraphs.forEach(pText => {
-                    const p = document.createElement('p');
-                    p.className = 'preview-text-paragraph';
-                    p.textContent = pText;
-                    textWrapper.appendChild(p);
-                });
-
-                previewBodyContainer.appendChild(textWrapper);
-            } else if (codeExts.includes(ext) || category === 'code') {
-                if (previewContentCard) previewContentCard.classList.add('preview-card-code');
-                // Code block formatting
-                const codeWrapper = document.createElement('div');
-                codeWrapper.className = 'preview-code-block';
-                codeWrapper.textContent = file.content || `#!/bin/bash\n# ${filename}\necho "EasyDrive Cloud System initialized."\necho "Running background verification tasks..."\necho "Status: Operational (OK)"`;
-                previewBodyContainer.appendChild(codeWrapper);
-            } else {
-                const textWrapper = document.createElement('div');
-                textWrapper.className = 'preview-text-content';
-                const p = document.createElement('p');
-                p.className = 'preview-text-paragraph';
-                p.textContent = file.content || `Previewing content for ${filename}.\nThis document is synced securely with EasyDrive.`;
-                textWrapper.appendChild(p);
-                previewBodyContainer.appendChild(textWrapper);
+            if (file.content !== undefined && file.content !== null) {
+                renderTextContent(file.content, isCode, ext, filename);
+                return;
             }
+
+            // Display loading skeleton
+            previewBodyContainer.innerHTML = `
+                <div class="preview-loading-state" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 24px;color:#888;">
+                    <i class="fas fa-spinner fa-spin" style="font-size:32px;margin-bottom:14px;color:#6d533b;"></i>
+                    <span style="font-size:14px;font-weight:500;">Loading file content...</span>
+                </div>
+            `;
+
+            const contentUrl = fileId ? `/api/files/${fileId}/content` : (file.url || `/mock-download/${encodeURIComponent(filename)}`);
+            fetch(contentUrl)
+                .then(async res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to load file`);
+                    return res.text();
+                })
+                .then(text => {
+                    if (activeFile && ((activeFile.id && activeFile.id === fileId) || (activeFile.file_id && activeFile.file_id === fileId) || (activeFile.name === filename || activeFile.filename === filename))) {
+                        renderTextContent(text, isCode, ext, filename);
+                    }
+                })
+                .catch(err => {
+                    console.error('Error fetching file content for preview:', err);
+                    if (previewBodyContainer) {
+                        previewBodyContainer.innerHTML = `
+                            <div class="preview-error-state" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;">
+                                <i class="fas fa-exclamation-circle" style="font-size:40px;color:#dc3545;margin-bottom:12px;"></i>
+                                <h4 style="margin:0 0 8px 0;color:#333;">Unable to load file content</h4>
+                                <p style="color:#777;font-size:13px;margin:0 0 16px 0;">${escapeHtml(err.message || 'File could not be loaded.')}</p>
+                                <button type="button" class="preview-fallback-btn" id="previewRetryDownloadBtn">
+                                    <i class="fas fa-download"></i> Download File Instead
+                                </button>
+                            </div>
+                        `;
+                        const retryBtn = previewBodyContainer.querySelector('#previewRetryDownloadBtn');
+                        if (retryBtn) retryBtn.addEventListener('click', () => {
+                            if (previewDownloadBtn) previewDownloadBtn.click();
+                        });
+                    }
+                });
             return;
         }
 
@@ -119,8 +188,8 @@
 
             const img = document.createElement('img');
             img.className = 'preview-image-element';
-            // Use real file URL, preview image or fallback illustrative image
-            img.src = file.url || (filename.toLowerCase().includes('bg') ? '/images/easydrive-bg.png' : '/images/doc-photo.svg');
+            const imageSrc = fileId ? `/api/files/${fileId}/content` : (file.url || '/images/doc-photo.svg');
+            img.src = imageSrc;
             img.alt = filename;
             img.onerror = () => {
                 img.src = '/images/doc-photo.svg';
@@ -132,192 +201,72 @@
         }
 
         // 3. PDF Files (.pdf)
-        const blobUrl = (window.uploadedBlobMap && (window.uploadedBlobMap.get(file.id) || window.uploadedBlobMap.get(filename))) || file.url;
+        const blobUrl = (window.uploadedBlobMap && (window.uploadedBlobMap.get(file.id) || window.uploadedBlobMap.get(file.file_id) || window.uploadedBlobMap.get(filename))) || file.url;
         if (ext === 'pdf' || (category === 'document' && ext === 'pdf')) {
-            if (blobUrl) {
-                if (previewContentCard) previewContentCard.classList.add('preview-card-frame');
-                const pdfContainer = document.createElement('div');
-                pdfContainer.className = 'preview-pdf-container';
-                const iframe = document.createElement('iframe');
-                iframe.className = 'preview-pdf-frame';
-                iframe.src = blobUrl;
-                pdfContainer.appendChild(iframe);
-                previewBodyContainer.appendChild(pdfContainer);
-                return;
-            }
-
-            // High-definition Document Reader View for PDF
-            const docPaper = document.createElement('div');
-            docPaper.className = 'preview-doc-paper';
-
-            const isProposal = filename.toLowerCase().includes('proposal') || filename.toLowerCase().includes('project');
-            const docTitle = isProposal 
-                ? 'Project Proposal: Cloud Storage Platform (EasyDrive)' 
-                : filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-
-            docPaper.innerHTML = `
-                <div class="preview-doc-meta-bar">
-                    <span class="preview-doc-badge pdf"><i class="fas fa-file-pdf"></i> PDF Document</span>
-                    <span class="preview-doc-info"><i class="far fa-file"></i> 2 Pages</span>
-                    <span class="preview-doc-info"><i class="far fa-calendar-alt"></i> October 2026</span>
-                    <span class="preview-doc-info"><i class="fas fa-shield-alt"></i> Verified Document</span>
-                </div>
-
-                <div class="preview-doc-header">
-                    <h1 class="preview-doc-title">${docTitle}</h1>
-                    <div class="preview-doc-subtitle">Faculty of Information Technology • King Mongkut's Institute of Technology Ladkrabang</div>
-                    <div class="preview-doc-divider"></div>
-                </div>
-
-                <div class="preview-doc-section">
-                    <h2 class="preview-doc-h2"><i class="fas fa-bookmark"></i> 1. Executive Summary & Objectives</h2>
-                    <p class="preview-doc-p">
-                        This technical proposal outlines the design, architecture, and deployment strategy for <strong>EasyDrive</strong> — an enterprise-grade cloud object storage solution tailored for academic and institutional workflows at KMITL. The system solves file storage fragmentation by delivering secure pre-signed uploads, low-latency metadata indexing, robust granular permissions, and end-to-end auditability.
-                    </p>
-                    <div class="preview-doc-highlight-box">
-                        <strong>Key Project Goal:</strong> Provide a unified, scalable distributed storage interface that reduces server bandwidth utilization by 80% using direct-to-S3 presigned URLs, while maintaining zero unauthorized access through cryptographically signed access tokens.
-                    </div>
-                </div>
-
-                <div class="preview-doc-section">
-                    <h2 class="preview-doc-h2"><i class="fas fa-network-wired"></i> 2. System Architecture & AWS Infrastructure</h2>
-                    <p class="preview-doc-p">
-                        EasyDrive adopts an event-driven serverless & microservices hybrid model optimized for high throughput and high availability across AWS Availability Zones:
-                    </p>
-                    <ul class="preview-doc-list">
-                        <li><strong>Storage Layer (Amazon S3):</strong> Primary object storage configured with Server-Side Encryption (SSE-S3/KMS), multi-part chunked upload for files exceeding 100MB, and lifecycle transition rules to S3 Glacier for long-term archives.</li>
-                        <li><strong>Metadata Layer (Amazon DynamoDB):</strong> NoSQL document database utilizing Partition Keys (<code>user_id</code> / <code>file_id</code>) and Global Secondary Indexes (GSI) for sub-millisecond query performance on folder navigation and search.</li>
-                        <li><strong>Asynchronous Processing (Amazon SNS + SQS Worker):</strong> Decoupled worker service handling background metadata extraction, SHA-256 integrity verification, and automatic tagging.</li>
-                    </ul>
-                </div>
-
-                <div class="preview-doc-page-divider">
-                    <span>Page 1 of 2</span>
-                </div>
-
-                <div class="preview-doc-section">
-                    <h2 class="preview-doc-h2"><i class="fas fa-user-shield"></i> 3. Security, Granular Sharing & Compliance</h2>
-                    <p class="preview-doc-p">
-                        The security model enforces defense-in-depth across the data ingestion and consumption lifecycle:
-                    </p>
-                    <ul class="preview-doc-list">
-                        <li><strong>Granular Role-Based Access:</strong> Specific permissions (Viewer, Downloader, Co-Owner) managed via encrypted share IDs with customizable expiration timers and download count limits.</li>
-                        <li><strong>Audit Logging:</strong> All read, write, trash, and download events are immutably recorded with actor identity, timestamp, IP address, and cryptographic file hashes.</li>
-                        <li><strong>Soft-Delete Recovery:</strong> Deleted items are staged in a dedicated Trash repository with 30-day restore capability before permanent sanitization.</li>
-                    </ul>
-                </div>
-
-                <div class="preview-doc-section">
-                    <h2 class="preview-doc-h2"><i class="fas fa-calendar-check"></i> 4. Milestones & Delivery Schedule</h2>
-                    <div class="preview-doc-table-wrap">
-                        <table class="preview-doc-table">
-                            <thead>
-                                <tr>
-                                    <th>Phase</th>
-                                    <th>Milestone Deliverable</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>Phase 1</td>
-                                    <td>Core Architecture, S3 Presigned Upload & Auth Engine</td>
-                                    <td><span class="preview-doc-status completed">Completed</span></td>
-                                </tr>
-                                <tr>
-                                    <td>Phase 2</td>
-                                    <td>Folder Hierarchy, Sharing Permissions & Audit Log UI</td>
-                                    <td><span class="preview-doc-status completed">Completed</span></td>
-                                </tr>
-                                <tr>
-                                    <td>Phase 3</td>
-                                    <td>Inline Previews (PDF/DOCX/Code/Media) & Soft-Trash</td>
-                                    <td><span class="preview-doc-status active">In Progress</span></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="preview-doc-page-divider">
-                    <span>Page 2 of 2 • End of Document</span>
-                </div>
-            `;
-
-            previewBodyContainer.appendChild(docPaper);
+            if (previewContentCard) previewContentCard.classList.add('preview-card-frame');
+            const pdfContainer = document.createElement('div');
+            pdfContainer.className = 'preview-pdf-container';
+            const iframe = document.createElement('iframe');
+            iframe.className = 'preview-pdf-frame';
+            iframe.src = fileId ? `/api/files/${fileId}/content` : (blobUrl || `/mock-download/${encodeURIComponent(filename)}`);
+            pdfContainer.appendChild(iframe);
+            previewBodyContainer.appendChild(pdfContainer);
             return;
         }
 
-        // 3.5 Word & Office Documents (.doc, .docx, .odt, .rtf)
-        const docExts = ['doc', 'docx', 'odt', 'rtf', 'pages'];
+        // 3.5 Word & Office Documents (.doc, .docx, .odt, .rtf, .xls, .xlsx, .ppt, .pptx)
+        const docExts = ['doc', 'docx', 'odt', 'rtf', 'pages', 'xls', 'xlsx', 'ppt', 'pptx'];
         if (docExts.includes(ext) || (category === 'document' && docExts.includes(ext))) {
-            const docPaper = document.createElement('div');
-            docPaper.className = 'preview-doc-paper';
+            const docCard = document.createElement('div');
+            docCard.className = 'preview-office-card';
+            docCard.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 24px;text-align:center;max-width:540px;margin:0 auto;';
 
-            const isNotes = filename.toLowerCase().includes('notes') || filename.toLowerCase().includes('meeting');
-            const docTitle = isNotes 
-                ? 'Sprint Review & Architecture Sync: EasyDrive' 
-                : filename.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+            let iconClass = 'fa-file-word';
+            let iconColor = '#2b579a';
+            let typeLabel = 'Word Document';
 
-            docPaper.innerHTML = `
-                <div class="preview-doc-meta-bar">
-                    <span class="preview-doc-badge doc"><i class="fas fa-file-word"></i> Word Document</span>
-                    <span class="preview-doc-info"><i class="far fa-file-alt"></i> 1 Page</span>
-                    <span class="preview-doc-info"><i class="far fa-calendar-alt"></i> October 2026</span>
-                    <span class="preview-doc-info"><i class="fas fa-users"></i> Cloud Engineering Team</span>
-                </div>
+            if (['xls', 'xlsx'].includes(ext)) {
+                iconClass = 'fa-file-excel';
+                iconColor = '#217346';
+                typeLabel = 'Excel Spreadsheet';
+            } else if (['ppt', 'pptx'].includes(ext)) {
+                iconClass = 'fa-file-powerpoint';
+                iconColor = '#d24726';
+                typeLabel = 'PowerPoint Presentation';
+            }
 
-                <div class="preview-doc-header">
-                    <h1 class="preview-doc-title">${docTitle}</h1>
-                    <div class="preview-doc-subtitle">Meeting Notes & Sprint Retrospective • KMITL Cloud Engineering Sprint #4</div>
-                    <div class="preview-doc-divider"></div>
-                </div>
-
-                <div class="preview-doc-section">
-                    <div class="preview-doc-callout">
-                        <strong>Meeting Details:</strong> Date: October 21, 2026 | Location: Lab 402 & Online | Facilitator: Tech Lead<br>
-                        <strong>Attendees:</strong> Cloud Architect, Backend Lead, UI Engineer, DevOps Engineer
-                    </div>
-                </div>
-
-                <div class="preview-doc-section">
-                    <h2 class="preview-doc-h2"><i class="fas fa-clipboard-list"></i> Discussion Points & Review</h2>
-                    <ul class="preview-doc-list">
-                        <li><strong>Presigned Download URLs:</strong> Resolved issue with download permissions. Presigned links are now issued with temporary 15-minute expirations for security.</li>
-                        <li><strong>Dedicated Code Category:</strong> Implemented <code>Code</code> category and filter chip on My Drive page with syntax highlighting for developer assets (.py, .js, .html, .css, etc.).</li>
-                        <li><strong>Inline Document Preview:</strong> Agreed that users should be able to preview full PDF and Word documents directly inside the modal rather than seeing download prompts.</li>
-                        <li><strong>Trash Lifecycle:</strong> Confirmed that "Move to Trash" soft-delete works consistently from file action menu, selection bar, and preview modal.</li>
-                    </ul>
-                </div>
-
-                <div class="preview-doc-section">
-                    <h2 class="preview-doc-h2"><i class="fas fa-tasks"></i> Action Items & Ownership</h2>
-                    <ul class="preview-doc-checklist">
-                        <li class="checked"><i class="fas fa-check-square"></i> <strong>[Frontend]</strong> Add rich PDF and DOC preview reader inside modal with zoom support.</li>
-                        <li class="checked"><i class="fas fa-check-square"></i> <strong>[Backend]</strong> Map code extensions and auto-tagging in Worker and API.</li>
-                        <li class="checked"><i class="fas fa-check-square"></i> <strong>[Frontend]</strong> Standardize share modal labels (Folder: name / File: name).</li>
-                        <li class="unchecked"><i class="far fa-square"></i> <strong>[DevOps]</strong> Finalize CloudFormation template and run automated load testing.</li>
-                    </ul>
-                </div>
-
-                <div class="preview-doc-page-divider">
-                    <span>Page 1 of 1 • End of Document</span>
-                </div>
+            docCard.innerHTML = `
+                <i class="fas ${iconClass}" style="font-size:64px;color:${iconColor};margin-bottom:20px;"></i>
+                <h3 style="margin:0 0 8px 0;font-size:20px;color:#333;word-break:break-word;">${escapeHtml(filename)}</h3>
+                <span style="display:inline-block;padding:4px 12px;background:#f0ede7;color:#6d533b;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:16px;">${typeLabel}</span>
+                <p style="color:#777;font-size:14px;line-height:1.6;margin:0 0 24px 0;">This office document is stored securely in EasyDrive.<br>Download the file to open and edit in your desktop application.</p>
+                <button type="button" class="preview-fallback-btn" id="previewOfficeDownloadBtn" style="padding:10px 24px;font-size:14px;font-weight:600;">
+                    <i class="fas fa-download"></i> Download File
+                </button>
             `;
 
-            previewBodyContainer.appendChild(docPaper);
+            previewBodyContainer.appendChild(docCard);
+
+            const officeDownload = docCard.querySelector('#previewOfficeDownloadBtn');
+            if (officeDownload) {
+                officeDownload.addEventListener('click', () => {
+                    if (previewDownloadBtn) previewDownloadBtn.click();
+                });
+            }
             return;
         }
 
         // 4. Video & Audio Files (.mp4, .mov, .mp3, .wav)
         const videoExts = ['mp4', 'mov', 'webm', 'mkv'];
         const audioExts = ['mp3', 'wav', 'aac', 'ogg'];
+        const mediaSourceUrl = fileId ? `/api/files/${fileId}/content` : (file.url || `/mock-download/${encodeURIComponent(filename)}`);
+
         if (videoExts.includes(ext) || category === 'video') {
             const mediaContainer = document.createElement('div');
             mediaContainer.className = 'preview-media-container';
             mediaContainer.innerHTML = `
-                <video class="preview-video-element" controls autoplay>
-                    <source src="${file.url || ''}" type="video/mp4">
+                <video class="preview-video-element" controls autoplay src="${mediaSourceUrl}">
+                    <source src="${mediaSourceUrl}" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
             `;
@@ -330,9 +279,9 @@
             mediaContainer.className = 'preview-media-container';
             mediaContainer.innerHTML = `
                 <i class="fas fa-music" style="font-size: 56px; color: #6d533b; margin-bottom: 16px;"></i>
-                <h4 style="margin: 0 0 12px 0; font-size: 18px; color: #333;">${filename}</h4>
-                <audio class="preview-audio-element" controls>
-                    <source src="${file.url || ''}" type="audio/mpeg">
+                <h4 style="margin: 0 0 12px 0; font-size: 18px; color: #333;">${escapeHtml(filename)}</h4>
+                <audio class="preview-audio-element" controls src="${mediaSourceUrl}">
+                    <source src="${mediaSourceUrl}" type="audio/mpeg">
                     Your browser does not support the audio element.
                 </audio>
             `;
@@ -520,6 +469,9 @@
         // Keyboard Escape to close
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && previewModal && previewModal.style.display === 'flex') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
                 closePreview();
             }
         });

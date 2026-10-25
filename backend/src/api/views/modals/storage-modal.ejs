@@ -1,0 +1,138 @@
+<!-- backend/src/api/views/modals/storage-modal.ejs -->
+<div class="modal-overlay storage-modal-overlay" id="storageBreakdownModal" style="display: none;">
+    <div class="modal-card storage-modal-card">
+        <div class="modal-header storage-modal-header">
+            <div class="storage-modal-title-box">
+                <div class="storage-modal-icon-badge">
+                    <i class="fas fa-server"></i>
+                </div>
+                <div>
+                    <h3 class="modal-title">Storage Breakdown</h3>
+                    <p class="modal-subtitle">Track cloud storage consumption across file categories</p>
+                </div>
+            </div>
+            <button type="button" class="btn-close-modal" id="closeStorageModalBtn" aria-label="Close modal">&times;</button>
+        </div>
+
+        <div class="modal-body storage-modal-body">
+            <!-- Storage Overview Cards -->
+            <div class="storage-stats-grid">
+                <div class="storage-stat-card">
+                    <span class="storage-stat-label">Total Used</span>
+                    <span class="storage-stat-value" id="storageModalUsed">0 MB</span>
+                </div>
+                <div class="storage-stat-card">
+                    <span class="storage-stat-label">Free Remaining</span>
+                    <span class="storage-stat-value" id="storageModalFree">50 GB</span>
+                </div>
+                <div class="storage-stat-card">
+                    <span class="storage-stat-label">Total Quota</span>
+                    <span class="storage-stat-value" id="storageModalQuota">50 GB</span>
+                </div>
+            </div>
+
+            <!-- Segmented Progress Bar -->
+            <div class="storage-bar-wrapper">
+                <div class="storage-bar-header">
+                    <span>Usage Distribution</span>
+                    <span id="storageModalPercentBadge" class="storage-percent-badge">0% used</span>
+                </div>
+                <div class="storage-segmented-bar" id="storageSegmentedBar">
+                    <div class="storage-segment segment-document" style="width: 0%;" title="Documents"></div>
+                    <div class="storage-segment segment-image" style="width: 0%;" title="Images"></div>
+                    <div class="storage-segment segment-media" style="width: 0%;" title="Videos"></div>
+                    <div class="storage-segment segment-audio" style="width: 0%;" title="Audio"></div>
+                    <div class="storage-segment segment-archive" style="width: 0%;" title="Archives"></div>
+                    <div class="storage-segment segment-code" style="width: 0%;" title="Code"></div>
+                    <div class="storage-segment segment-other" style="width: 0%;" title="Other"></div>
+                </div>
+            </div>
+
+            <!-- Categories Breakdown List -->
+            <div class="storage-category-list" id="storageCategoryList">
+                <div class="storage-category-row" data-category="document">
+                    <div class="storage-cat-info">
+                        <span class="storage-cat-indicator" style="background-color: #2196f3;"></span>
+                        <i class="fas fa-file-alt storage-cat-icon" style="color: #2196f3;"></i>
+                        <span class="storage-cat-name">Documents</span>
+                    </div>
+                    <div class="storage-cat-metric">
+                        <span class="storage-cat-size">0 MB</span>
+                        <span class="storage-cat-pct">0%</span>
+                    </div>
+                </div>
+                <div class="storage-category-row" data-category="image">
+                    <div class="storage-cat-info">
+                        <span class="storage-cat-indicator" style="background-color: #ff9800;"></span>
+                        <i class="fas fa-image storage-cat-icon" style="color: #ff9800;"></i>
+                        <span class="storage-cat-name">Images</span>
+                    </div>
+                    <div class="storage-cat-metric">
+                        <span class="storage-cat-size">0 MB</span>
+                        <span class="storage-cat-pct">0%</span>
+                    </div>
+                </div>
+                <div class="storage-category-row" data-category="video">
+                    <div class="storage-cat-info">
+                        <span class="storage-cat-indicator" style="background-color: #9c27b0;"></span>
+                        <i class="fas fa-video storage-cat-icon" style="color: #9c27b0;"></i>
+                        <span class="storage-cat-name">Videos</span>
+                    </div>
+                    <div class="storage-cat-metric">
+                        <span class="storage-cat-size">0 MB</span>
+                        <span class="storage-cat-pct">0%</span>
+                    </div>
+                </div>
+                <div class="storage-category-row" data-category="audio">
+                    <div class="storage-cat-info">
+                        <span class="storage-cat-indicator" style="background-color: #e91e63;"></span>
+                        <i class="fas fa-music storage-cat-icon" style="color: #e91e63;"></i>
+                        <span class="storage-cat-name">Audio</span>
+                    </div>
+                    <div class="storage-cat-metric">
+                        <span class="storage-cat-size">0 MB</span>
+                        <span class="storage-cat-pct">0%</span>
+                    </div>
+                </div>
+                <div class="storage-category-row" data-category="archive">
+                    <div class="storage-cat-info">
+                        <span class="storage-cat-indicator" style="background-color: #795548;"></span>
+                        <i class="fas fa-file-archive storage-cat-icon" style="color: #795548;"></i>
+                        <span class="storage-cat-name">Archives</span>
+                    </div>
+                    <div class="storage-cat-metric">
+                        <span class="storage-cat-size">0 MB</span>
+                        <span class="storage-cat-pct">0%</span>
+                    </div>
+                </div>
+                <div class="storage-category-row" data-category="code">
+                    <div class="storage-cat-info">
+                        <span class="storage-cat-indicator" style="background-color: #4caf50;"></span>
+                        <i class="fas fa-code storage-cat-icon" style="color: #4caf50;"></i>
+                        <span class="storage-cat-name">Code</span>
+                    </div>
+                    <div class="storage-cat-metric">
+                        <span class="storage-cat-size">0 MB</span>
+                        <span class="storage-cat-pct">0%</span>
+                    </div>
+                </div>
+                <div class="storage-category-row" data-category="other">
+                    <div class="storage-cat-info">
+                        <span class="storage-cat-indicator" style="background-color: #9e9e9e;"></span>
+                        <i class="fas fa-folder storage-cat-icon" style="color: #9e9e9e;"></i>
+                        <span class="storage-cat-name">Other</span>
+                    </div>
+                    <div class="storage-cat-metric">
+                        <span class="storage-cat-size">0 MB</span>
+                        <span class="storage-cat-pct">0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="storage-modal-footer">
+            <a href="/trash" class="btn-storage-trash-shortcut"><i class="fas fa-trash-alt"></i> Empty Trash</a>
+            <button type="button" class="btn-storage-close" id="closeStorageModalBtn2">Close</button>
+        </div>
+    </div>
+</div>

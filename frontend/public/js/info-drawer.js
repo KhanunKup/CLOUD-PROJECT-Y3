@@ -278,6 +278,12 @@
                     const chip = document.createElement('span');
                     chip.className = 'info-tag-chip';
                     chip.textContent = `#${cleanTag}`;
+                    chip.title = `Click to filter by tag: ${cleanTag}`;
+                    const currentQuery = (document.querySelector('.search-input')?.value || '').trim().toLowerCase();
+                    const activeQueries = currentQuery ? currentQuery.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean) : [];
+                    if (activeQueries.includes(cleanTag.toLowerCase())) {
+                        chip.classList.add('tag-active');
+                    }
                     tagsContainerEl.appendChild(chip);
                 });
             }
@@ -392,6 +398,36 @@
     window.toggleInfoDrawer = toggleDrawer;
 
     document.addEventListener('DOMContentLoaded', () => {
+
+    // Global helper to update drawer tags in real-time
+    window.updateInfoDrawerTags = function(fileId, newTags) {
+        if (activeFile && (activeFile.id === fileId || activeFile.file_id === fileId)) {
+            activeFile.tags = newTags;
+            const tagsContainer = document.getElementById('infoTagsContainer');
+            if (tagsContainer) {
+                tagsContainer.innerHTML = '';
+                if (!newTags || newTags.length === 0) {
+                    tagsContainer.innerHTML = '<span class="info-tags-empty">No tags assigned</span>';
+                } else {
+                    const currentQuery = (document.querySelector('.search-input')?.value || '').trim().toLowerCase();
+                    const activeQueries = currentQuery ? currentQuery.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean) : [];
+                    newTags.forEach(tag => {
+                        const cleanTag = String(tag).trim();
+                        if (!cleanTag) return;
+                        const chip = document.createElement('span');
+                        chip.className = 'info-tag-chip';
+                        chip.textContent = `#${cleanTag}`;
+                        chip.title = `Click to filter by tag: ${cleanTag}`;
+                        if (activeQueries.includes(cleanTag.toLowerCase())) {
+                            chip.classList.add('tag-active');
+                        }
+                        tagsContainer.appendChild(chip);
+                    });
+                }
+            }
+        }
+    };
+
         initElements();
 
         // Topbar toggle button
@@ -480,12 +516,19 @@
             editTagsBtn.addEventListener('click', () => {
                 if (!activeFile) return;
                 const fileId = activeFile.id || activeFile.file_id;
-                const tagsModal = document.getElementById('tagsModal');
-                const triggerBtn = document.querySelector(`.file-row[data-id="${fileId}"] .open-tags-modal, .open-tags-modal[data-id="${fileId}"]`);
-                if (triggerBtn) {
+                const targetRow = document.querySelector(`.file-row[data-id="${fileId}"]`);
+                const triggerBtn = document.querySelector(`.open-tags-modal[data-id="${fileId}"]`);
+                if (window.openTagsModalForTarget) {
+                    window.openTagsModalForTarget({
+                        id: fileId,
+                        name: activeFile.name || activeFile.filename,
+                        type: activeFile.type || (activeFile.category === 'folder' ? 'folder' : 'file'),
+                        tags: activeFile.tags,
+                        targetRow,
+                        triggerBtn
+                    });
+                } else if (triggerBtn) {
                     triggerBtn.click();
-                } else if (tagsModal) {
-                    tagsModal.style.display = 'flex';
                 }
             });
         }
@@ -579,6 +622,9 @@
         // Close on Escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && infoDrawer && infoDrawer.classList.contains('open')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
                 closeDrawer();
             }
         });
