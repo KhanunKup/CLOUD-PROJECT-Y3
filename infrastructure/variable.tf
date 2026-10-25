@@ -7,7 +7,7 @@ variable "region" {
 variable "bucket_prefix" {
   description = "Prefix for S3 bucket names. Must be lowercase per AWS S3 rules."
   type        = string
-  default     = "easydrive-itkmitl-dev"
+  default     = "easydrive-itkmitl"
 }
 
 variable "alert_email" {
