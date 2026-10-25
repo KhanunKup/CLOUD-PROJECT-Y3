@@ -1,5 +1,9 @@
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+try {
+  require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+} catch (_) {
+  // Ignored in AWS Lambda environment where process.env is injected by runtime
+}
 
 const crypto = require('crypto');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');

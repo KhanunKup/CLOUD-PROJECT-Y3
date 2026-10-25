@@ -3110,28 +3110,43 @@ app.delete('/api/shares/:id', authMiddleware, async (req, res) => {
 // 5.8.4 Direct Collaborator Access Control (GET & PUT /api/files/:id/access)
 app.get('/api/files/:id/access', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
-  const file = mockFiles.find(f => f.file_id === fileId);
-  if (!file) {
-    return res.status(404).json({ error: 'File or folder not found' });
+
+  if (IS_MOCK_MODE) {
+    const file = mockFiles.find(f => f.file_id === fileId);
+    if (!file) {
+      return res.status(404).json({ error: 'File or folder not found' });
+    }
+    if (!canUserAccessFile(file, req.user) && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Access denied' });
+    }
+    return res.json({ success: true, accessList: file.access_list || [] });
   }
-  if (!canUserAccessFile(file, req.user) && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Forbidden: Access denied' });
+
+  try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = getRes.Item;
+    if (!file) {
+      return res.status(404).json({ error: 'File or folder not found' });
+    }
+    const userEmail = (req.user.email || '').toLowerCase();
+    const userId = req.user.user_id;
+    const isOwner = file.owner_id === userId;
+    const hasCollab = (file.access_list || []).some(c => (c.email || '').toLowerCase() === userEmail);
+    if (!isOwner && !hasCollab && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Access denied' });
+    }
+    return res.json({ success: true, accessList: file.access_list || [] });
+  } catch (err) {
+    console.error('Get file access error:', err);
+    res.status(500).json({ error: 'Failed to get file access list' });
   }
-  res.json({ success: true, accessList: file.access_list || [] });
 });
 
 app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
-  const file = mockFiles.find(f => f.file_id === fileId);
-  if (!file) {
-    return res.status(404).json({ error: 'File or folder not found' });
-  }
-
-  const isOwner = file.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && file.owner_id === 'demo-user');
-  if (!isOwner && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Only the resource owner can modify access permissions' });
-  }
-
   const { accessList } = req.body;
   if (!Array.isArray(accessList)) {
     return res.status(400).json({ error: 'accessList must be an array' });
@@ -3150,17 +3165,67 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
       added_by: req.user.user_id
     }));
 
-  file.access_list = sanitized;
-  file.updated_at = new Date().toISOString();
+  if (IS_MOCK_MODE) {
+    const file = mockFiles.find(f => f.file_id === fileId);
+    if (!file) {
+      return res.status(404).json({ error: 'File or folder not found' });
+    }
 
-  recordAuditLog({
-    user: req.user,
-    action: 'SHARE_INVITE',
-    level: 'info',
-    details: `Updated collaborator access for "${file.filename}": ${sanitized.length} collaborators`
-  });
+    const isOwner = file.owner_id === req.user.user_id || (req.user.user_id === 'user-normal-01' && file.owner_id === 'demo-user');
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only the resource owner can modify access permissions' });
+    }
 
-  res.json({ success: true, message: 'Access list updated successfully', accessList: file.access_list });
+    file.access_list = sanitized;
+    file.updated_at = new Date().toISOString();
+
+    recordAuditLog({
+      user: req.user,
+      action: 'SHARE_INVITE',
+      level: 'info',
+      details: `Updated collaborator access for "${file.filename}": ${sanitized.length} collaborators`
+    });
+
+    return res.json({ success: true, message: 'Access list updated successfully', accessList: file.access_list });
+  }
+
+  try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = getRes.Item;
+    if (!file) {
+      return res.status(404).json({ error: 'File or folder not found' });
+    }
+
+    const isOwner = file.owner_id === req.user.user_id;
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only the resource owner can modify access permissions' });
+    }
+
+    await docClient.send(new UpdateCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId },
+      UpdateExpression: 'SET access_list = :al, updated_at = :up',
+      ExpressionAttributeValues: {
+        ':al': sanitized,
+        ':up': new Date().toISOString()
+      }
+    }));
+
+    recordAuditLog({
+      user: req.user,
+      action: 'SHARE_INVITE',
+      level: 'info',
+      details: `Updated collaborator access for "${file.filename}": ${sanitized.length} collaborators`
+    });
+
+    res.json({ success: true, message: 'Access list updated successfully', accessList: sanitized });
+  } catch (err) {
+    console.error('Update file access error:', err);
+    res.status(500).json({ error: 'Failed to update file access list' });
+  }
 });
 
 // 5.8.5 Shared With Me Endpoints
@@ -3406,35 +3471,90 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
 
   const targetUserId = req.params.id;
   const { role, status, quota, storageQuota } = req.body;
-  const user = mockUsers.find(u => u.user_id === targetUserId);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
 
-  if (role && (role === 'admin' || role === 'user')) {
-    user.role = role;
-  }
-  if (status && (status === 'active' || status === 'inactive')) {
-    user.status = status;
-  }
-  const targetQuota = quota || storageQuota;
-  if (targetQuota && Number(targetQuota) > 0) {
-    user.quota = Number(targetQuota);
-    user.storage_quota = Number(targetQuota);
-    if (mockUserStorage && mockUserStorage[targetUserId]) {
-      mockUserStorage[targetUserId].quota = Number(targetQuota);
+  if (IS_MOCK_MODE) {
+    const user = mockUsers.find(u => u.user_id === targetUserId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
+
+    if (role && (role === 'admin' || role === 'user')) {
+      user.role = role;
+    }
+    if (status && (status === 'active' || status === 'inactive')) {
+      user.status = status;
+    }
+    const targetQuota = quota || storageQuota;
+    if (targetQuota && Number(targetQuota) > 0) {
+      user.quota = Number(targetQuota);
+      user.storage_quota = Number(targetQuota);
+      if (mockUserStorage && mockUserStorage[targetUserId]) {
+        mockUserStorage[targetUserId].quota = Number(targetQuota);
+      }
+    }
+    user.updated_at = new Date().toISOString();
+
+    recordAuditLog({
+      user: req.user,
+      action: 'ROLE_CHANGE',
+      level: 'warning',
+      details: `Admin updated user "${user.name}" (${user.email}): Role=${user.role}, Status=${user.status || 'active'}, Quota=${formatBytes(user.quota)}`
+    });
+
+    return res.json({ success: true, message: 'User updated successfully', user });
   }
-  user.updated_at = new Date().toISOString();
 
-  recordAuditLog({
-    user: req.user,
-    action: 'ROLE_CHANGE',
-    level: 'warning',
-    details: `Admin updated user "${user.name}" (${user.email}): Role=${user.role}, Status=${user.status || 'active'}, Quota=${formatBytes(user.quota)}`
-  });
+  try {
+    const expressions = [];
+    const names = {};
+    const values = {};
 
-  res.json({ success: true, message: 'User updated successfully', user });
+    if (role && (role === 'admin' || role === 'user')) {
+      expressions.push('#role = :role');
+      names['#role'] = 'role';
+      values[':role'] = role;
+    }
+    if (status && (status === 'active' || status === 'inactive')) {
+      expressions.push('#status = :status');
+      names['#status'] = 'status';
+      values[':status'] = status;
+    }
+    const targetQuota = quota || storageQuota;
+    if (targetQuota && Number(targetQuota) > 0) {
+      expressions.push('quota = :quota, storage_quota = :sq');
+      values[':quota'] = Number(targetQuota);
+      values[':sq'] = Number(targetQuota);
+    }
+
+    if (expressions.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    expressions.push('updated_at = :up');
+    values[':up'] = new Date().toISOString();
+
+    const result = await docClient.send(new UpdateCommand({
+      TableName: USERS_TABLE,
+      Key: { user_id: targetUserId },
+      UpdateExpression: 'SET ' + expressions.join(', '),
+      ExpressionAttributeNames: Object.keys(names).length > 0 ? names : undefined,
+      ExpressionAttributeValues: values,
+      ReturnValues: 'ALL_NEW'
+    }));
+
+    const updatedUser = result.Attributes;
+    recordAuditLog({
+      user: req.user,
+      action: 'ROLE_CHANGE',
+      level: 'warning',
+      details: `Admin updated user "${updatedUser.name || targetUserId}" (${updatedUser.email || ''}): Role=${updatedUser.role}, Status=${updatedUser.status || 'active'}, Quota=${formatBytes(updatedUser.quota || 0)}`
+    });
+
+    res.json({ success: true, message: 'User updated successfully', user: updatedUser });
+  } catch (err) {
+    console.error('Admin update user error:', err);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
 });
 
 // 5.13 Admin: Delete User (With self-deletion protection)
@@ -3448,20 +3568,50 @@ app.delete('/api/admin/users/:id', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Cannot delete your own admin account' });
   }
 
-  const userIndex = mockUsers.findIndex(u => u.user_id === targetUserId);
-  if (userIndex === -1) {
-    return res.status(404).json({ error: 'User not found' });
+  if (IS_MOCK_MODE) {
+    const userIndex = mockUsers.findIndex(u => u.user_id === targetUserId);
+    if (userIndex === -1) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const deletedUser = mockUsers.splice(userIndex, 1)[0];
+    recordAuditLog({
+      user: req.user,
+      action: 'DELETE_USER',
+      level: 'critical',
+      details: `Admin permanently deleted user "${deletedUser.name}" (${deletedUser.email})`
+    });
+
+    return res.json({ success: true, message: 'User deleted successfully' });
   }
 
-  const deletedUser = mockUsers.splice(userIndex, 1)[0];
-  recordAuditLog({
-    user: req.user,
-    action: 'DELETE_USER',
-    level: 'critical',
-    details: `Admin permanently deleted user "${deletedUser.name}" (${deletedUser.email})`
-  });
+  try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: USERS_TABLE,
+      Key: { user_id: targetUserId }
+    }));
+    const userItem = getRes.Item;
+    if (!userItem) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-  res.json({ success: true, message: 'User deleted successfully' });
+    await docClient.send(new DeleteCommand({
+      TableName: USERS_TABLE,
+      Key: { user_id: targetUserId }
+    }));
+
+    recordAuditLog({
+      user: req.user,
+      action: 'DELETE_USER',
+      level: 'critical',
+      details: `Admin permanently deleted user "${userItem.name || targetUserId}" (${userItem.email || ''})`
+    });
+
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    console.error('Admin delete user error:', err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
 });
 
 // 5.14 Admin: Get Audit Logs (With filtering)
