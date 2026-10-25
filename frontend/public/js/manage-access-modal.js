@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const maUserIcon = document.getElementById('ma-user-icon');
     
     let currentEditingNames = [];
+    let currentEditingEmail = null;
     
     // When an access item is clicked in the dynamic-access-list or static one
     document.addEventListener('click', (e) => {
@@ -31,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             
+            currentEditingEmail = accessItem.dataset.email || (namesData ? JSON.parse(namesData)[0] : null);
             const namesData = accessItem.getAttribute('data-names');
             const dropdownIcon = document.getElementById('ma-user-dropdown-icon');
             const dropdownList = document.getElementById('ma-user-dropdown-list');
@@ -174,13 +176,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             toggleTimeInputs();
 
-            // Default password: false & hidden
+            // Load password settings for this specific collaborator
             const passwordCheck = document.getElementById('ma-password-check');
             const passwordContainer = document.getElementById('ma-password-container');
             const passwordInput = document.getElementById('ma-password-input');
-            if (passwordCheck) passwordCheck.checked = false;
-            if (passwordContainer) passwordContainer.style.display = 'none';
-            if (passwordInput) passwordInput.value = '';
+            const hasSavedPassword = Boolean(acc && acc.hasPassword);
+            const savedPasswordVal = (acc && acc.password) ? acc.password : '';
+            if (passwordCheck) passwordCheck.checked = hasSavedPassword;
+            if (passwordContainer) passwordContainer.style.display = hasSavedPassword ? 'block' : 'none';
+            if (passwordInput) passwordInput.value = savedPasswordVal;
             
             // Show modal
             if (manageModal) {
@@ -243,12 +247,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 if (window.currentAccessList) {
-                    window.currentAccessList.forEach(acc => {
-                        if (currentEditingNames.includes(acc.name)) {
-                            acc.permission = newPermission;
-                            acc.timeRemaining = newTime;
+                    const targetEmail = currentEditingEmail || (currentEditingNames.length > 0 ? currentEditingNames[0] : null);
+                    if (targetEmail && targetEmail !== 'Anyone') {
+                        const target = window.currentAccessList.find(acc => (acc.email || acc.name || '').toLowerCase() === targetEmail.toLowerCase());
+                        const passwordCheck = document.getElementById('ma-password-check');
+                        const passwordInput = document.getElementById('ma-password-input');
+                        const isPasswordReq = Boolean(passwordCheck && passwordCheck.checked);
+                        const passwordVal = (passwordInput && isPasswordReq) ? passwordInput.value.trim() : '';
+
+                        if (target) {
+                            target.permission = newPermission;
+                            target.timeRemaining = newTime;
+                            target.hasPassword = isPasswordReq;
+                            target.password = passwordVal;
                         }
-                    });
+                    } else {
+                        window.currentAccessList.forEach(acc => {
+                            if (currentEditingNames.includes(acc.name)) {
+                                acc.permission = newPermission;
+                                acc.timeRemaining = newTime;
+                            }
+                        });
+                    }
                 }
                 
                 if (window.renderAccessList) {

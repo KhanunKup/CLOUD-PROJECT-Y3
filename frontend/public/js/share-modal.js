@@ -117,7 +117,7 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
         <div class="access-item" data-names='["Anyone"]'>
             <div class="user-info">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                <span>Anyone</span>
+                <span title="Anyone">Anyone</span>
             </div>
             <div class="access-details">
                 <span class="time-remaining">Time remaining: ${window.anyoneAccess.timeRemaining || 'Unlimited'}</span>
@@ -127,52 +127,53 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
     `;
     container.insertAdjacentHTML('beforeend', anyoneHtml);
 
-    // 2. จัดกลุ่มรายชื่อที่มีสิทธิ์ (permission) และเวลา (timeRemaining) เหมือนกันเป๊ะๆ
-    const grouped = {};
-    accessList.forEach(acc => {
-        // ข้าม Anyone ถ้าบังเอิญมีส่งมาจาก Backend เพื่อไม่ให้ซ้ำกับ Default
-        if (acc.name && acc.name.toLowerCase() === 'anyone') return;
-
-        const key = acc.permission + '|' + (acc.timeRemaining || '');
-        if (!grouped[key]) {
-            grouped[key] = {
-                names: [],
-                permission: acc.permission,
-                timeRemaining: acc.timeRemaining
-            };
-        }
-        grouped[key].names.push(acc.name);
+    // 2. วนลูปสร้าง HTML สำหรับผู้ใช้แต่ละคนแบบรายบุคคล (Individual Collaborators)
+    const specificCollaborators = accessList.filter(acc => {
+        const n = (acc.name || acc.email || '').toLowerCase();
+        return n !== 'anyone' && n !== 'everyone';
     });
 
-    // 3. วนลูปสร้าง HTML จากกลุ่มที่จัดแล้ว
-    Object.values(grouped).forEach(group => {
-        // จัดการข้อความเวลา
-        const timeRemainingText = group.timeRemaining ? `Time remaining: ${group.timeRemaining}` : 'Time remaining: Unlimited';
-        
-        // จัดการแสดงผลชื่อ ถ้าเกิน 2 คนให้แสดง ... and X others
-        let displayName = '';
-        if (group.names.length === 1) {
-            displayName = group.names[0];
-        } else if (group.names.length === 2) {
-            displayName = group.names[0] + ' and ' + group.names[1];
-        } else {
-            // เช่น anan and 4 others
-            displayName = group.names[0] + ' and ' + (group.names.length - 1) + ' others';
-        }
+    specificCollaborators.forEach(collab => {
+        const userEmail = (collab.email || collab.name || '').trim();
+        const timeRemainingText = collab.timeRemaining ? `Time remaining: ${collab.timeRemaining}` : 'Time remaining: Unlimited';
 
         const html = `
-            <div class="access-item" data-names='${JSON.stringify(group.names).replace(/'/g, "&apos;")}'>
+            <div class="access-item" data-email="${userEmail}" data-names='${JSON.stringify([userEmail]).replace(/'/g, "&apos;")}'>
                 <div class="user-info">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    <span>${displayName}</span>
+                    <span title="${userEmail}">${userEmail}</span>
                 </div>
                 <div class="access-details">
                     <span class="time-remaining">${timeRemainingText}</span>
-                    <button class="permission-dropdown">${group.permission}</button>
+                    <button class="permission-dropdown">${collab.permission || 'can view'}</button>
+                    <button type="button" class="remove-access-btn" data-email="${userEmail}" title="Remove collaborator" style="background: none; border: none; color: #ffb4b4; cursor: pointer; padding: 4px 6px; font-size: 15px; margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;"><i class="fas fa-times"></i></button>
                 </div>
             </div>
         `;
         container.insertAdjacentHTML('beforeend', html);
+    });
+
+    // Event listener for removing collaborators from access list
+    container.querySelectorAll('.remove-access-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const item = btn.closest('.access-item');
+            if (!item) return;
+            const namesData = item.getAttribute('data-names');
+            if (!namesData) return;
+            try {
+                const names = JSON.parse(namesData);
+                window.currentAccessList = (window.currentAccessList || []).filter(acc => !names.includes(acc.name) && !names.includes(acc.email));
+                if (window.renderAccessList) {
+                    window.renderAccessList(window.currentAccessList);
+                }
+                if (window.showToast) {
+                    window.showToast('Removed collaborator(s) from access list', 'info');
+                }
+            } catch (err) {
+                console.error('Error removing collaborator:', err);
+            }
+        });
     });
 };
 
@@ -473,19 +474,65 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // เมื่อกดปุ่ม Invite ให้เปลี่ยนข้อความเป็น "Invited!" และเปลี่ยนกลับหลังจาก 2 วินาที
+    // เมื่อกดปุ่ม Invite: ตรวจสอบความถูกต้องของอีเมล เพิ่มเข้าสู่ currentAccessList และ render ใหม่
     const inviteBtn = document.getElementById('invite-btn');
     if (inviteBtn) {
         inviteBtn.addEventListener('click', () => {
-            const val = inviteInput ? inviteInput.value.trim() : '';
-            // if (val.length === 0) return; // do nothing if empty
-            
-            // TODO: Here you could add the new person to the currentAccessList dynamically
-            
+            const rawVal = inviteInput ? inviteInput.value.trim() : '';
+            if (!rawVal) {
+                if (window.showToast) {
+                    window.showToast('Please enter at least one email address to invite', 'warning');
+                } else {
+                    alert('Please enter at least one email address to invite');
+                }
+                return;
+            }
+
+            const rawEmails = rawVal.split(',').map(e => e.trim()).filter(Boolean);
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const invalidEmails = rawEmails.filter(e => !emailRegex.test(e));
+
+            if (invalidEmails.length > 0) {
+                if (window.showToast) {
+                    window.showToast(`Invalid email address: ${invalidEmails.join(', ')}`, 'warning');
+                } else {
+                    alert(`Invalid email address: ${invalidEmails.join(', ')}`);
+                }
+                return;
+            }
+
+            const permission = (invitePermission && invitePermission.value) ? invitePermission.value : 'can view';
+            window.currentAccessList = window.currentAccessList || [];
+
+            let addedCount = 0;
+            rawEmails.forEach(email => {
+                const normalized = email.toLowerCase();
+                const existing = window.currentAccessList.find(a => (a.email || a.name || '').toLowerCase() === normalized);
+                if (existing) {
+                    existing.permission = permission; // Update permission if already invited
+                } else {
+                    window.currentAccessList.push({
+                        name: email,
+                        email: normalized,
+                        permission: permission,
+                        timeRemaining: null
+                    });
+                    addedCount++;
+                }
+            });
+
+            if (window.renderAccessList) {
+                window.renderAccessList(window.currentAccessList);
+            }
+
+            if (window.showToast) {
+                window.showToast(`Added ${rawEmails.length} collaborator(s) (${permission})`, 'success');
+            }
+
             inviteBtn.textContent = 'Invited!';
             if (inviteInput) inviteInput.value = '';
             if (invitePermission) invitePermission.style.display = 'none';
-            
+
             setTimeout(() => {
                 inviteBtn.textContent = 'Invite';
             }, 1000);
@@ -493,16 +540,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (saveChangesBtn) {
-        saveChangesBtn.addEventListener('click', () => {
-            if (window.activeShareFileBtn) {
-                let fullList = window.currentAccessList ? [...window.currentAccessList] : [];
-                // ตัด Anyone เดิมออกก่อนแล้วใส่ Anyone ที่อัปเดตใหม่เข้าไป
-                fullList = fullList.filter(acc => acc.name && acc.name.toLowerCase() !== 'anyone');
-                fullList.push({
-                    name: 'Anyone',
-                    permission: (window.anyoneAccess && window.anyoneAccess.permission) || 'can view',
-                    timeRemaining: (window.anyoneAccess && window.anyoneAccess.timeRemaining) || null
-                });
+        saveChangesBtn.addEventListener('click', async () => {
+            const fileId = window.activeShareFileBtn ? window.activeShareFileBtn.dataset.id : null;
+            let fullList = window.currentAccessList ? [...window.currentAccessList] : [];
+            const specificCollaborators = fullList.filter(acc => acc.name && acc.name.toLowerCase() !== 'anyone');
+
+            if (fileId) {
+                try {
+                    const res = await fetch(`/api/files/${fileId}/access`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ accessList: specificCollaborators })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.error || 'Failed to update access list');
+                    }
+                    if (window.showToast) {
+                        window.showToast('Collaborator access permissions saved!', 'success');
+                    }
+                    if (window.activeShareFileBtn) {
+                        window.activeShareFileBtn.dataset.access = encodeURIComponent(JSON.stringify(fullList));
+                    }
+                } catch (err) {
+                    console.error('Error saving access list:', err);
+                    if (window.showToast) {
+                        window.showToast(`Save failed: ${err.message}`, 'error');
+                    }
+                }
+            } else if (window.activeShareFileBtn) {
                 window.activeShareFileBtn.dataset.access = encodeURIComponent(JSON.stringify(fullList));
             }
             closeModal();

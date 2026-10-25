@@ -110,6 +110,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (window.renderAccessList) {
                     window.renderAccessList(fileAccessList, shareBtn);
                 }
+
+                // Fetch fresh access list from backend to ensure up-to-date persistence
+                const fileId = shareBtn.dataset.id;
+                if (fileId) {
+                    fetch(`/api/files/${fileId}/access`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success && Array.isArray(data.accessList)) {
+                                shareBtn.dataset.access = encodeURIComponent(JSON.stringify(data.accessList));
+                                if (window.renderAccessList) {
+                                    window.renderAccessList(data.accessList, shareBtn);
+                                }
+                            }
+                        })
+                        .catch(err => console.warn('Failed to fetch fresh access list:', err));
+                }
             }
 
             // ปิด Dropdown
