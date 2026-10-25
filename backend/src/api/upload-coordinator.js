@@ -2,9 +2,13 @@
 // Deep module coordinating pre-upload quota headroom verification and S3 pre-signed upload URL generation
 
 const crypto = require('crypto');
-const { PutObjectCommand } = require('@aws-sdk/client-s3');
-const { PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { PutObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
+const { PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
+// Pending uploads that are never completed expire via DynamoDB TTL (expires_at)
+const PENDING_TTL_SECONDS = 24 * 60 * 60;
+const MAX_COMPLETE_BATCH = 100;
 
 function getCategoryFromExtension(filename) {
   const ext = (filename || '').split('.').pop().toLowerCase();
@@ -100,9 +104,8 @@ class UploadCoordinator {
           size,
           category,
           tags: [category, filename.split('.').pop().toLowerCase()],
-          file_hash: crypto.randomBytes(32).toString('hex'),
           s3_key: s3Key,
-          status: 'active',
+          status: 'pending',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -125,6 +128,7 @@ class UploadCoordinator {
             Bucket: this.storageBucket,
             Key: s3Key,
             ContentType: req.contentType || 'application/octet-stream',
+            ContentLength: size,
             Metadata: {
               file_id: fileId,
               owner_id: userId,
@@ -132,7 +136,11 @@ class UploadCoordinator {
               original_name: encodeURIComponent(filename)
             }
           });
-          uploadUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+          // signableHeaders forces content-length into the signature so S3 rejects size mismatches
+          uploadUrl = await getSignedUrl(this.s3Client, command, {
+            expiresIn: 3600,
+            signableHeaders: new Set(['content-length'])
+          });
         }
 
         const cloudFileRecord = {
@@ -144,7 +152,8 @@ class UploadCoordinator {
           category,
           tags: [category, filename.split('.').pop().toLowerCase()],
           s3_key: s3Key,
-          status: 'active',
+          status: 'pending',
+          expires_at: Math.floor(Date.now() / 1000) + PENDING_TTL_SECONDS,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -155,6 +164,9 @@ class UploadCoordinator {
             Item: cloudFileRecord
           })).catch(err => {
             console.error('[UploadCoordinator] Failed registering pending file in DynamoDB:', err);
+            const failure = new Error('Could not register upload. Please try again.');
+            failure.statusCode = 500;
+            throw failure;
           });
         }
 
@@ -189,6 +201,80 @@ class UploadCoordinator {
       success: true,
       items
     };
+  }
+
+  /**
+   * Flips pending uploads to active once the browser has PUT them to S3.
+   * The size written is the real S3 object size, never the client-declared one.
+   * @param {Object} user - Authenticated user context
+   * @param {string[]} fileIds - Up to MAX_COMPLETE_BATCH ids returned by prepareUploads
+   * @returns {Promise<{completed: string[], failed: string[]}>}
+   */
+  async completeUploads(user, fileIds = []) {
+    if (!Array.isArray(fileIds) || fileIds.length === 0 || fileIds.length > MAX_COMPLETE_BATCH) {
+      const err = new Error(`file_ids must contain between 1 and ${MAX_COMPLETE_BATCH} ids`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const userId = user.user_id || user.id || 'anonymous';
+    const completed = [];
+    const failed = [];
+
+    for (const fileId of fileIds) {
+      try {
+        if (this.isMockMode) {
+          const mockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
+          const record = Array.isArray(mockFiles)
+            ? mockFiles.find(f => f.file_id === fileId && f.owner_id === userId && f.status === 'pending')
+            : null;
+          if (!record) { failed.push(fileId); continue; }
+          record.status = 'active';
+          record.updated_at = new Date().toISOString();
+          completed.push(fileId);
+          continue;
+        }
+
+        const { Item } = await this.docClient.send(new GetCommand({
+          TableName: this.filesTable,
+          Key: { file_id: fileId }
+        }));
+        if (!Item || Item.owner_id !== userId || Item.status !== 'pending') {
+          failed.push(fileId);
+          continue;
+        }
+
+        const head = await this.s3Client.send(new HeadObjectCommand({
+          Bucket: this.storageBucket,
+          Key: Item.s3_key
+        }));
+
+        await this.docClient.send(new UpdateCommand({
+          TableName: this.filesTable,
+          Key: { file_id: fileId },
+          UpdateExpression: 'SET #st = :active, #sz = :size, updated_at = :now REMOVE expires_at',
+          ConditionExpression: 'owner_id = :u AND #st = :pending',
+          ExpressionAttributeNames: { '#st': 'status', '#sz': 'size' },
+          ExpressionAttributeValues: {
+            ':active': 'active',
+            ':pending': 'pending',
+            ':u': userId,
+            ':size': head.ContentLength,
+            ':now': new Date().toISOString()
+          }
+        }));
+        completed.push(fileId);
+      } catch (err) {
+        console.warn(`[UploadCoordinator] completeUploads failed for ${fileId}:`, err.name || err.message);
+        failed.push(fileId);
+      }
+    }
+
+    if (this.isMockMode && completed.length > 0 && this.mockStorage && typeof this.mockStorage.saveMockFiles === 'function') {
+      this.mockStorage.saveMockFiles(this.mockFilesRef());
+    }
+
+    return { completed, failed };
   }
 }
 

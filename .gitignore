@@ -92,3 +92,7 @@ logs/
 
 backend/storage/
 storage/
+
+# Terraform build output and generated backend config
+infrastructure/.build/
+infrastructure/backend.hcl

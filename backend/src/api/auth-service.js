@@ -313,18 +313,10 @@ async function bootstrapAdminUser() {
       if (qRes.Items && qRes.Items.length > 0) {
         existingAdmin = qRes.Items[0];
       }
-    } catch (_) {
-      // Fallback to ScanCommand if EmailIndex is not yet active
-      const scanRes = await authConfig.docClient.send(new ScanCommand({
-        TableName: authConfig.usersTable,
-        FilterExpression: 'email = :email OR #r = :role',
-        ExpressionAttributeNames: { '#r': 'role' },
-        ExpressionAttributeValues: { ':email': 'admin@kmitl.ac.th', ':role': 'admin' },
-        Limit: 1
-      }));
-      if (scanRes.Items && scanRes.Items.length > 0) {
-        existingAdmin = scanRes.Items[0];
-      }
+    } catch (queryErr) {
+      // Do not guess: a failed lookup must not lead to re-seeding the admin with the default password
+      console.error('[EasyDrive Cloud] Admin lookup via EmailIndex failed, skipping bootstrap:', queryErr.message);
+      return;
     }
 
     if (!existingAdmin) {
@@ -337,15 +329,13 @@ async function bootstrapAdminUser() {
         password_hash: passwordHash,
         role: 'admin',
         quota: 107374182400, // 100 GB
-        used_storage: 0,
-        totalUsed: 0,
-        breakdown: { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 },
         status: 'active',
         created_at: new Date().toISOString()
       };
       await authConfig.docClient.send(new PutCommand({
         TableName: authConfig.usersTable,
-        Item: adminItem
+        Item: adminItem,
+        ConditionExpression: 'attribute_not_exists(user_id)'
       }));
       console.log('[EasyDrive Cloud] Initial admin user bootstrapped successfully in DynamoDB: admin@kmitl.ac.th');
     }
@@ -393,13 +383,15 @@ async function registerUser({ username, email, password, role = 'user', quota = 
         return { success: false, error: 'Username or email already exists' };
       }
 
-      // 2. Check username collision via ScanCommand
-      const scanRes = await authConfig.docClient.send(new ScanCommand({
+      // 2. Username collision check via UsernameIndex
+      const queryUsername = await authConfig.docClient.send(new QueryCommand({
         TableName: authConfig.usersTable,
-        FilterExpression: 'email = :e OR username = :u',
-        ExpressionAttributeValues: { ':e': normEmail, ':u': normUsername }
+        IndexName: 'UsernameIndex',
+        KeyConditionExpression: 'username = :u',
+        ExpressionAttributeValues: { ':u': normUsername },
+        Limit: 1
       }));
-      if (scanRes.Items && scanRes.Items.length > 0) {
+      if (queryUsername.Items && queryUsername.Items.length > 0) {
         return { success: false, error: 'Username or email already exists' };
       }
 
@@ -413,9 +405,6 @@ async function registerUser({ username, email, password, role = 'user', quota = 
         password_hash: passwordHash,
         role,
         quota,
-        used_storage: 0,
-        totalUsed: 0,
-        breakdown: { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 },
         status: 'active',
         created_at: new Date().toISOString()
       };
@@ -488,32 +477,16 @@ async function authenticateUser({ identifier, password }) {
     try {
       let user = null;
 
-      // 1. Fast O(1) Lookup via EmailIndex if identifier is an email
-      if (normIdent.includes('@')) {
-        try {
-          const queryRes = await authConfig.docClient.send(new QueryCommand({
-            TableName: authConfig.usersTable,
-            IndexName: 'EmailIndex',
-            KeyConditionExpression: 'email = :email',
-            ExpressionAttributeValues: { ':email': normIdent }
-          }));
-          if (queryRes.Items && queryRes.Items.length > 0) {
-            user = queryRes.Items[0];
-          }
-        } catch (queryErr) {
-          // Fallback to table scan if EmailIndex is temporarily unavailable
-        }
-      }
-
-      // 2. Fallback to table scan if not found via index or identifier is username
-      if (!user) {
-        const scanRes = await authConfig.docClient.send(new ScanCommand({
-          TableName: authConfig.usersTable,
-          FilterExpression: 'email = :ident OR username = :ident',
-          ExpressionAttributeValues: { ':ident': normIdent }
-        }));
-        user = scanRes.Items && scanRes.Items[0];
-      }
+      // Email identifiers use EmailIndex, everything else is a username (UsernameIndex)
+      const isEmail = normIdent.includes('@');
+      const queryRes = await authConfig.docClient.send(new QueryCommand({
+        TableName: authConfig.usersTable,
+        IndexName: isEmail ? 'EmailIndex' : 'UsernameIndex',
+        KeyConditionExpression: isEmail ? 'email = :ident' : 'username = :ident',
+        ExpressionAttributeValues: { ':ident': normIdent },
+        Limit: 1
+      }));
+      user = queryRes.Items && queryRes.Items[0];
 
       if (!user) {
         return { success: false, error: 'Invalid username/email or password' };

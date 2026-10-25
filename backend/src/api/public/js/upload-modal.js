@@ -418,6 +418,7 @@ async function uploadFolderRecursive({
     let cursor = 0;
     let completedCount = 0;
     const errors = [];
+    const uploadedIds = [];
 
     async function worker(workerId) {
         while (cursor < totalFiles) {
@@ -436,9 +437,11 @@ async function uploadFolderRecursive({
                 const contentType = itemFile.type || (itemFile.file && itemFile.file.type) || 'application/octet-stream';
 
                 let uploadUrl;
+                let fileId = null;
                 const cached = urlMap.get(index);
                 if (cached && cached.uploadUrl) {
                     uploadUrl = cached.uploadUrl;
+                    fileId = cached.file_id || null;
                 } else {
                     const urlRes = await safeFetchWithRetry('/api/files/upload-url', { apiFetch,
                         method: 'POST',
@@ -455,6 +458,7 @@ async function uploadFolderRecursive({
                         throw new Error(urlData.error || `Failed to get upload URL for "${filename}"`);
                     }
                     uploadUrl = urlData.uploadUrl;
+                    fileId = urlData.file_id;
                 }
 
                 const uploadBody = itemFile.file || (typeof Blob !== 'undefined' ? new Blob(['EasyDrive Mock File Content'], { type: contentType }) : 'EasyDrive Mock File Content');
@@ -467,6 +471,7 @@ async function uploadFolderRecursive({
                 if (!putRes.ok) {
                     throw new Error(`Failed to upload content for "${filename}"`);
                 }
+                if (fileId) uploadedIds.push(fileId);
 
                 completedCount++;
                 onProgress({
@@ -494,6 +499,24 @@ async function uploadFolderRecursive({
 
     const workers = Array.from({ length: poolSize }, (_, id) => worker(id + 1));
     await Promise.all(workers);
+
+    // ยืนยันไฟล์ที่ PUT สำเร็จเป็นชุด (สูงสุด 100 ต่อคำขอ) เพื่อเปลี่ยน pending -> active
+    for (let i = 0; i < uploadedIds.length; i += 100) {
+        const chunk = uploadedIds.slice(i, i + 100);
+        try {
+            const completeRes = await safeFetchWithRetry('/api/files/batch-complete', { apiFetch,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_ids: chunk })
+            });
+            const completeData = await completeRes.json().catch(() => ({}));
+            if (!completeRes.ok) throw new Error(completeData.error || 'batch-complete failed');
+            (completeData.failed || []).forEach((id) => errors.push({ file: id, error: 'Upload could not be confirmed' }));
+        } catch (err) {
+            console.error('Error confirming uploads:', err);
+            chunk.forEach((id) => errors.push({ file: id, error: err.message }));
+        }
+    }
 
     if (errors.length > 0 && completedCount === 0) {
         throw new Error(`Failed to upload files: ${errors[0].error}`);
@@ -1401,6 +1424,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
 
                         if (!putRes.ok) throw new Error('Failed to upload file content to storage');
+
+                        // ยืนยันการอัปโหลด: pending -> active (server ตรวจขนาดจริงจาก S3)
+                        const completeRes = await fetch('/api/files/batch-complete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ file_ids: [fileId] })
+                        });
+                        const completeData = await completeRes.json().catch(() => ({}));
+                        if (!completeRes.ok || !(completeData.completed || []).includes(fileId)) {
+                            throw new Error('Upload could not be confirmed. Please try again.');
+                        }
                         overallCompleted++;
                         updateOverallProgress(item.name);
                     }

@@ -55,7 +55,6 @@
             data-size="<%= typeof file !== 'undefined' && file.size ? file.size : '' %>"
             data-owner="<%= typeof file !== 'undefined' && file.owner ? file.owner : 'Admin Rick' %>"
             data-created="<%= typeof file !== 'undefined' && (file.createdAt || file.created_at || file.uploadDate) ? (file.createdAt || file.created_at || file.uploadDate) : '' %>"
-            data-hash="<%= typeof file !== 'undefined' && file.file_hash ? file.file_hash : '' %>"
             data-tags="<%= typeof file !== 'undefined' && file.tags ? (Array.isArray(file.tags) ? file.tags.join(',') : file.tags) : '' %>">
         <i class="fas fa-info-circle"></i> Information
     </button>

@@ -1,22 +1,19 @@
 output "region" {
-  description = "AWS Deployment Region"
+  description = "AWS deployment region"
   value       = var.region
 }
 
-# S3 Output
-output "easydrive-storage-bucket" {
-  description = "S3 bucket name for private user file storage"
-  value       = data.aws_s3_bucket.easydrive-storage.id
+output "api_url" {
+  description = "Base URL of the EasyDrive HTTP API"
+  value       = module.api.invoke_url
 }
 
-# API Gateway Output
-output "api-gateway-url" {
-  description = "Base URL for EasyDrive HTTP API (Zero Stage Prefix)"
-  value       = aws_apigatewayv2_stage.default.invoke_url
+output "storage_bucket" {
+  description = "S3 bucket holding user files"
+  value       = module.storage.bucket_name
 }
 
-# SNS Output
-output "sns-topic-arn" {
-  description = "ARN for SNS Download Alerts Topic"
-  value       = aws_sns_topic.easydrive-download-alerts.arn
+output "sns_topic_arn" {
+  description = "SNS topic for download and cost alerts"
+  value       = module.notifications.topic_arn
 }

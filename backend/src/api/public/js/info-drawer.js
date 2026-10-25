@@ -10,9 +10,7 @@
     // Elements
     let filenameEl, categoryEl, iconEl, previewGraphicEl;
     let propTypeEl, propSizeEl, propStorageEl, propLocationEl, propOwnerEl, propModifiedEl, propCreatedEl;
-    let tagsContainerEl, hashCodeEl, copyHashBtn, toggleHashBtn, accessStatusEl, accessStatusText;
-    let currentFullHash = '';
-    let isHashRevealed = false;
+    let tagsContainerEl, accessStatusEl, accessStatusText;
     let quickPreviewBtn, quickDownloadBtn, manageAccessBtn, editTagsBtn;
     let tabBtns, tabPanes, timelineEl;
     let detailsTabBtn = null, activityTabBtn = null;
@@ -37,8 +35,6 @@
         propCreatedEl = document.getElementById('infoPropCreated');
 
         tagsContainerEl = document.getElementById('infoTagsContainer');
-        hashCodeEl = document.getElementById('infoHashCode');
-        copyHashBtn = document.getElementById('infoCopyHashBtn');
         accessStatusEl = document.getElementById('infoAccessStatus');
         accessStatusText = document.getElementById('infoAccessStatusText');
 
@@ -48,7 +44,6 @@
         editTagsBtn = document.getElementById('infoEditTagsBtn');
         infoOwnerName = document.getElementById('infoOwnerName');
         infoOwnerRole = document.getElementById('infoOwnerRole');
-        toggleHashBtn = document.getElementById('infoToggleHashBtn');
         cloudSectionEl = document.querySelector('.info-section-cloud');
 
         tabBtns = document.querySelectorAll('.info-tab-btn');
@@ -151,25 +146,6 @@
             bigIcon: '<i class="fas fa-file-alt" style="color: #6b7280; font-size: 54px;"></i>',
             typeStr: ext ? `File (.${ext})` : 'File'
         };
-    }
-
-    function updateHashDisplay() {
-        if (!hashCodeEl) return;
-        if (isHashRevealed) {
-            hashCodeEl.textContent = currentFullHash;
-            hashCodeEl.style.letterSpacing = 'normal';
-            if (toggleHashBtn) {
-                toggleHashBtn.innerHTML = '<i class="far fa-eye-slash"></i>';
-                toggleHashBtn.title = 'Hide Checksum';
-            }
-        } else {
-            hashCodeEl.textContent = '••••••••••••••••••••••••••••••••';
-            hashCodeEl.style.letterSpacing = '2px';
-            if (toggleHashBtn) {
-                toggleHashBtn.innerHTML = '<i class="far fa-eye"></i>';
-                toggleHashBtn.title = 'Reveal Checksum';
-            }
-        }
     }
 
     function renderDrawerContent(data) {
@@ -288,11 +264,6 @@
                 });
             }
         }
-
-        // SHA-256 Hash (Masked by default)
-        currentFullHash = data.file_hash || data.hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-        isHashRevealed = false;
-        updateHashDisplay();
 
         // Activity Timeline
         if (timelineEl) {
@@ -533,32 +504,6 @@
             });
         }
 
-        // Toggle Reveal / Mask SHA-256 Hash
-        if (toggleHashBtn) {
-            toggleHashBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                isHashRevealed = !isHashRevealed;
-                updateHashDisplay();
-            });
-        }
-
-        // Copy SHA-256 Hash (Always copies real unmasked hash)
-        if (copyHashBtn) {
-            copyHashBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (!currentFullHash) return;
-                navigator.clipboard.writeText(currentFullHash).then(() => {
-                    copyHashBtn.innerHTML = '<i class="fas fa-check" style="color: #16a34a;"></i>';
-                    setTimeout(() => {
-                        copyHashBtn.innerHTML = '<i class="far fa-copy"></i>';
-                    }, 1500);
-                    if (window.showToast) window.showToast('Copied SHA-256 checksum to clipboard', 'success');
-                }).catch(() => {
-                    if (window.showToast) window.showToast('Failed to copy checksum', 'error');
-                });
-            });
-        }
-
         // Event delegation: clicking Information from dropdown menus
         document.addEventListener('click', (e) => {
             const infoBtn = e.target.closest('.open-info-drawer');
@@ -584,7 +529,6 @@
                 const size = infoBtn.dataset.size || (row && row.dataset.size) || '';
                 const owner = infoBtn.dataset.owner || (row && row.querySelector('.file-owner')?.textContent.trim()) || 'Admin Rick';
                 const created = infoBtn.dataset.created || (row && row.querySelector('.file-date')?.textContent.trim()) || '';
-                const hash = infoBtn.dataset.hash || '';
 
                 openDrawer({
                     id: fileId,
@@ -597,8 +541,7 @@
                     size: size,
                     owner: owner,
                     created: created,
-                    updated: created,
-                    file_hash: hash
+                    updated: created
                 });
             }
         });
