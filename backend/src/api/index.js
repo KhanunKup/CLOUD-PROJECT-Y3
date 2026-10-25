@@ -23,7 +23,9 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 const storage = require('./storage');
-const { createZipArchive, pipeZipArchive } = require('./zip-packager');
+const ArchiveStreamer = require('./archive-streamer');
+const AccessPolicy = require('./access-policy');
+const UploadCoordinator = require('./upload-coordinator');
 const FileRepository = require('./file-repository');
 const authService = require('./auth-service');
 
@@ -125,6 +127,33 @@ authService.initAuthStore({
   isMockMode: IS_MOCK_MODE,
   docClient,
   usersTable: USERS_TABLE
+});
+
+const archiveStreamer = new ArchiveStreamer({
+  isMockMode: IS_MOCK_MODE,
+  storage,
+  s3Client,
+  storageBucket: STORAGE_BUCKET,
+  fileRepository: fileRepo
+});
+
+const accessPolicy = new AccessPolicy({
+  isMockMode: IS_MOCK_MODE,
+  docClient,
+  sharesTable: SHARES_TABLE,
+  filesTable: FILES_TABLE,
+  shares: () => (typeof mockShares !== 'undefined' ? mockShares : [])
+});
+
+const uploadCoordinator = new UploadCoordinator({
+  isMockMode: IS_MOCK_MODE,
+  s3Client,
+  storageBucket: STORAGE_BUCKET,
+  filesTable: FILES_TABLE,
+  docClient,
+  storageService: { getUserStorage: (uid) => getUserStorage(uid) },
+  mockStorage: storage,
+  mockFilesRef: () => (typeof mockFiles !== 'undefined' ? mockFiles : [])
 });
 
 // ==========================================
@@ -365,26 +394,12 @@ function canUserAccessFile(file, user, requiredPermission = 'view', visited = ne
   if (!file || !user || visited.has(file.file_id)) return false;
   visited.add(file.file_id);
 
-  // 1. Resource owner or Admin role always has full access
-  if (file.owner_id === user.user_id) return true;
-  if (user.role === 'admin') return true;
-  if (user.user_id === 'user-normal-01' && file.owner_id === 'demo-user') return true;
+  const evalResult = accessPolicy.evaluateFileAccess(file, user, requiredPermission);
+  if (evalResult.allowed) return true;
 
-  // 2. Direct collaborator check via access_list
-  const userEmail = (user.email || '').toLowerCase();
-  if (userEmail && Array.isArray(file.access_list)) {
-    const entry = file.access_list.find(a => ((a.email || a.name || '').toLowerCase() === userEmail));
-    if (entry) {
-      if (requiredPermission === 'edit') {
-        return entry.permission === 'can edit';
-      }
-      return true; // 'view' is granted
-    }
-  }
-
-  // 3. Recursive folder parent inheritance check
+  // Inherited permission from parent folder
   if (file.folder_id) {
-    const parentFolder = mockFiles.find(f => f.file_id === file.folder_id);
+    const parentFolder = mockFiles ? mockFiles.find(f => f.file_id === file.folder_id) : null;
     if (parentFolder && canUserAccessFile(parentFolder, user, requiredPermission, visited)) {
       return true;
     }
@@ -1539,103 +1554,43 @@ app.get('/mock-download/:filename', (req, res) => {
 // 5.3 Request Presigned Upload URL
 app.post('/api/files/upload-url', authMiddleware, async (req, res) => {
   const filename = req.body.filename || req.body.name;
-  const { size, contentType, folder_id, parent_id } = req.body;
-  const parentFolderId = folder_id || parent_id || null;
+  const { size, contentType, folder_id, parent_id } = req.body || {};
   if (!filename || !size) {
     return res.status(400).json({ error: 'filename and size are required' });
   }
 
-  // Quota Guard: Enforce storage quota limits
-  const currentStorage = getUserStorage(req.user.user_id);
-  const requestedBytes = Number(size);
-  if (currentStorage.totalUsed + requestedBytes > currentStorage.quota) {
-    return res.status(400).json({
-      error: `Storage quota exceeded. You have ${currentStorage.formattedFree} free space remaining out of ${currentStorage.formattedQuota}.`
-    });
-  }
-
-  const fileId = `file-${crypto.randomUUID()}`;
+  const parentFolderId = folder_id || parent_id || 'root';
   const effectiveFolderId = (parentFolderId && parentFolderId !== 'root') ? parentFolderId : 'root';
-  const s3Key = effectiveFolderId !== 'root'
-    ? `uploads/${req.user.user_id}/${effectiveFolderId}/${fileId}/${filename}`
-    : `uploads/${req.user.user_id}/${fileId}/${filename}`;
-  const category = getCategoryFromExtension(filename);
+  const host = req.get('host') || 'localhost:3000';
+  const protocol = req.protocol || 'http';
 
-  if (IS_MOCK_MODE) {
-    const mockFileRecord = {
-      file_id: fileId,
-      owner_id: req.user.user_id,
-      folder_id: effectiveFolderId,
-      filename,
-      size: Number(size),
-      category,
-      tags: [category, filename.split('.').pop().toLowerCase()],
-      file_hash: crypto.randomBytes(32).toString('hex'),
-      s3_key: s3Key,
-      status: 'active',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    mockFiles.unshift(mockFileRecord);
-    storage.saveMockFiles(mockFiles);
-
-    // Update mock storage breakdown
-    mockUserStorage.totalUsed += Number(size);
-    mockUserStorage.breakdown[category] = (mockUserStorage.breakdown[category] || 0) + Number(size);
+  try {
+    const result = await uploadCoordinator.prepareUploads(
+      req.user,
+      [{ filename, size, folder_id: effectiveFolderId, contentType }],
+      { host, protocol }
+    );
+    const item = result.items[0];
 
     recordAuditLog({
       user: req.user,
       action: 'UPLOAD',
       level: 'info',
-      details: `Uploaded 1 file (${category}, ${formatBytes(Number(size))})`,
-      metadata: {
-        file_id: fileId,
-        category,
-        size: Number(size),
-        count: 1
-      }
+      details: `Uploaded 1 file (${item.category}, ${formatBytes(Number(size))})`,
+      metadata: { file_id: item.file_id, category: item.category, size: Number(size), count: 1 }
     });
 
-    const host = req.get('host') || 'localhost:3000';
-    const protocol = req.protocol || 'http';
-    return res.json({
+    res.json({
       success: true,
-      file_id: fileId,
-      key: s3Key,
-      uploadUrl: `${protocol}://${host}/mock-upload?key=${encodeURIComponent(s3Key)}`,
-      file: mockFileRecord
+      file_id: item.file_id,
+      key: item.key,
+      uploadUrl: item.uploadUrl,
+      file: item.file
     });
-  }
-
-  try {
-    const putCommand = new PutObjectCommand({
-      Bucket: STORAGE_BUCKET,
-      Key: s3Key,
-      ContentType: contentType || 'application/octet-stream'
-    });
-    const uploadUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: 900 }); // 15 mins
-
-    // Create pending record in DynamoDB
-    const newFile = {
-      file_id: fileId,
-      owner_id: req.user.user_id,
-      folder_id: parentFolderId,
-      filename,
-      size: Number(size),
-      category,
-      tags: [category, filename.split('.').pop().toLowerCase()],
-      s3_key: s3Key,
-      status: 'pending_upload',
-      created_at: new Date().toISOString()
-    };
-
-    await docClient.send(new PutCommand({
-      TableName: FILES_TABLE,
-      Item: newFile
-    }));
-
-    res.json({ success: true, file_id: fileId, key: s3Key, uploadUrl, file: newFile });
   } catch (err) {
+    if (err.statusCode === 400) {
+      return res.status(400).json({ error: err.message });
+    }
     console.error('Presigned URL error:', err);
     res.status(500).json({ error: 'Failed to generate upload URL' });
   }
@@ -1648,136 +1603,25 @@ app.post('/api/files/batch-upload-urls', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'files array is required and must not be empty' });
   }
 
-  // Quota Guard: Enforce storage quota limits across all files in the batch
-  const currentStorage = getUserStorage(req.user.user_id);
-  const totalBatchBytes = filesList.reduce((acc, f) => acc + (Number(f.size) || 0), 0);
-  if (currentStorage.totalUsed + totalBatchBytes > currentStorage.quota) {
-    return res.status(400).json({
-      error: `Storage quota exceeded. You have ${currentStorage.formattedFree} free space remaining out of ${currentStorage.formattedQuota}.`
-    });
-  }
-
   const host = req.get('host') || 'localhost:3000';
   const protocol = req.protocol || 'http';
-  const items = [];
-  const newMockRecords = [];
-  const categoryFreed = {};
 
-  if (IS_MOCK_MODE) {
-    for (const fileItem of filesList) {
-      const filename = fileItem.filename || fileItem.name;
-      const size = Number(fileItem.size) || 0;
-      const parentFolderId = fileItem.folder_id || fileItem.parent_id || 'root';
-      const fileId = `file-${crypto.randomUUID()}`;
-      const s3Key = (parentFolderId && parentFolderId !== 'root')
-        ? `uploads/${req.user.user_id}/${parentFolderId}/${fileId}/${filename}`
-        : `uploads/${req.user.user_id}/${fileId}/${filename}`;
-      const category = getCategoryFromExtension(filename);
-
-      const mockFileRecord = {
-        file_id: fileId,
-        owner_id: req.user.user_id,
-        folder_id: parentFolderId,
-        filename,
-        size,
-        category,
-        tags: [category, filename.split('.').pop().toLowerCase()],
-        file_hash: crypto.randomBytes(32).toString('hex'),
-        s3_key: s3Key,
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      newMockRecords.push(mockFileRecord);
-      categoryFreed[category] = (categoryFreed[category] || 0) + size;
-
-      items.push({
-        file_id: fileId,
-        filename,
-        key: s3Key,
-        s3_key: s3Key,
-        uploadUrl: `${protocol}://${host}/mock-upload?key=${encodeURIComponent(s3Key)}`,
-        file: mockFileRecord
-      });
-    }
-
-    mockFiles.unshift(...newMockRecords);
-    storage.saveMockFiles(mockFiles);
-
-    mockUserStorage.totalUsed += totalBatchBytes;
-    for (const [cat, sz] of Object.entries(categoryFreed)) {
-      mockUserStorage.breakdown[cat] = (mockUserStorage.breakdown[cat] || 0) + sz;
-    }
+  try {
+    const result = await uploadCoordinator.prepareUploads(req.user, filesList, { host, protocol });
 
     recordAuditLog({
       user: req.user,
-      action: 'UPLOAD',
+      action: 'BATCH_UPLOAD',
       level: 'info',
-      details: `Batch uploaded ${items.length} files (${formatBytes(totalBatchBytes)})`,
-      metadata: {
-        file_ids: items.map(item => item.file_id),
-        count: items.length,
-        total_bytes: totalBatchBytes
-      }
+      details: `Batch requested upload URLs for ${result.items.length} files`,
+      metadata: { count: result.items.length }
     });
 
-    return res.json({
-      success: true,
-      items
-    });
-  }
-
-  try {
-    for (const fileItem of filesList) {
-      const filename = fileItem.filename || fileItem.name;
-      const size = Number(fileItem.size) || 0;
-      const parentFolderId = fileItem.folder_id || fileItem.parent_id || null;
-      const fileId = `file-${crypto.randomUUID()}`;
-      const s3Key = parentFolderId
-        ? `uploads/${req.user.user_id}/${parentFolderId}/${fileId}/${filename}`
-        : `uploads/${req.user.user_id}/${fileId}/${filename}`;
-
-      const putCommand = new PutObjectCommand({
-        Bucket: STORAGE_BUCKET,
-        Key: s3Key,
-        ContentType: fileItem.contentType || 'application/octet-stream'
-      });
-      const uploadUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: 900 });
-
-      const newFile = {
-        file_id: fileId,
-        owner_id: req.user.user_id,
-        folder_id: parentFolderId,
-        filename,
-        size,
-        category: getCategoryFromExtension(filename),
-        s3_key: s3Key,
-        status: 'active',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      await docClient.send(new PutCommand({
-        TableName: FILES_TABLE,
-        Item: newFile
-      }));
-
-      items.push({
-        file_id: fileId,
-        filename,
-        key: s3Key,
-        s3_key: s3Key,
-        uploadUrl,
-        file: newFile
-      });
-    }
-
-    return res.json({
-      success: true,
-      items
-    });
+    res.json({ success: true, count: result.items.length, items: result.items });
   } catch (err) {
+    if (err.statusCode === 400) {
+      return res.status(400).json({ error: err.message });
+    }
     console.error('Batch presigned URL error:', err);
     res.status(500).json({ error: 'Failed to generate batch upload URLs' });
   }
@@ -1787,200 +1631,30 @@ app.post('/api/files/batch-upload-urls', authMiddleware, async (req, res) => {
 app.get('/api/folders/:id/download-zip', authMiddleware, async (req, res) => {
   const folderId = req.params.id;
 
-  if (IS_MOCK_MODE) {
-    mockFiles = storage.loadMockFiles();
-    const folder = mockFiles.find(f => f.file_id === folderId);
-    if (!folder || !canUserAccessFile(folder, req.user) || folder.status === 'trash') {
-      return res.status(404).json({ error: 'Folder not found' });
-    }
-    if (folder.category !== 'folder') {
-      return res.status(400).json({ error: 'Requested item is not a folder' });
-    }
-
-    // Build hierarchical entries
-    const entries = [];
-    entries.push({
-      path: folder.filename,
-      isFolder: true,
-      date: folder.created_at || folder.uploadDate
-    });
-
-    const folderPathMap = new Map();
-    folderPathMap.set(folder.file_id, folder.filename);
-
-    const childrenMap = new Map();
-    for (const f of mockFiles) {
-      if (!f.folder_id) continue;
-      let list = childrenMap.get(f.folder_id);
-      if (!list) {
-        list = [];
-        childrenMap.set(f.folder_id, list);
-      }
-      list.push(f);
-    }
-
-    const queue = [folder.file_id];
-    let head = 0;
-    while (head < queue.length) {
-      const parentId = queue[head++];
-      const parentPath = folderPathMap.get(parentId);
-      const children = childrenMap.get(parentId) || [];
-
-      for (const child of children) {
-        if (child.status === 'trash') continue;
-        if (!canUserAccessFile(child, req.user)) continue;
-
-        const relPath = `${parentPath}/${child.filename}`;
-        if (child.category === 'folder') {
-          folderPathMap.set(child.file_id, relPath);
-          queue.push(child.file_id);
-          entries.push({
-            path: relPath,
-            isFolder: true,
-            date: child.created_at || child.uploadDate
-          });
-        } else {
-          let content = Buffer.alloc(0);
-          const storedPath = storage.findStoredFile ? storage.findStoredFile(child) : null;
-          if (storedPath && fs.existsSync(storedPath)) {
-            try {
-              content = fs.readFileSync(storedPath);
-            } catch (_) {}
-          } else if (child.content) {
-            content = Buffer.isBuffer(child.content) ? child.content : Buffer.from(child.content);
-          } else {
-            content = Buffer.from(`Sample content for ${child.filename}`);
-          }
-
-          entries.push({
-            path: relPath,
-            content,
-            isFolder: false,
-            date: child.created_at || child.uploadDate
-          });
-        }
-      }
-    }
-
-    const zipBuffer = createZipArchive(entries);
-
-    recordAuditLog({
-      user: req.user,
-      action: 'FOLDER_DOWNLOAD_ZIP',
-      level: 'info',
-      details: `Downloaded folder "${folder.filename}" as ZIP (${entries.length} items)`
-    });
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(folder.filename)}.zip"`);
-    return res.send(zipBuffer);
-  }
-
-  // DynamoDB & S3 production mode
   try {
-    const getRes = await docClient.send(new GetCommand({
-      TableName: FILES_TABLE,
-      Key: { file_id: folderId }
-    }));
-    const folder = getRes.Item;
-    if (!folder || !canUserAccessFile(folder, req.user) || folder.status === 'trash') {
-      return res.status(404).json({ error: 'Folder not found' });
-    }
-    if (folder.category !== 'folder') {
-      return res.status(400).json({ error: 'Requested item is not a folder' });
-    }
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="folder-${folderId}.zip"`);
 
-    const scanRes = await docClient.send(new ScanCommand({
-      TableName: FILES_TABLE,
-      FilterExpression: 'owner_id = :owner AND (attribute_not_exists(#st) OR #st <> :trash)',
-      ExpressionAttributeNames: { '#st': 'status' },
-      ExpressionAttributeValues: {
-        ':owner': req.user.user_id,
-        ':trash': 'trash'
-      }
-    }));
-    const allFiles = scanRes.Items || [];
-
-    const entries = [];
-    entries.push({
-      path: folder.filename,
-      isFolder: true,
-      date: folder.created_at || folder.uploadDate
+    await archiveStreamer.streamArchive(res, {
+      rootFolderId: folderId,
+      user: req.user,
+      archiveName: `folder-${folderId}.zip`
     });
-
-    const folderPathMap = new Map();
-    folderPathMap.set(folder.file_id, folder.filename);
-
-    const childrenMap = new Map();
-    for (const f of allFiles) {
-      if (!f.folder_id) continue;
-      let list = childrenMap.get(f.folder_id);
-      if (!list) {
-        list = [];
-        childrenMap.set(f.folder_id, list);
-      }
-      list.push(f);
-    }
-
-    const queue = [folder.file_id];
-    let head = 0;
-    while (head < queue.length) {
-      const parentId = queue[head++];
-      const parentPath = folderPathMap.get(parentId);
-      const children = childrenMap.get(parentId) || [];
-
-      for (const child of children) {
-        const relPath = `${parentPath}/${child.filename}`;
-        if (child.category === 'folder') {
-          folderPathMap.set(child.file_id, relPath);
-          queue.push(child.file_id);
-          entries.push({
-            path: relPath,
-            isFolder: true,
-            date: child.created_at || child.uploadDate
-          });
-        } else {
-          let content = Buffer.alloc(0);
-          if (child.s3_key) {
-            try {
-              const s3Res = await s3Client.send(new GetObjectCommand({
-                Bucket: STORAGE_BUCKET,
-                Key: child.s3_key
-              }));
-              const chunks = [];
-              for await (const chunk of s3Res.Body) {
-                chunks.push(chunk);
-              }
-              content = Buffer.concat(chunks);
-            } catch (s3Err) {
-              console.warn(`Could not read S3 key ${child.s3_key}:`, s3Err.message);
-            }
-          }
-          entries.push({
-            path: relPath,
-            content,
-            isFolder: false,
-            date: child.created_at || child.uploadDate
-          });
-        }
-      }
-    }
-
-    const zipBuffer = createZipArchive(entries);
 
     recordAuditLog({
       user: req.user,
       action: 'FOLDER_DOWNLOAD_ZIP',
       level: 'info',
-      details: `Downloaded folder "${folder.filename}" as ZIP (${entries.length} items)`
+      details: `Downloaded folder ID "${folderId}" as ZIP`
     });
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(folder.filename)}.zip"`);
-    res.send(zipBuffer);
   } catch (err) {
+    if (err.statusCode === 404) {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
     console.error('Download folder zip error:', err);
-    res.status(500).json({ error: 'Failed to package folder zip' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to package folder zip' });
+    }
   }
 });
 
@@ -1991,158 +1665,27 @@ app.post('/api/files/batch-download-zip', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'file_ids array is required' });
   }
 
-  if (IS_MOCK_MODE) {
-    mockFiles = storage.loadMockFiles();
-    const targetFiles = mockFiles.filter(f => file_ids.includes(f.file_id) && canUserAccessFile(f, req.user) && f.status !== 'trash');
-    if (targetFiles.length === 0) {
-      return res.status(404).json({ error: 'No accessible files found to package' });
-    }
-
-    const entries = [];
-    const childrenMap = new Map();
-    for (const f of mockFiles) {
-      if (!f.folder_id) continue;
-      let list = childrenMap.get(f.folder_id);
-      if (!list) {
-        list = [];
-        childrenMap.set(f.folder_id, list);
-      }
-      list.push(f);
-    }
-
-    for (const target of targetFiles) {
-      if (target.category === 'folder') {
-        // Collect folder hierarchy
-        entries.push({
-          path: target.filename,
-          isFolder: true,
-          date: target.created_at || target.uploadDate
-        });
-
-        const folderPathMap = new Map();
-        folderPathMap.set(target.file_id, target.filename);
-
-        const queue = [target.file_id];
-        let head = 0;
-        while (head < queue.length) {
-          const parentId = queue[head++];
-          const parentPath = folderPathMap.get(parentId);
-          const children = childrenMap.get(parentId) || [];
-
-          for (const child of children) {
-            if (child.status === 'trash') continue;
-            if (!canUserAccessFile(child, req.user)) continue;
-
-            const relPath = `${parentPath}/${child.filename}`;
-            if (child.category === 'folder') {
-              folderPathMap.set(child.file_id, relPath);
-              queue.push(child.file_id);
-              entries.push({
-                path: relPath,
-                isFolder: true,
-                date: child.created_at || child.uploadDate
-              });
-            } else {
-              let content = Buffer.alloc(0);
-              const storedPath = storage.findStoredFile ? storage.findStoredFile(child) : null;
-              if (storedPath && fs.existsSync(storedPath)) {
-                try { content = fs.readFileSync(storedPath); } catch (_) {}
-              } else if (child.content) {
-                content = Buffer.isBuffer(child.content) ? child.content : Buffer.from(child.content);
-              } else {
-                content = Buffer.from(`Sample content for ${child.filename}`);
-              }
-
-              entries.push({
-                path: relPath,
-                content,
-                isFolder: false,
-                date: child.created_at || child.uploadDate
-              });
-            }
-          }
-        }
-      } else {
-        // Single file at root of ZIP
-        let content = Buffer.alloc(0);
-        const storedPath = storage.findStoredFile ? storage.findStoredFile(target) : null;
-        if (storedPath && fs.existsSync(storedPath)) {
-          try { content = fs.readFileSync(storedPath); } catch (_) {}
-        } else if (target.content) {
-          content = Buffer.isBuffer(target.content) ? target.content : Buffer.from(target.content);
-        } else {
-          content = Buffer.from(`Sample content for ${target.filename}`);
-        }
-
-        entries.push({
-          path: target.filename,
-          content,
-          isFolder: false,
-          date: target.created_at || target.uploadDate
-        });
-      }
-    }
-
-    recordAuditLog({
-      user: req.user,
-      action: 'BATCH_DOWNLOAD_ZIP',
-      level: 'info',
-      details: `Batch downloaded ${targetFiles.length} item(s) as ZIP (${entries.length} archive entries)`
-    });
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename="EasyDrive_Batch_Download.zip"');
-    return pipeZipArchive(entries, res);
-  }
-
-  // DynamoDB / S3 mode
   try {
-    const entries = [];
-    for (const fileId of file_ids) {
-      const result = await docClient.send(new GetCommand({
-        TableName: FILES_TABLE,
-        Key: { file_id: fileId }
-      }));
-      const file = result.Item;
-      if (!file || file.owner_id !== req.user.user_id || file.status === 'trash') continue;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="EasyDrive_Batch_Download.zip"');
 
-      let content = Buffer.alloc(0);
-      if (file.s3_key) {
-        const getCommand = new GetObjectCommand({
-          Bucket: STORAGE_BUCKET,
-          Key: file.s3_key
-        });
-        const s3Res = await s3Client.send(getCommand);
-        const chunks = [];
-        for await (const chunk of s3Res.Body) {
-          chunks.push(chunk);
-        }
-        content = Buffer.concat(chunks);
-      }
-
-      entries.push({
-        path: file.filename,
-        content,
-        isFolder: file.category === 'folder',
-        date: file.created_at
-      });
-    }
-
-    const zipBuffer = createZipArchive(entries);
+    await archiveStreamer.streamArchive(res, {
+      fileIds: file_ids,
+      user: req.user,
+      archiveName: 'EasyDrive_Batch_Download.zip'
+    });
 
     recordAuditLog({
       user: req.user,
       action: 'BATCH_DOWNLOAD_ZIP',
       level: 'info',
-      details: `Batch downloaded ${entries.length} items as ZIP`
+      details: `Batch downloaded ${file_ids.length} items as ZIP`
     });
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename="EasyDrive_Batch_Download.zip"');
-    res.send(zipBuffer);
   } catch (err) {
     console.error('Batch download zip error:', err);
-    res.status(500).json({ error: 'Failed to package batch download ZIP' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to package batch download ZIP' });
+    }
   }
 });
 
@@ -3313,35 +2856,14 @@ app.post('/api/shares/:id/verify', async (req, res) => {
   const shareId = req.params.id;
   const { password } = req.body;
 
-  let share;
-  if (IS_MOCK_MODE) {
-    share = mockShares.find(s => s.share_id === shareId);
-  } else {
-    const result = await docClient.send(new GetCommand({
-      TableName: SHARES_TABLE,
-      Key: { share_id: shareId }
-    }));
-    share = result.Item;
+  const verifyRes = await accessPolicy.verifyShareAccess(shareId, password);
+  if (!verifyRes.valid) {
+    return res.status(verifyRes.statusCode || 400).json({
+      error: verifyRes.error,
+      passwordRequired: verifyRes.passwordRequired
+    });
   }
-
-  if (!share) return res.status(404).json({ error: 'Share link not found or expired' });
-
-  // 1. Check TTL expiry
-  if (share.expires_at && Math.floor(Date.now() / 1000) > share.expires_at) {
-    return res.status(410).json({ error: 'This share link has expired' });
-  }
-
-  // 2. Check Download Limit (Burn-After-Read)
-  if (share.max_downloads > 0 && share.download_count >= share.max_downloads) {
-    return res.status(410).json({ error: 'Download limit reached. This link is no longer active.' });
-  }
-
-  // 3. Check Password
-  if (share.has_password) {
-    if (!password) return res.status(401).json({ error: 'Password required', passwordRequired: true });
-    const isMatch = await bcrypt.compare(password, share.password_hash);
-    if (!isMatch) return res.status(403).json({ error: 'Invalid password' });
-  }
+  const share = verifyRes.share;
 
   // 4. Increment Download Count (Atomic Update)
   if (IS_MOCK_MODE) {
