@@ -84,7 +84,6 @@
         name: selectedRow.dataset.name,
         type: selectedRow.dataset.type,
         size: selectedRow.dataset.size,
-        hash: selectedRow.dataset.hash,
         owner: selectedRow.dataset.owner,
         tags: (selectedRow.dataset.tags || '').split(',').filter(Boolean),
         date: selectedRow.dataset.date

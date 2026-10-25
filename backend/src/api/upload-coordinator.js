@@ -2,9 +2,13 @@
 // Deep module coordinating pre-upload quota headroom verification and S3 pre-signed upload URL generation
 
 const crypto = require('crypto');
-const { PutObjectCommand } = require('@aws-sdk/client-s3');
-const { PutCommand } = require('@aws-sdk/lib-dynamodb');
+const { PutObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
+const { PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+
+// Pending uploads that are never completed expire via DynamoDB TTL (expires_at)
+const PENDING_TTL_SECONDS = 24 * 60 * 60;
+const MAX_COMPLETE_BATCH = 100;
 
 function getCategoryFromExtension(filename) {
   const ext = (filename || '').split('.').pop().toLowerCase();
@@ -29,6 +33,7 @@ class UploadCoordinator {
     s3Client = null,
     storageBucket = '',
     filesTable = '',
+    usersTable = '',
     docClient = null,
     storageService = null,
     mockStorage = null,
@@ -38,6 +43,7 @@ class UploadCoordinator {
     this.s3Client = s3Client;
     this.storageBucket = storageBucket;
     this.filesTable = filesTable;
+    this.usersTable = usersTable;
     this.docClient = docClient;
     this.storageService = storageService;
     this.mockStorage = mockStorage;
@@ -76,6 +82,7 @@ class UploadCoordinator {
     for (const req of fileRequests) {
       const filename = req.filename || req.name;
       const size = Number(req.size) || 0;
+      const incomingHash = req.file_hash || req.hash || null; // รับค่า Hash จาก Frontend
       if (!filename || size <= 0) {
         const err = new Error('filename and positive size are required for all items');
         err.statusCode = 400;
@@ -84,13 +91,68 @@ class UploadCoordinator {
 
       const rawFolderId = req.folder_id || req.parent_id;
       const effectiveFolderId = (rawFolderId && rawFolderId !== 'root') ? rawFolderId : 'root';
-      const fileId = `file-${crypto.randomUUID()}`;
-      const s3Key = effectiveFolderId !== 'root'
-        ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
-        : `uploads/${userId}/${fileId}/${filename}`;
       const category = getCategoryFromExtension(filename);
 
+      // --- 1. ตรวจสอบ Deduplication บน Local Mock Mode ---
       if (this.isMockMode) {
+        const liveMockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
+        // ค้นหาไฟล์เดิมของผู้ใช้ที่มี Hash ตรงกัน
+        const duplicateFile = incomingHash 
+          ? liveMockFiles.find(f => f.owner_id === userId && f.status === 'active' && f.file_hash === incomingHash)
+          : null;
+
+        if (duplicateFile) {
+          const liveMockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
+          
+          // แยกชื่อไฟล์กับนามสกุลเพื่อเติม index เช่น "test.txt" -> base: "test", ext: ".txt"
+          const lastDotIndex = filename.lastIndexOf('.');
+          const baseName = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+          const extName = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+
+          // หาว่าในโฟลเดอร์เดียวกันนี้ของผู้ใช้ มีชื่อขึ้นต้นแบบนี้ไปแล้วกี่อัน
+          let index = 1;
+          let newFilename = `${baseName} (${index})${extName}`;
+          while (liveMockFiles.some(f => f.owner_id === userId && f.folder_id === effectiveFolderId && f.status === 'active' && f.filename === newFilename)) {
+            index++;
+            newFilename = `${baseName} (${index})${extName}`;
+          }
+
+          const newFileId = `file-${crypto.randomUUID()}`;
+          const newMockRecord = {
+            file_id: newFileId,
+            owner_id: userId,
+            folder_id: effectiveFolderId,
+            filename: newFilename, // ใช้ชื่อใหม่ที่มี index
+            size,
+            category,
+            tags: [category, newFilename.split('.').pop().toLowerCase()],
+            file_hash: incomingHash,
+            s3_key: duplicateFile.s3_key, // ใช้ไฟล์ binary เดิมบน S3
+            status: 'active',
+            is_duplicate: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+
+          newMockRecords.push(newMockRecord);
+          items.push({
+            file_id: newFileId,
+            filename: newFilename,
+            key: duplicateFile.s3_key,
+            s3Key: duplicateFile.s3_key,
+            category,
+            uploadUrl: null, // ไม่ต้อง PUT binary ขึ้น S3 ซ้ำ
+            deduplicated: true,
+            file: newMockRecord
+          });
+          continue;
+        }
+
+        // กรณีเป็นไฟล์ใหม่ (ไม่ซ้ำ)
+        const fileId = `file-${crypto.randomUUID()}`;
+        const s3Key = effectiveFolderId !== 'root'
+          ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
+          : `uploads/${userId}/${fileId}/${filename}`;
         const uploadUrl = `${protocol}://${host}/mock-upload?key=${encodeURIComponent(s3Key)}&filename=${encodeURIComponent(filename)}&folder_id=${encodeURIComponent(effectiveFolderId)}`;
         const mockFileRecord = {
           file_id: fileId,
@@ -100,7 +162,7 @@ class UploadCoordinator {
           size,
           category,
           tags: [category, filename.split('.').pop().toLowerCase()],
-          file_hash: crypto.randomBytes(32).toString('hex'),
+          file_hash: incomingHash || crypto.randomBytes(32).toString('hex'),
           s3_key: s3Key,
           status: 'active',
           created_at: new Date().toISOString(),
@@ -115,16 +177,112 @@ class UploadCoordinator {
           s3Key,
           category,
           uploadUrl,
+          deduplicated: false,
           file: mockFileRecord
         });
       } else {
-        // AWS S3 Presigned URL Creation
+        // --- 2. ตรวจสอบ Deduplication บน AWS Cloud Mode (DynamoDB) ---
+        let duplicateCloudFile = null;
+        if (incomingHash && this.docClient && this.filesTable) {
+          try {
+            const { QueryCommand } = require('@aws-sdk/lib-dynamodb');
+            // ค้นหาไฟล์ของผู้ใช้ที่มีสถานะ active
+            const qRes = await this.docClient.send(new QueryCommand({
+              TableName: this.filesTable,
+              IndexName: 'OwnerIndex',
+              KeyConditionExpression: 'owner_id = :owner',
+              FilterExpression: '#st = :status AND file_hash = :hash',
+              ExpressionAttributeNames: { '#st': 'status' },
+              ExpressionAttributeValues: {
+                ':owner': userId,
+                ':status': 'active',
+                ':hash': incomingHash
+              }
+            }));
+            if (qRes.Items && qRes.Items.length > 0) {
+              duplicateCloudFile = qRes.Items[0];
+            }
+          } catch (dupErr) {
+            console.warn('[UploadCoordinator] Deduplication check skipped:', dupErr.message);
+          }
+        }
+
+        if (duplicateCloudFile) {
+          const lastDotIndex = filename.lastIndexOf('.');
+          const baseName = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+          const extName = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+
+          // ดึงไฟล์ทั้งหมดในโฟลเดอร์เพื่อหาเลข index ที่ไม่ซ้ำ
+          let nextIndex = 1;
+          let newFilename = `${baseName} (${nextIndex})${extName}`;
+          try {
+            const listRes = await this.docClient.send(new QueryCommand({
+              TableName: this.filesTable,
+              IndexName: 'OwnerIndex',
+              KeyConditionExpression: 'owner_id = :owner',
+              FilterExpression: '#st = :status AND folder_id = :fid',
+              ExpressionAttributeNames: { '#st': 'status' },
+              ExpressionAttributeValues: {
+                ':owner': userId,
+                ':status': 'active',
+                ':fid': effectiveFolderId
+              }
+            }));
+            const existingNames = new Set((listRes.Items || []).map(f => f.filename));
+            while (existingNames.has(newFilename)) {
+              nextIndex++;
+              newFilename = `${baseName} (${nextIndex})${extName}`;
+            }
+          } catch (_) {}
+
+          const newFileId = `file-${crypto.randomUUID()}`;
+          const cloudRecord = {
+            file_id: newFileId,
+            owner_id: userId,
+            folder_id: effectiveFolderId,
+            filename: newFilename,
+            size,
+            category,
+            tags: [category, newFilename.split('.').pop().toLowerCase()],
+            file_hash: incomingHash,
+            s3_key: duplicateCloudFile.s3_key,
+            status: 'active',
+            is_duplicate: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+
+          await this.docClient.send(new PutCommand({
+            TableName: this.filesTable,
+            Item: cloudRecord
+          }));
+
+          items.push({
+            file_id: newFileId,
+            filename: newFilename,
+            key: duplicateCloudFile.s3_key,
+            s3Key: duplicateCloudFile.s3_key,
+            category,
+            uploadUrl: null,
+            deduplicated: true,
+            file: cloudRecord
+          });
+          continue;
+        }
+
+        // กรณีไฟล์ใหม่: ออก S3 Presigned URL ตามปกติ
+        const fileId = `file-${crypto.randomUUID()}`;
+        const s3Key = effectiveFolderId !== 'root'
+          ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
+          : `uploads/${userId}/${fileId}/${filename}`;
+
         let uploadUrl = '';
         if (this.s3Client && this.storageBucket) {
           const command = new PutObjectCommand({
             Bucket: this.storageBucket,
             Key: s3Key,
             ContentType: req.contentType || 'application/octet-stream',
+            ContentLength: size,
             Metadata: {
               file_id: fileId,
               owner_id: userId,
@@ -132,7 +290,11 @@ class UploadCoordinator {
               original_name: encodeURIComponent(filename)
             }
           });
-          uploadUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 3600 });
+          // signableHeaders forces content-length into the signature so S3 rejects size mismatches
+          uploadUrl = await getSignedUrl(this.s3Client, command, {
+            expiresIn: 3600,
+            signableHeaders: new Set(['content-length'])
+          });
         }
 
         const cloudFileRecord = {
@@ -143,19 +305,48 @@ class UploadCoordinator {
           size,
           category,
           tags: [category, filename.split('.').pop().toLowerCase()],
+          file_hash: incomingHash || crypto.randomBytes(32).toString('hex'),
           s3_key: s3Key,
           status: 'active',
+          expires_at: Math.floor(Date.now() / 1000) + PENDING_TTL_SECONDS,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
 
         if (this.docClient && this.filesTable) {
+          const { PutCommand } = require('@aws-sdk/lib-dynamodb');
           await this.docClient.send(new PutCommand({
             TableName: this.filesTable,
             Item: cloudFileRecord
           })).catch(err => {
             console.error('[UploadCoordinator] Failed registering pending file in DynamoDB:', err);
+            const failure = new Error('Could not register upload. Please try again.');
+            failure.statusCode = 500;
+            throw failure;
           });
+
+          if (this.usersTable && userId && userId !== 'unknown') {
+            try {
+              await this.docClient.send(new UpdateCommand({
+                TableName: this.usersTable,
+                Key: { user_id: userId },
+                UpdateExpression: `SET 
+                  totalUsed = if_not_exists(totalUsed, :zero) + :s,
+                  breakdown.#cat = if_not_exists(breakdown.#cat, :zero) + :s,
+                  updated_at = :up`,
+                ExpressionAttributeNames: {
+                  '#cat': category
+                },
+                ExpressionAttributeValues: {
+                  ':s': size,
+                  ':zero': 0,
+                  ':up': new Date().toISOString()
+                }
+              }));
+            } catch (quotaErr) {
+              console.warn('[UploadCoordinator] Failed to update user quota in DB:', quotaErr.message);
+            }
+          }
         }
 
         items.push({
@@ -165,6 +356,7 @@ class UploadCoordinator {
           s3Key,
           category,
           uploadUrl,
+          deduplicated: false,
           file: cloudFileRecord
         });
       }
@@ -189,6 +381,80 @@ class UploadCoordinator {
       success: true,
       items
     };
+  }
+
+  /**
+   * Flips pending uploads to active once the browser has PUT them to S3.
+   * The size written is the real S3 object size, never the client-declared one.
+   * @param {Object} user - Authenticated user context
+   * @param {string[]} fileIds - Up to MAX_COMPLETE_BATCH ids returned by prepareUploads
+   * @returns {Promise<{completed: string[], failed: string[]}>}
+   */
+  async completeUploads(user, fileIds = []) {
+    if (!Array.isArray(fileIds) || fileIds.length === 0 || fileIds.length > MAX_COMPLETE_BATCH) {
+      const err = new Error(`file_ids must contain between 1 and ${MAX_COMPLETE_BATCH} ids`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const userId = user.user_id || user.id || 'anonymous';
+    const completed = [];
+    const failed = [];
+
+    for (const fileId of fileIds) {
+      try {
+        if (this.isMockMode) {
+          const mockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
+          const record = Array.isArray(mockFiles)
+            ? mockFiles.find(f => f.file_id === fileId && f.owner_id === userId && f.status === 'pending')
+            : null;
+          if (!record) { failed.push(fileId); continue; }
+          record.status = 'active';
+          record.updated_at = new Date().toISOString();
+          completed.push(fileId);
+          continue;
+        }
+
+        const { Item } = await this.docClient.send(new GetCommand({
+          TableName: this.filesTable,
+          Key: { file_id: fileId }
+        }));
+        if (!Item || Item.owner_id !== userId || Item.status !== 'pending') {
+          failed.push(fileId);
+          continue;
+        }
+
+        const head = await this.s3Client.send(new HeadObjectCommand({
+          Bucket: this.storageBucket,
+          Key: Item.s3_key
+        }));
+
+        await this.docClient.send(new UpdateCommand({
+          TableName: this.filesTable,
+          Key: { file_id: fileId },
+          UpdateExpression: 'SET #st = :active, #sz = :size, updated_at = :now REMOVE expires_at',
+          ConditionExpression: 'owner_id = :u AND #st = :pending',
+          ExpressionAttributeNames: { '#st': 'status', '#sz': 'size' },
+          ExpressionAttributeValues: {
+            ':active': 'active',
+            ':pending': 'pending',
+            ':u': userId,
+            ':size': head.ContentLength,
+            ':now': new Date().toISOString()
+          }
+        }));
+        completed.push(fileId);
+      } catch (err) {
+        console.warn(`[UploadCoordinator] completeUploads failed for ${fileId}:`, err.name || err.message);
+        failed.push(fileId);
+      }
+    }
+
+    if (this.isMockMode && completed.length > 0 && this.mockStorage && typeof this.mockStorage.saveMockFiles === 'function') {
+      this.mockStorage.saveMockFiles(this.mockFilesRef());
+    }
+
+    return { completed, failed };
   }
 }
 

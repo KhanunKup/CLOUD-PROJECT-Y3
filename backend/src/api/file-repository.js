@@ -30,13 +30,15 @@ class FileRepository {
   // ==========================================
   // 1. Single Item Fetch & Access Control
   // ==========================================
-  async findById(fileId, user = null) {
+  // options.activeOnly hides pending (upload not confirmed) and trashed records
+  async findById(fileId, user = null, { activeOnly = false } = {}) {
     if (!fileId) return null;
 
     if (this.isMockMode) {
       const files = this.storage.loadMockFiles();
       const file = files.find(f => f.file_id === fileId);
       if (!file) return null;
+      if (activeOnly && file.status && file.status !== 'active') return null;
       if (user && !this.canAccess(file, user)) return null;
       return file;
     }
@@ -48,6 +50,7 @@ class FileRepository {
       }));
       const file = res.Item;
       if (!file) return null;
+      if (activeOnly && file.status && file.status !== 'active') return null;
       if (user && !this.canAccess(file, user)) return null;
       return file;
     } catch (err) {
@@ -373,24 +376,26 @@ class FileRepository {
           } catch (_) {}
         }
 
-        // 2. Query active files belonging to this user to calculate real storage
+        // 2. Query ALL files belonging to this user (รวมทั้ง active และ trash) เพื่อคำนวณ Storage จริง
         const filesRes = await this.docClient.send(new QueryCommand({
           TableName: this.filesTable,
           IndexName: 'OwnerIndex',
           KeyConditionExpression: 'owner_id = :owner',
-          FilterExpression: '#st = :status',
+          // pending uploads reserve space so parallel uploads cannot overshoot the quota
+          FilterExpression: '#st IN (:active, :pending)',
           ExpressionAttributeNames: { '#st': 'status' },
           ExpressionAttributeValues: {
             ':owner': userId,
-            ':status': 'active'
+            ':active': 'active',
+            ':pending': 'pending'
           }
         })).catch(() => ({ Items: [] }));
 
-        const activeFiles = filesRes.Items || [];
+        const allUserFiles = filesRes.Items || [];
         const breakdown = { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 };
         let totalUsed = 0;
 
-        for (const f of activeFiles) {
+        for (const f of allUserFiles) {
           if (f.category !== 'folder') {
             const sz = Number(f.size) || 0;
             totalUsed += sz;
@@ -434,9 +439,9 @@ class FileRepository {
       }
     }
 
-    // Mock Mode fallback
+    // Mock Mode fallback: ไม่ตัดไฟล์สถานะ trash ออกแล้ว
     const files = this.storage ? this.storage.loadMockFiles() : [];
-    const userFiles = files.filter(f => f.status !== 'trash' && (f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user')));
+    const userFiles = files.filter(f => f.owner_id === userId || (userId === 'user-normal-01' && f.owner_id === 'demo-user'));
     const breakdown = { document: 0, image: 0, code: 0, archive: 0, video: 0, audio: 0, other: 0 };
     let totalUsed = 0;
     for (const f of userFiles) {
@@ -755,24 +760,7 @@ class FileRepository {
         }
       }
 
-      // 3. Atomically decrement totalUsed and category breakdown on USERS_TABLE
-      if (totalSizeFreed > 0 && this.usersTable) {
-        for (const [cat, freed] of Object.entries(categoryFreed)) {
-          if (freed > 0) {
-            await this.docClient.send(new UpdateCommand({
-              TableName: this.usersTable,
-              Key: { user_id: userId },
-              UpdateExpression: 'SET totalUsed = if_not_exists(totalUsed, :zero) - :s, breakdown.#cat = if_not_exists(breakdown.#cat, :zero) - :s, updated_at = :up',
-              ExpressionAttributeNames: { '#cat': cat },
-              ExpressionAttributeValues: {
-                ':s': freed,
-                ':zero': 0,
-                ':up': new Date().toISOString()
-              }
-            })).catch(() => {});
-          }
-        }
-      }
+      // Quota is computed live from the files table (getUserStorage), so deleting the records frees the space
     } catch (err) {
       console.error('[FileRepository.emptyUserTrash Cloud Error]:', err);
     }
