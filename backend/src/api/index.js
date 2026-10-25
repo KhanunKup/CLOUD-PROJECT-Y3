@@ -22,11 +22,24 @@ const {
 } = require('@aws-sdk/lib-dynamodb');
 const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
 const storage = require('./storage');
-const { createZipArchive } = require('./zip-packager');
+const { createZipArchive, pipeZipArchive } = require('./zip-packager');
+const FileRepository = require('./file-repository');
 const authService = require('./auth-service');
 
 const app = express();
 app.use(cors());
+
+// Production Security Headers Guard
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
 
 // Raw binary/mock upload endpoint mounted BEFORE body-parsers so arbitrary file uploads
 // (including JSON with comments like tsconfig.json, raw binary, or large files) are not parsed as JSON
@@ -86,6 +99,14 @@ if (!IS_MOCK_MODE) {
   docClient = DynamoDBDocumentClient.from(ddbClient);
   snsClient = new SNSClient({ region: REGION });
 }
+
+// Unified Deep FileRepository
+const fileRepo = new FileRepository({
+  isMockMode: IS_MOCK_MODE,
+  storage,
+  docClient,
+  filesTable: FILES_TABLE
+});
 
 // ==========================================
 // 2. In-Memory Mock Store (For Local Development)
@@ -2057,8 +2078,6 @@ app.post('/api/files/batch-download-zip', authMiddleware, async (req, res) => {
       }
     }
 
-    const zipBuffer = createZipArchive(entries);
-
     recordAuditLog({
       user: req.user,
       action: 'BATCH_DOWNLOAD_ZIP',
@@ -2068,7 +2087,7 @@ app.post('/api/files/batch-download-zip', authMiddleware, async (req, res) => {
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="EasyDrive_Batch_Download.zip"');
-    return res.send(zipBuffer);
+    return pipeZipArchive(entries, res);
   }
 
   // DynamoDB / S3 mode
@@ -2449,57 +2468,15 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
 // 5.5.3 Toggle Pin File or Folder (Pin to Top)
 app.post('/api/files/:id/toggle-pin', authMiddleware, async (req, res) => {
   const fileId = req.params.id;
-
-  if (IS_MOCK_MODE) {
-    mockFiles = storage.loadMockFiles();
-    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
-    if (!file) return res.status(404).json({ error: 'File not found' });
-
-    file.is_pinned = !file.is_pinned;
-    file.pinned_at = file.is_pinned ? new Date().toISOString() : null;
-    file.updated_at = new Date().toISOString();
-    storage.saveMockFiles(mockFiles, true);
-
-    // Note: Pinning is treated strictly as personal UI view preference, so NO security audit log is created.
-    return res.json({
-      success: true,
-      file_id: file.file_id,
-      is_pinned: file.is_pinned,
-      pinned_at: file.pinned_at,
-      message: file.is_pinned ? 'Item pinned to top' : 'Item unpinned'
-    });
-  }
-
-  // DynamoDB Mode
   try {
-    const getRes = await docClient.send(new GetCommand({
-      TableName: FILES_TABLE,
-      Key: { file_id: fileId }
-    }));
-    const file = getRes.Item;
-    if (!file || (file.owner_id !== req.user.user_id && req.user.role !== 'admin')) {
-      return res.status(404).json({ error: 'File not found' });
-    }
-
-    const newPinned = !file.is_pinned;
-    const pinnedAt = newPinned ? new Date().toISOString() : null;
-    await docClient.send(new UpdateCommand({
-      TableName: FILES_TABLE,
-      Key: { file_id: fileId },
-      UpdateExpression: 'SET is_pinned = :p, pinned_at = :pa, updated_at = :u',
-      ExpressionAttributeValues: {
-        ':p': newPinned,
-        ':pa': pinnedAt,
-        ':u': new Date().toISOString()
-      }
-    }));
-
+    const result = await fileRepo.togglePin(fileId, req.user);
+    if (!result) return res.status(404).json({ error: 'File not found' });
     return res.json({
       success: true,
-      file_id: fileId,
-      is_pinned: newPinned,
-      pinned_at: pinnedAt,
-      message: newPinned ? 'Item pinned to top' : 'Item unpinned'
+      file_id: result.file_id,
+      is_pinned: result.is_pinned,
+      pinned_at: result.pinned_at,
+      message: result.is_pinned ? 'Item pinned to top' : 'Item unpinned'
     });
   } catch (err) {
     console.error('Toggle pin error:', err);
@@ -2698,86 +2675,22 @@ app.post('/api/files/batch-trash', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'file_ids array is required' });
   }
 
-  const targetIdSet = new Set(file_ids);
-  let affectedCount = 0;
-
-  if (IS_MOCK_MODE) {
-    mockFiles = storage.loadMockFiles();
-    const trashedAt = new Date().toISOString();
-    const allDescendantIds = new Set();
-
-    mockFiles.forEach(f => {
-      if (targetIdSet.has(f.file_id) && canUserAccessFile(f, req.user)) {
-        f.status = 'trash';
-        f.trashed_at = trashedAt;
-        affectedCount++;
-
-        if (f.category === 'folder') {
-          const descendantIds = getFolderDescendantIds(f.file_id);
-          descendantIds.forEach(id => allDescendantIds.add(id));
-        }
-      }
-    });
-
-    if (allDescendantIds.size > 0) {
-      mockFiles.forEach(f => {
-        if (allDescendantIds.has(f.file_id)) {
-          f.status = 'trash';
-          f.trashed_at = trashedAt;
-        }
-      });
-    }
-
-    storage.saveMockFiles(mockFiles, true);
-
-    recordAuditLog({
-      user: req.user,
-      action: 'BATCH_MOVE_TRASH',
-      level: 'warning',
-      details: `Moved ${affectedCount} item(s) to trash${allDescendantIds.size > 0 ? ` and ${allDescendantIds.size} nested item(s)` : ''}`
-    });
-
-    return res.json({
-      success: true,
-      message: `Moved ${affectedCount} item(s) to trash`,
-      count: affectedCount
-    });
-  }
-
-  // DynamoDB Mode
   try {
-    const trashedAt = new Date().toISOString();
-    for (const fileId of file_ids) {
-      await docClient.send(new UpdateCommand({
-        TableName: FILES_TABLE,
-        Key: { file_id: fileId },
-        ConditionExpression: 'owner_id = :owner',
-        UpdateExpression: 'SET #st = :trash, trashed_at = :t',
-        ExpressionAttributeNames: { '#st': 'status' },
-        ExpressionAttributeValues: {
-          ':trash': 'trash',
-          ':t': trashedAt,
-          ':owner': req.user.user_id
-        }
-      })).catch(e => console.warn(`Skipping batch trash for file ${fileId}:`, e.message));
-      affectedCount++;
-    }
-
+    const { affectedCount, descendantCount } = await fileRepo.batchTrash(file_ids, req.user);
     recordAuditLog({
       user: req.user,
       action: 'BATCH_MOVE_TRASH',
       level: 'warning',
-      details: `Moved ${affectedCount} item(s) to trash`
+      details: `Moved ${affectedCount} item(s) to trash${descendantCount > 0 ? ` and ${descendantCount} nested item(s)` : ''}`
     });
-
-    res.json({
+    return res.json({
       success: true,
       message: `Moved ${affectedCount} item(s) to trash`,
       count: affectedCount
     });
   } catch (err) {
     console.error('Batch trash error:', err);
-    res.status(500).json({ error: 'Failed to process batch trash' });
+    return res.status(500).json({ error: 'Failed to move batch items to trash' });
   }
 });
 
@@ -2788,83 +2701,22 @@ app.post('/api/files/batch-restore', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'file_ids array is required' });
   }
 
-  const targetIdSet = new Set(file_ids);
-  let affectedCount = 0;
-
-  if (IS_MOCK_MODE) {
-    mockFiles = storage.loadMockFiles();
-    const allDescendantIds = new Set();
-
-    mockFiles.forEach(f => {
-      if (targetIdSet.has(f.file_id) && canUserAccessFile(f, req.user)) {
-        f.status = 'active';
-        delete f.trashed_at;
-        affectedCount++;
-
-        if (f.category === 'folder') {
-          const descendantIds = getFolderDescendantIds(f.file_id);
-          descendantIds.forEach(id => allDescendantIds.add(id));
-        }
-      }
-    });
-
-    if (allDescendantIds.size > 0) {
-      mockFiles.forEach(f => {
-        if (allDescendantIds.has(f.file_id)) {
-          f.status = 'active';
-          delete f.trashed_at;
-        }
-      });
-    }
-
-    storage.saveMockFiles(mockFiles, true);
-
-    recordAuditLog({
-      user: req.user,
-      action: 'BATCH_RESTORE',
-      level: 'info',
-      details: `Restored ${affectedCount} item(s) from trash${allDescendantIds.size > 0 ? ` and ${allDescendantIds.size} nested item(s)` : ''}`
-    });
-
-    return res.json({
-      success: true,
-      message: `Restored ${affectedCount} item(s) successfully`,
-      count: affectedCount
-    });
-  }
-
-  // DynamoDB Mode
   try {
-    for (const fileId of file_ids) {
-      await docClient.send(new UpdateCommand({
-        TableName: FILES_TABLE,
-        Key: { file_id: fileId },
-        ConditionExpression: 'owner_id = :owner',
-        UpdateExpression: 'SET #st = :active REMOVE trashed_at',
-        ExpressionAttributeNames: { '#st': 'status' },
-        ExpressionAttributeValues: {
-          ':active': 'active',
-          ':owner': req.user.user_id
-        }
-      })).catch(e => console.warn(`Skipping batch restore for ${fileId}:`, e.message));
-      affectedCount++;
-    }
-
+    const { affectedCount } = await fileRepo.batchRestore(file_ids, req.user);
     recordAuditLog({
       user: req.user,
       action: 'BATCH_RESTORE',
       level: 'info',
-      details: `Restored ${affectedCount} file(s) from trash`
+      details: `Restored ${affectedCount} item(s) from trash`
     });
-
-    res.json({
+    return res.json({
       success: true,
       message: `Restored ${affectedCount} item(s) successfully`,
       count: affectedCount
     });
   } catch (err) {
     console.error('Batch restore error:', err);
-    res.status(500).json({ error: 'Failed to restore batch files' });
+    return res.status(500).json({ error: 'Failed to restore batch files' });
   }
 });
 
