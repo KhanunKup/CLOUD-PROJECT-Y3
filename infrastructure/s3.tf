@@ -1,11 +1,16 @@
-# Reference existing S3 Bucket (avoids SCP s3:GetBucketObjectLockConfiguration restriction in AWS Academy)
-data "aws_s3_bucket" "easydrive-storage" {
+# S3 Bucket for User File Storage (Private & Secure)
+resource "aws_s3_bucket" "easydrive-storage" {
   bucket = "${var.bucket_prefix}-storage"
+
+  tags = {
+    Name        = "easydrive-file-storage"
+    Environment = "Dev"
+  }
 }
 
 # Block all public access for storage bucket (Private Zone)
 resource "aws_s3_bucket_public_access_block" "easydrive-storage-privacy" {
-  bucket = data.aws_s3_bucket.easydrive-storage.id
+  bucket = aws_s3_bucket.easydrive-storage.id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -13,9 +18,9 @@ resource "aws_s3_bucket_public_access_block" "easydrive-storage-privacy" {
   restrict_public_buckets = true
 }
 
-# Enable versioning for point-in-time recovery
+# Enable versioning for point-in-time recovery (Suspended for cost-savings)
 resource "aws_s3_bucket_versioning" "easydrive-storage-versioning" {
-  bucket = data.aws_s3_bucket.easydrive-storage.id
+  bucket = aws_s3_bucket.easydrive-storage.id
 
   versioning_configuration {
     status = "Suspended"
@@ -24,7 +29,7 @@ resource "aws_s3_bucket_versioning" "easydrive-storage-versioning" {
 
 # CORS Configuration for direct browser upload via Presigned URLs
 resource "aws_s3_bucket_cors_configuration" "easydrive-storage-cors" {
-  bucket = data.aws_s3_bucket.easydrive-storage.id
+  bucket = aws_s3_bucket.easydrive-storage.id
 
   cors_rule {
     allowed_headers = ["*"]
@@ -35,9 +40,9 @@ resource "aws_s3_bucket_cors_configuration" "easydrive-storage-cors" {
   }
 }
 
-# S3 Lifecycle Rule: Expire noncurrent versions after 30 days & clean incomplete uploads
+# S3 Lifecycle Rule: Expire noncurrent versions after 1 day & clean incomplete uploads
 resource "aws_s3_bucket_lifecycle_configuration" "easydrive-storage-lifecycle" {
-  bucket = data.aws_s3_bucket.easydrive-storage.id
+  bucket = aws_s3_bucket.easydrive-storage.id
 
   rule {
     id     = "expire-noncurrent-versions-and-abort-uploads"
@@ -57,7 +62,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "easydrive-storage-lifecycle" {
 
 # S3 Event Notification to trigger Worker Lambda on file upload
 resource "aws_s3_bucket_notification" "easydrive-storage-notification" {
-  bucket = data.aws_s3_bucket.easydrive-storage.id
+  bucket = aws_s3_bucket.easydrive-storage.id
 
   lambda_function {
     lambda_function_arn = aws_lambda_function.easydrive-worker.arn

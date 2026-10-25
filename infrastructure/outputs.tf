@@ -6,7 +6,7 @@ output "region" {
 # S3 Output
 output "easydrive-storage-bucket" {
   description = "S3 bucket name for private user file storage"
-  value       = data.aws_s3_bucket.easydrive-storage.id
+  value       = aws_s3_bucket.easydrive-storage.id
 }
 
 # API Gateway Output
