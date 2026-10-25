@@ -61,7 +61,7 @@ resource "aws_s3_bucket_notification" "easydrive-storage-notification" {
 
   lambda_function {
     lambda_function_arn = aws_lambda_function.easydrive-worker.arn
-    events              = ["s3:ObjectCreated:*"]
+    events              = ["s3:ObjectCreated:Put", "s3:ObjectCreated:CompleteMultipartUpload"]
     filter_prefix       = "uploads/"
   }
 

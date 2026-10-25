@@ -49,8 +49,9 @@ resource "aws_lambda_function" "easydrive-worker" {
   handler          = "index.handler"
   runtime          = "nodejs22.x"
   source_code_hash = data.archive_file.worker_zip.output_base64sha256
-  timeout          = 15
-  memory_size      = 128
+  timeout                        = 15
+  memory_size                    = 128
+  reserved_concurrent_executions = 5
 
   environment {
     variables = {
