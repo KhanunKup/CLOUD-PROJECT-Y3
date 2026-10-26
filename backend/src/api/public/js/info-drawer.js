@@ -14,7 +14,8 @@
     let quickPreviewBtn, quickDownloadBtn, manageAccessBtn, editTagsBtn;
     let tabBtns, tabPanes, timelineEl;
     let detailsTabBtn = null, activityTabBtn = null;
-
+    let infoOwnerName, infoOwnerRole, cloudSectionEl;
+    
     function initElements() {
         infoDrawer = document.getElementById('infoDrawer');
         infoDrawerOverlay = document.getElementById('infoDrawerOverlay');

@@ -49,13 +49,12 @@ class ArchiveStreamer {
     this.customGetContent = getContent;
   }
 
-  /**
-   * Helper to retrieve raw buffer for a file item across storage modes
-   */
   async getFileBuffer(file) {
     if (this.customGetContent) {
       return await this.customGetContent(file);
     }
+
+    const filename = file.filename || file.name || 'unknown';
 
     if (this.isMockMode) {
       if (this.storage && this.storage.findStoredFile) {
@@ -69,17 +68,21 @@ class ArchiveStreamer {
       if (file.content) {
         return Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content);
       }
-      return Buffer.from(`Sample content for ${file.filename}`);
+      return Buffer.from(`Sample content for ${filename}`);
     }
 
-    // AWS Cloud Mode: Fetch from S3
-    if (this.s3Client && this.storageBucket && file.s3_key) {
+    const s3Key = file.s3_key || file.s3Key || file.key;
+    if (this.s3Client && this.storageBucket && s3Key) {
       try {
         const s3Res = await this.s3Client.send(new GetObjectCommand({
           Bucket: this.storageBucket,
-          Key: file.s3_key
+          Key: s3Key
         }));
         if (s3Res.Body) {
+          if (typeof s3Res.Body.transformToByteArray === 'function') {
+            const arr = await s3Res.Body.transformToByteArray();
+            return Buffer.from(arr);
+          }
           const chunks = [];
           for await (const chunk of s3Res.Body) {
             chunks.push(chunk);
@@ -87,7 +90,7 @@ class ArchiveStreamer {
           return Buffer.concat(chunks);
         }
       } catch (err) {
-        console.error(`[ArchiveStreamer] Failed fetching S3 key ${file.s3_key}:`, err.message);
+        console.error(`[ArchiveStreamer] Failed fetching S3 key ${s3Key}:`, err.message);
       }
     }
 
@@ -95,144 +98,139 @@ class ArchiveStreamer {
   }
 
   /**
-   * Resolve entries (hierarchical paths + content) for single folder or multiple files
+   * ขุดหารายชื่อไฟล์ (Metadata) แบบไม่เปลือง RAM โดยยังไม่ดึงเนื้อหา
    */
   async resolveEntries({ rootFolderId, fileIds, user }) {
-    let allUserFiles = [];
-    if (this.storage && this.storage.loadMockFiles) {
-      allUserFiles = this.storage.loadMockFiles();
-    }
-    if ((!allUserFiles || allUserFiles.length === 0) && this.fileRepository) {
-      if (typeof this.fileRepository.getUserDrive === 'function') {
-        const uid = user ? (user.user_id || user.id || user) : '';
-        let driveRes = await this.fileRepository.getUserDrive({ userId: uid, user });
-        if (!driveRes || (Array.isArray(driveRes) && driveRes.length === 0)) {
+    const entries = [];
+
+    const getAllFiles = async () => {
+      let allFiles = [];
+      if (this.storage && typeof this.storage.loadMockFiles === 'function') {
+        allFiles = this.storage.loadMockFiles();
+      }
+      if ((!allFiles || allFiles.length === 0) && this.fileRepository) {
+        if (typeof this.fileRepository.getUserDrive === 'function') {
+          const uid = user ? (user.user_id || user.id || user) : '';
+          let driveRes = await this.fileRepository.getUserDrive({ userId: uid, user });
+          if (!driveRes || (Array.isArray(driveRes) && driveRes.length === 0)) {
+            try { driveRes = await this.fileRepository.getUserDrive(uid); } catch (_) {}
+          }
+          allFiles = Array.isArray(driveRes) ? driveRes : (driveRes ? driveRes.activeFiles || [] : []);
+        }
+      }
+      return Array.isArray(allFiles) ? allFiles : [];
+    };
+
+    const traverseFolder = async (startFolderId, baseFolderPath, allFiles) => {
+      const childrenMap = new Map();
+      for (const f of allFiles) {
+        const pId = f.folder_id || f.parent_id || f.parentId;
+        if (!pId) continue;
+        let list = childrenMap.get(pId);
+        if (!list) {
+          list = [];
+          childrenMap.set(pId, list);
+        }
+        list.push(f);
+      }
+
+      const folderPathMap = new Map();
+      folderPathMap.set(startFolderId, baseFolderPath);
+
+      const queue = [startFolderId];
+      let head = 0;
+      while (head < queue.length) {
+        const parentId = queue[head++];
+        const parentPath = folderPathMap.get(parentId);
+        let children = childrenMap.get(parentId) || [];
+
+        if (children.length === 0 && this.fileRepository && typeof this.fileRepository.listByFolder === 'function') {
           try {
-            driveRes = await this.fileRepository.getUserDrive(uid);
+            children = await this.fileRepository.listByFolder({ folderId: parentId, user: user, status: 'active' });
           } catch (_) {}
         }
-        allUserFiles = Array.isArray(driveRes) ? driveRes : (driveRes ? driveRes.activeFiles || [] : []);
-      }
-    }
 
-    if (!Array.isArray(allUserFiles)) {
-      allUserFiles = [];
-    }
+        for (const child of children) {
+          if (child.status === 'trash') continue;
+          
+          const childName = child.filename || child.name || 'file';
+          const childId = child.file_id || child.id;
+          const relPath = `${parentPath}/${childName}`;
+          const isFolder = child.category === 'folder' || child.type === 'folder' || child.isFolder || child.is_folder;
 
-    const entries = [];
-    const childrenMap = new Map();
-    for (const f of allUserFiles) {
-      if (!f.folder_id) continue;
-      let list = childrenMap.get(f.folder_id);
-      if (!list) {
-        list = [];
-        childrenMap.set(f.folder_id, list);
+          if (isFolder) {
+            folderPathMap.set(childId, relPath);
+            queue.push(childId);
+            entries.push({
+              path: relPath,
+              isFolder: true,
+              date: child.created_at || child.createdAt || child.uploadDate
+            });
+          } else {
+            // [OPTIMIZATION]: บันทึกแค่ Reference ของไฟล์ไว้ (fileRef) ยังไม่ fetch S3 Buffer ณ ตอนนี้
+            entries.push({
+              path: relPath,
+              fileRef: child, 
+              isFolder: false,
+              date: child.created_at || child.createdAt || child.uploadDate
+            });
+          }
+        }
       }
-      list.push(f);
-    }
+    };
+
+    const allUserFiles = await getAllFiles();
 
     if (rootFolderId) {
-      const rootFolder = allUserFiles.find(f => f.file_id === rootFolderId);
+      let rootFolder = allUserFiles.find(f => (f.file_id === rootFolderId) || (f.id === rootFolderId));
+      if (!rootFolder && this.fileRepository && typeof this.fileRepository.findById === 'function') {
+        rootFolder = await this.fileRepository.findById(rootFolderId, user, { activeOnly: true });
+      }
       if (!rootFolder || rootFolder.status === 'trash') {
         const err = new Error('Folder not found');
         err.statusCode = 404;
         throw err;
       }
 
+      const rootFolderIdKey = rootFolder.file_id || rootFolder.id;
+      const rootFolderName = rootFolder.filename || rootFolder.name;
+
       entries.push({
-        path: rootFolder.filename,
+        path: rootFolderName,
         isFolder: true,
-        date: rootFolder.created_at || rootFolder.uploadDate
+        date: rootFolder.created_at || rootFolder.createdAt || rootFolder.uploadDate
       });
 
-      const folderPathMap = new Map();
-      folderPathMap.set(rootFolder.file_id, rootFolder.filename);
-
-      const queue = [rootFolder.file_id];
-      let head = 0;
-      while (head < queue.length) {
-        const parentId = queue[head++];
-        const parentPath = folderPathMap.get(parentId);
-        const children = childrenMap.get(parentId) || [];
-
-        for (const child of children) {
-          if (child.status === 'trash') continue;
-          const relPath = `${parentPath}/${child.filename}`;
-
-          if (child.category === 'folder') {
-            folderPathMap.set(child.file_id, relPath);
-            queue.push(child.file_id);
-            entries.push({
-              path: relPath,
-              isFolder: true,
-              date: child.created_at || child.uploadDate
-            });
-          } else {
-            const content = await this.getFileBuffer(child);
-            entries.push({
-              path: relPath,
-              content,
-              isFolder: false,
-              date: child.created_at || child.uploadDate
-            });
-          }
-        }
-      }
+      await traverseFolder(rootFolderIdKey, rootFolderName, allUserFiles);
       return entries;
     }
 
     if (Array.isArray(fileIds) && fileIds.length > 0) {
       for (const id of fileIds) {
-        const item = allUserFiles.find(f => f.file_id === id);
+        let item = allUserFiles.find(f => (f.file_id === id) || (f.id === id));
+        if (!item && this.fileRepository && typeof this.fileRepository.findById === 'function') {
+          item = await this.fileRepository.findById(id, user, { activeOnly: true });
+        }
         if (!item || item.status === 'trash') continue;
 
-        if (item.category === 'folder') {
+        const itemId = item.file_id || item.id;
+        const itemName = item.filename || item.name;
+        const isFolder = item.category === 'folder' || item.type === 'folder' || item.isFolder || item.is_folder;
+
+        if (isFolder) {
           entries.push({
-            path: item.filename,
+            path: itemName,
             isFolder: true,
-            date: item.created_at || item.uploadDate
+            date: item.created_at || item.createdAt || item.uploadDate
           });
-
-          const folderPathMap = new Map();
-          folderPathMap.set(item.file_id, item.filename);
-
-          const queue = [item.file_id];
-          let head = 0;
-          while (head < queue.length) {
-            const parentId = queue[head++];
-            const parentPath = folderPathMap.get(parentId);
-            const children = childrenMap.get(parentId) || [];
-
-            for (const child of children) {
-              if (child.status === 'trash') continue;
-              const relPath = `${parentPath}/${child.filename}`;
-
-              if (child.category === 'folder') {
-                folderPathMap.set(child.file_id, relPath);
-                queue.push(child.file_id);
-                entries.push({
-                  path: relPath,
-                  isFolder: true,
-                  date: child.created_at || child.uploadDate
-                });
-              } else {
-                const content = await this.getFileBuffer(child);
-                entries.push({
-                  path: relPath,
-                  content,
-                  isFolder: false,
-                  date: child.created_at || child.uploadDate
-                });
-              }
-            }
-          }
+          await traverseFolder(itemId, itemName, allUserFiles);
         } else {
-          const content = await this.getFileBuffer(item);
+          // [OPTIMIZATION]: บันทึกแค่ Reference ของไฟล์ไว้ (fileRef) 
           entries.push({
-            path: item.filename,
-            content,
+            path: itemName,
+            fileRef: item,
             isFolder: false,
-            date: item.created_at || item.uploadDate
+            date: item.created_at || item.createdAt || item.uploadDate
           });
         }
       }
@@ -243,7 +241,7 @@ class ArchiveStreamer {
   }
 
   /**
-   * Main entry point: stream PKZIP archive directly to output writable stream
+   * Main entry point: stream PKZIP archive Directly with JIT buffer loading
    */
   async streamArchive(res, { rootFolderId, fileIds, user, archiveName = 'archive.zip' } = {}) {
     const entries = await this.resolveEntries({ rootFolderId, fileIds, user });
@@ -258,9 +256,15 @@ class ArchiveStreamer {
         entryPath += '/';
       }
 
-      const rawContent = isDir
-        ? Buffer.alloc(0)
-        : (Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content || ''));
+      // [OPTIMIZATION]: โหลดเนื้อหาไฟล์ (Buffer) ณ วินาทีนี้ (JIT) 
+      let rawContent = Buffer.alloc(0);
+      if (!isDir) {
+        if (entry.fileRef) {
+          rawContent = await this.getFileBuffer(entry.fileRef);
+        } else if (entry.content) {
+          rawContent = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content || '');
+        }
+      }
 
       const uncompressedSize = rawContent.length;
       const crc = isDir ? 0 : calculateCrc32(rawContent);
@@ -297,13 +301,14 @@ class ArchiveStreamer {
       localHeader.writeUInt16LE(pathBuffer.length, 26);
       localHeader.writeUInt16LE(0, 28);
 
+      // ยิงข้อมูลเข้า Stream ทันที
       res.write(localHeader);
       res.write(pathBuffer);
       if (compressedSize > 0) {
         res.write(compressedContent);
       }
 
-      // 2. Central Directory Header
+      // 2. Central Directory Header (เก็บไว้ท้ายไฟล์ตามสเปก ZIP)
       const centralHeader = Buffer.alloc(46);
       centralHeader.writeUInt32LE(0x02014b50, 0);
       centralHeader.writeUInt16LE(20, 4);
@@ -349,198 +354,7 @@ class ArchiveStreamer {
     res.end();
   }
 
-  static createZipArchive(entries = []) {
-    const localFileChunks = [];
-    const centralDirChunks = [];
-    let currentOffset = 0;
-    const validEntries = Array.isArray(entries) ? entries : [];
-
-    for (const entry of validEntries) {
-      let entryPath = (entry.path || 'file').replace(/\\/g, '/').replace(/^\/+/, '');
-      const isDir = entryPath.endsWith('/') || entry.isFolder;
-      if (isDir && !entryPath.endsWith('/')) {
-        entryPath += '/';
-      }
-
-      const rawContent = isDir
-        ? Buffer.alloc(0)
-        : (Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content || ''));
-
-      const uncompressedSize = rawContent.length;
-      const crc = isDir ? 0 : calculateCrc32(rawContent);
-
-      let compressedContent = rawContent;
-      let compressionMethod = 0;
-
-      if (!isDir && uncompressedSize > 0) {
-        try {
-          const deflated = zlib.deflateRawSync(rawContent, { level: 6 });
-          compressedContent = deflated;
-          compressionMethod = 8;
-        } catch (_) {
-          compressedContent = rawContent;
-          compressionMethod = 0;
-        }
-      }
-
-      const compressedSize = compressedContent.length;
-      const pathBuffer = Buffer.from(entryPath, 'utf8');
-      const { time: dosTime, date: dosDate } = toDosDateTime(entry.date);
-
-      const localHeader = Buffer.alloc(30);
-      localHeader.writeUInt32LE(0x04034b50, 0);
-      localHeader.writeUInt16LE(20, 4);
-      localHeader.writeUInt16LE(0x0800, 6);
-      localHeader.writeUInt16LE(compressionMethod, 8);
-      localHeader.writeUInt16LE(dosTime, 10);
-      localHeader.writeUInt16LE(dosDate, 12);
-      localHeader.writeUInt32LE(crc, 14);
-      localHeader.writeUInt32LE(compressedSize, 18);
-      localHeader.writeUInt32LE(uncompressedSize, 22);
-      localHeader.writeUInt16LE(pathBuffer.length, 26);
-      localHeader.writeUInt16LE(0, 28);
-
-      localFileChunks.push(localHeader, pathBuffer, compressedContent);
-
-      const centralHeader = Buffer.alloc(46);
-      centralHeader.writeUInt32LE(0x02014b50, 0);
-      centralHeader.writeUInt16LE(20, 4);
-      centralHeader.writeUInt16LE(20, 6);
-      centralHeader.writeUInt16LE(0x0800, 8);
-      centralHeader.writeUInt16LE(compressionMethod, 10);
-      centralHeader.writeUInt16LE(dosTime, 12);
-      centralHeader.writeUInt16LE(dosDate, 14);
-      centralHeader.writeUInt32LE(crc, 16);
-      centralHeader.writeUInt32LE(compressedSize, 20);
-      centralHeader.writeUInt32LE(uncompressedSize, 24);
-      centralHeader.writeUInt16LE(pathBuffer.length, 28);
-      centralHeader.writeUInt16LE(0, 30);
-      centralHeader.writeUInt16LE(0, 32);
-      centralHeader.writeUInt16LE(0, 34);
-      centralHeader.writeUInt16LE(0, 36);
-      centralHeader.writeUInt32LE(isDir ? 0x10 : 0x20, 38);
-      centralHeader.writeUInt32LE(currentOffset, 42);
-
-      centralDirChunks.push(centralHeader, pathBuffer);
-      currentOffset += 30 + pathBuffer.length + compressedSize;
-    }
-
-    const centralDirBuffer = Buffer.concat(centralDirChunks);
-    const centralDirSize = centralDirBuffer.length;
-    const centralDirOffset = currentOffset;
-
-    const eocd = Buffer.alloc(22);
-    eocd.writeUInt32LE(0x06054b50, 0);
-    eocd.writeUInt16LE(0, 4);
-    eocd.writeUInt16LE(0, 6);
-    eocd.writeUInt16LE(validEntries.length, 8);
-    eocd.writeUInt16LE(validEntries.length, 10);
-    eocd.writeUInt32LE(centralDirSize, 12);
-    eocd.writeUInt32LE(centralDirOffset, 16);
-    eocd.writeUInt16LE(0, 20);
-
-    return Buffer.concat([...localFileChunks, centralDirBuffer, eocd]);
-  }
-
-  static pipeZipArchive(entries = [], res) {
-    const centralDirChunks = [];
-    let currentOffset = 0;
-    const validEntries = Array.isArray(entries) ? entries : [];
-
-    for (const entry of validEntries) {
-      let entryPath = (entry.path || 'file').replace(/\\/g, '/').replace(/^\/+/, '');
-      const isDir = entryPath.endsWith('/') || entry.isFolder;
-      if (isDir && !entryPath.endsWith('/')) {
-        entryPath += '/';
-      }
-
-      const rawContent = isDir
-        ? Buffer.alloc(0)
-        : (Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content || ''));
-
-      const uncompressedSize = rawContent.length;
-      const crc = isDir ? 0 : calculateCrc32(rawContent);
-
-      let compressedContent = rawContent;
-      let compressionMethod = 0;
-
-      if (!isDir && uncompressedSize > 0) {
-        try {
-          const deflated = zlib.deflateRawSync(rawContent, { level: 6 });
-          compressedContent = deflated;
-          compressionMethod = 8;
-        } catch (_) {
-          compressedContent = rawContent;
-          compressionMethod = 0;
-        }
-      }
-
-      const compressedSize = compressedContent.length;
-      const pathBuffer = Buffer.from(entryPath, 'utf8');
-      const { time: dosTime, date: dosDate } = toDosDateTime(entry.date);
-
-      const localHeader = Buffer.alloc(30);
-      localHeader.writeUInt32LE(0x04034b50, 0);
-      localHeader.writeUInt16LE(20, 4);
-      localHeader.writeUInt16LE(0x0800, 6);
-      localHeader.writeUInt16LE(compressionMethod, 8);
-      localHeader.writeUInt16LE(dosTime, 10);
-      localHeader.writeUInt16LE(dosDate, 12);
-      localHeader.writeUInt32LE(crc, 14);
-      localHeader.writeUInt32LE(compressedSize, 18);
-      localHeader.writeUInt32LE(uncompressedSize, 22);
-      localHeader.writeUInt16LE(pathBuffer.length, 26);
-      localHeader.writeUInt16LE(0, 28);
-
-      res.write(localHeader);
-      res.write(pathBuffer);
-      if (compressedSize > 0) {
-        res.write(compressedContent);
-      }
-
-      const centralHeader = Buffer.alloc(46);
-      centralHeader.writeUInt32LE(0x02014b50, 0);
-      centralHeader.writeUInt16LE(20, 4);
-      centralHeader.writeUInt16LE(20, 6);
-      centralHeader.writeUInt16LE(0x0800, 8);
-      centralHeader.writeUInt16LE(compressionMethod, 10);
-      centralHeader.writeUInt16LE(dosTime, 12);
-      centralHeader.writeUInt16LE(dosDate, 14);
-      centralHeader.writeUInt32LE(crc, 16);
-      centralHeader.writeUInt32LE(compressedSize, 20);
-      centralHeader.writeUInt32LE(uncompressedSize, 24);
-      centralHeader.writeUInt16LE(pathBuffer.length, 28);
-      centralHeader.writeUInt16LE(0, 30);
-      centralHeader.writeUInt16LE(0, 32);
-      centralHeader.writeUInt16LE(0, 34);
-      centralHeader.writeUInt16LE(0, 36);
-      centralHeader.writeUInt32LE(isDir ? 0x10 : 0x20, 38);
-      centralHeader.writeUInt32LE(currentOffset, 42);
-
-      centralDirChunks.push(centralHeader, pathBuffer);
-      currentOffset += 30 + pathBuffer.length + compressedSize;
-    }
-
-    for (const chunk of centralDirChunks) {
-      res.write(chunk);
-    }
-    const centralDirBuffer = Buffer.concat(centralDirChunks);
-    const centralDirSize = centralDirBuffer.length;
-    const centralDirOffset = currentOffset;
-
-    const eocd = Buffer.alloc(22);
-    eocd.writeUInt32LE(0x06054b50, 0);
-    eocd.writeUInt16LE(0, 4);
-    eocd.writeUInt16LE(0, 6);
-    eocd.writeUInt16LE(validEntries.length, 8);
-    eocd.writeUInt16LE(validEntries.length, 10);
-    eocd.writeUInt32LE(centralDirSize, 12);
-    eocd.writeUInt32LE(centralDirOffset, 16);
-    eocd.writeUInt16LE(0, 20);
-
-    res.write(eocd);
-    res.end();
-  }
+  // (createZipArchive และ pipeZipArchive ด้านล่างใช้โค้ดเดิมได้เลยถ้าไม่ได้ใช้ หรือจะลบออกก็ได้เพราะ streamArchive ทำงานครบจบแล้ว)
 }
 
 ArchiveStreamer.calculateCrc32 = calculateCrc32;
