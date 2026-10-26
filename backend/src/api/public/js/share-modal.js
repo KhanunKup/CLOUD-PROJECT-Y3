@@ -530,6 +530,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.showToast(`Added ${rawEmails.length} collaborator(s) (${permission})`, 'success');
             }
 
+            // บันทึกสิทธิ์ลงฐานข้อมูลอัตโนมัติทันทีเมื่อกด Invite
+            const fileId = window.activeShareFileBtn ? (window.activeShareFileBtn.dataset.id || window.activeShareFileBtn.dataset.folderId) : null;
+            if (fileId) {
+                const specificCollaborators = window.currentAccessList.filter(acc => {
+                    const n = (acc.name || acc.email || '').toLowerCase();
+                    return n !== 'anyone' && n !== 'everyone';
+                });
+
+                fetch(`/api/files/${fileId}/access`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ accessList: specificCollaborators })
+                }).then(res => res.json()).then(data => {
+                    if (!data.success) throw new Error(data.error);
+                }).catch(err => {
+                    console.error('Auto-save collaborator error:', err);
+                });
+            }
+
             inviteBtn.textContent = 'Invited!';
             if (inviteInput) inviteInput.value = '';
             if (invitePermission) invitePermission.style.display = 'none';

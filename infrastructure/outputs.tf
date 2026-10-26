@@ -13,7 +13,7 @@ output "storage_bucket" {
   value       = module.storage.bucket_name
 }
 
-output "sns_topic_arn" {
-  description = "SNS topic for download and cost alerts"
-  value       = module.notifications.topic_arn
-}
+#output "sns_topic_arn" {
+#  description = "SNS topic for download and cost alerts"
+#  value       = module.notifications.topic_arn
+#}
