@@ -39,7 +39,9 @@ function isDevDirectoryName(name) {
         'venv',
         '.cache',
         '.idea',
-        '.vscode'
+        '.vscode',
+        'coverage',
+        '.terraform'
     ]);
     return devFolderNames.has(name.trim().toLowerCase());
 }
@@ -345,7 +347,7 @@ async function uploadFolderRecursive({
     folderItem,
     parentFolderId = null,
     apiFetch = (typeof fetch !== 'undefined' ? fetch : null),
-    concurrency = 6,
+    concurrency = 2,
     onProgress = () => {},
     onDirProgress = null
 }) {
@@ -491,6 +493,7 @@ async function uploadFolderRecursive({
                     }
                 }
                 completedCount++;
+                await new Promise(r => setTimeout(r, 50));
                 onProgress({
                     completed: completedCount,
                     total: totalFiles,
@@ -621,7 +624,7 @@ async function preResolveDirectories({
     rootFolderId,
     dirPaths = [],
     apiFetch = (typeof fetch !== 'undefined' ? fetch : null),
-    concurrency = 6,
+    concurrency = 2,
     onProgress = null
 }) {
     if (!apiFetch) throw new Error('fetch implementation is required');
@@ -678,6 +681,7 @@ async function preResolveDirectories({
                 }
                 folderPathMap.set(dirPath, data.file.file_id);
                 completedCount++;
+                await new Promise(r => setTimeout(r, 60));
 
                 if (typeof onProgress === 'function') {
                     onProgress({

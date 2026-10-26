@@ -3,7 +3,6 @@
 
 PREFIX="${PREFIX:-easydrive-itkmitl-dev}"
 REGION="${REGION:-us-east-1}"
-STATE_BUCKET="${PREFIX}-tfstate"
 STORAGE_BUCKET="${PREFIX}-storage"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
