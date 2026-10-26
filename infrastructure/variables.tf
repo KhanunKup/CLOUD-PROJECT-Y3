@@ -25,13 +25,13 @@ variable "alert_email" {
 variable "api_throttle_burst" {
   description = "HTTP API stage burst limit (requests)."
   type        = number
-  default     = 20
+  default     = 5
 }
 
 variable "api_throttle_rate" {
   description = "HTTP API stage steady-state limit (requests per second)."
   type        = number
-  default     = 10
+  default     = 3
 }
 
 variable "invocation_alarm_threshold" {

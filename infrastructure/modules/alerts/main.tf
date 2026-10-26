@@ -1,5 +1,6 @@
 variable "topic_arn" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "lambda_function_name" {
@@ -14,7 +15,7 @@ variable "invocation_threshold" {
   type = number
 }
 
-# Tripwires only: they notify, they never shut anything down
+# Tripwires only: monitors metrics on CloudWatch Dashboard
 resource "aws_cloudwatch_metric_alarm" "lambda_invocations" {
   alarm_name          = "easydrive-api-invocations-spike"
   namespace           = "AWS/Lambda"
@@ -26,7 +27,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_invocations" {
   threshold           = var.invocation_threshold
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [var.topic_arn]
+  # alarm_actions     = [var.topic_arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
@@ -40,7 +41,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   threshold           = 20
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [var.topic_arn]
+  # alarm_actions     = [var.topic_arn]
 }
 
 resource "aws_cloudwatch_metric_alarm" "api_requests" {
@@ -54,7 +55,7 @@ resource "aws_cloudwatch_metric_alarm" "api_requests" {
   threshold           = var.invocation_threshold * 5
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [var.topic_arn]
+  # alarm_actions     = [var.topic_arn]
 }
 
 output "alarm_names" {

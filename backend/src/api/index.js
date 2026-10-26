@@ -1174,8 +1174,7 @@ function getSharedWithMeForUser(user) {
 
   return [
     ...defaultSharedWithMe.filter(d => !Array.isArray(d.dismissed_by) || (!d.dismissed_by.includes(user.user_id) && !d.dismissed_by.includes(userEmail))),
-    ...invitedFiles,
-    ...publicSharedWithMe
+    ...invitedFiles
   ];
 }
 
@@ -1285,6 +1284,15 @@ app.get('/shared', requireAuthWeb, async (req, res) => {
     sharedWithMe = [...sharedWithMe, ...demoItems];
   }
 
+  // กำจัดไฟล์ซ้ำ (Deduplicate) โดยอิงตาม id หรือ shareId ไม่ให้แสดงซ้ำในตาราง
+  const seenIds = new Set();
+  sharedWithMe = sharedWithMe.filter(item => {
+    const key = item.id || item.shareId;
+    if (!key || seenIds.has(key)) return false;
+    seenIds.add(key);
+    return true;
+  });
+  
   const storage = await fileRepo.getUserStorage(req.user.user_id);
 
   res.render('pages/shared', {

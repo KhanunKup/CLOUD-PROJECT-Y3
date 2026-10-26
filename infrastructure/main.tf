@@ -7,10 +7,10 @@ module "database" {
   source = "./modules/database"
 }
 
-module "notifications" {
-  source      = "./modules/notifications"
-  alert_email = var.alert_email
-}
+#module "notifications" {
+#  source      = "./modules/notifications"
+#  alert_email = var.alert_email
+#}
 
 module "compute" {
   source     = "./modules/compute"
@@ -24,7 +24,7 @@ module "compute" {
     SHARES_TABLE   = module.database.shares_table
     USERS_TABLE    = module.database.users_table
     STORAGE_BUCKET = module.storage.bucket_name
-    SNS_TOPIC_ARN  = module.notifications.topic_arn
+#    SNS_TOPIC_ARN  = module.notifications.topic_arn
   }
 }
 
@@ -38,7 +38,6 @@ module "api" {
 
 module "alerts" {
   source               = "./modules/alerts"
-  topic_arn            = module.notifications.topic_arn
   lambda_function_name = module.compute.function_name
   api_id               = module.api.api_id
   invocation_threshold = var.invocation_alarm_threshold
