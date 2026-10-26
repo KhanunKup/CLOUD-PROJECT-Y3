@@ -440,6 +440,9 @@
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && confirmModal && confirmModal.style.display === 'flex') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
                 closeConfirmModal();
             }
         });

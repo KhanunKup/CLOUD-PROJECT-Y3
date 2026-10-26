@@ -376,6 +376,24 @@
     border-radius: 6px;
     font-size: 12px;
     font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.info-tag-chip:hover {
+    background-color: #e0ead9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(67, 82, 50, 0.15);
+}
+
+.info-tag-chip.tag-active {
+    background-color: #594130 !important;
+    color: #faf8f5 !important;
+    border-color: #594130 !important;
+    box-shadow: 0 2px 6px rgba(89, 65, 48, 0.35);
+    transform: translateY(-1px);
 }
 
 .info-tags-empty {

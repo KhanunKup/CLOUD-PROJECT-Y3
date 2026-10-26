@@ -1,4 +1,146 @@
 // public/js/menu.js
+
+// Function to handle clicking on tag badges (file table or info drawer)
+function handleTagClick(targetEl, searchInput) {
+    if (!targetEl) return false;
+    const tagEl = targetEl.closest ? targetEl.closest('.file-tag-badge, .info-tag-chip') : targetEl;
+    if (!tagEl) return false;
+
+    const rawTag = (tagEl.textContent || '').trim().replace(/^#/, '');
+    if (!rawTag) return false;
+
+    const sInput = searchInput || (typeof document !== 'undefined' ? document.querySelector('.search-input') : null);
+    if (!sInput) return false;
+
+    // Parse current tokens (comma-separated, trimmed, without '#')
+    const currentVal = (sInput.value || '').trim();
+    let tokens = currentVal ? currentVal.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean) : [];
+
+    const lowerTag = rawTag.toLowerCase();
+    const existingIndex = tokens.findIndex(t => t.toLowerCase() === lowerTag);
+
+    if (existingIndex !== -1) {
+        // Toggle OFF: remove this tag from the list
+        tokens.splice(existingIndex, 1);
+    } else {
+        // Toggle ON: append this tag to the list
+        tokens.push(rawTag);
+    }
+
+    sInput.value = tokens.join(', ');
+
+    if (typeof Event !== 'undefined') {
+        sInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (typeof sInput.focus === 'function') {
+        sInput.focus();
+    }
+    return true;
+}
+
+if (typeof window !== 'undefined') {
+    window.handleTagClick = handleTagClick;
+}
+// ─── Core Folders-on-Top Sorting Engine ───
+function sortDriveTable(container, sortCol = 'date', sortDir = 'desc') {
+    const tableContainer = container || (typeof document !== 'undefined' ? document.querySelector('.file-table-container') : null);
+    if (!tableContainer) return;
+
+    const rows = Array.from(tableContainer.querySelectorAll('.file-row'));
+    if (rows.length === 0) return;
+
+    const pinnedFolders = [];
+    const pinnedFiles = [];
+    const regularFolders = [];
+    const regularFiles = [];
+
+    rows.forEach(row => {
+        const isPinned = (row.dataset && row.dataset.pinned === 'true') ||
+                         (row.classList && row.classList.contains('is-pinned'));
+        const isFolder = (row.classList && row.classList.contains('folder-row')) ||
+                         (row.dataset && (row.dataset.category === 'folder' || row.dataset.type === 'folder'));
+        if (isPinned && isFolder) pinnedFolders.push(row);
+        else if (isPinned && !isFolder) pinnedFiles.push(row);
+        else if (!isPinned && isFolder) regularFolders.push(row);
+        else regularFiles.push(row);
+    });
+
+    function getVal(row, col) {
+        if (!row) return '';
+        if (col === 'name') {
+            return ((row.dataset && row.dataset.name) || (row.querySelector && row.querySelector('.file-name')?.textContent) || '').toLowerCase().trim();
+        }
+        if (col === 'owner') {
+            return ((row.dataset && row.dataset.owner) || (row.querySelector && row.querySelector('.file-owner')?.textContent) || '').toLowerCase().trim();
+        }
+        if (col === 'date') {
+            const raw = (row.dataset && (row.dataset.date || row.dataset.created)) || (row.querySelector && row.querySelector('.file-date')?.textContent) || '';
+            const t = new Date(raw).getTime();
+            const lower = String(raw).trim().toLowerCase();
+            if (lower === 'just now' || lower === 'recently' || lower === 'today') {
+                return Date.now();
+            }
+            return isNaN(t) ? 0 : t;
+        }
+        return '';
+    }
+
+    function comparator(a, b) {
+        const valA = getVal(a, sortCol);
+        const valB = getVal(b, sortCol);
+
+        let res = 0;
+        if (typeof valA === 'number' && typeof valB === 'number') {
+            res = valA - valB;
+        } else {
+            res = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+        }
+        if (res === 0) {
+            const nameA = getVal(a, 'name');
+            const nameB = getVal(b, 'name');
+            return String(nameA).localeCompare(String(nameB), undefined, { numeric: true, sensitivity: 'base' });
+        }
+
+        return sortDir === 'desc' ? -res : res;
+    }
+
+    pinnedFolders.sort(comparator);
+    pinnedFiles.sort(comparator);
+    regularFolders.sort(comparator);
+    regularFiles.sort(comparator);
+
+    // Re-append: Pinned Folders -> Pinned Files -> Regular Folders -> Regular Files
+    pinnedFolders.forEach(row => tableContainer.appendChild(row));
+    pinnedFiles.forEach(row => tableContainer.appendChild(row));
+    regularFolders.forEach(row => tableContainer.appendChild(row));
+    regularFiles.forEach(row => tableContainer.appendChild(row));
+
+    // Update Header UI
+    const headerCols = tableContainer.querySelectorAll ? tableContainer.querySelectorAll('.sortable-col') : (typeof document !== 'undefined' ? document.querySelectorAll('.sortable-col') : []);
+    if (headerCols && headerCols.length > 0) {
+        headerCols.forEach(col => {
+            const cSort = col.dataset ? col.dataset.sort : '';
+            const iconEl = col.querySelector ? col.querySelector('.sort-icon') : null;
+            if (cSort === sortCol) {
+                if (col.classList && col.classList.add) col.classList.add('sort-active');
+                if (iconEl) {
+                    iconEl.innerHTML = sortDir === 'asc' ? '<i class="fas fa-arrow-up"></i>' : '<i class="fas fa-arrow-down"></i>';
+                }
+            } else {
+                if (col.classList && col.classList.remove) col.classList.remove('sort-active');
+                if (iconEl) {
+                    iconEl.innerHTML = '<i class="fas fa-sort"></i>';
+                }
+            }
+        });
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.sortDriveTable = sortDriveTable;
+}
+
+if (typeof document !== 'undefined') {
 document.addEventListener('DOMContentLoaded', () => {
     // ฟังก์ชันคำนวณตำแหน่ง Dropdown เพื่อให้อยู่ในหน้าจอเสมอ (auto-dropup เมื่อขอบล่างไม่พอ)
     function positionDropdown(dropdown, anchorEl) {
@@ -193,13 +335,34 @@ document.addEventListener('DOMContentLoaded', () => {
             e.stopPropagation();
             const textSpan = downloadActionEl.querySelector('.download-text') || downloadActionEl;
             const originalText = textSpan.textContent;
-            textSpan.textContent = 'Downloading...';
-
             const targetId = downloadActionEl.dataset.id;
             const filename = downloadActionEl.dataset.filename || 'downloaded-file';
+            const isFolder = downloadActionEl.dataset.type === 'folder' ||
+                             Boolean(downloadActionEl.closest('.folder-options')) ||
+                             Boolean(downloadActionEl.closest('.folder-row'));
 
             (async () => {
                 try {
+                    if (isFolder) {
+                        textSpan.textContent = 'Preparing ZIP...';
+                        if (window.showToast) {
+                            window.showToast(`Preparing folder ZIP download for "${filename}"...`, 'info');
+                        }
+
+                        if (targetId) {
+                            const a = document.createElement('a');
+                            a.href = `/api/folders/${encodeURIComponent(targetId)}/download-zip`;
+                            a.download = `${filename}.zip`;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                        }
+                        textSpan.textContent = 'Downloaded!';
+                        setTimeout(() => { textSpan.textContent = originalText; }, 1500);
+                        return;
+                    }
+
+                    textSpan.textContent = 'Downloading...';
                     if (targetId) {
                         const res = await fetch(`/api/files/${targetId}/download-url`);
                         const data = await res.json();
@@ -544,8 +707,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applyDriveFilters() {
         const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const queries = query ? query.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean) : [];
         const fileRows = document.querySelectorAll('.file-row');
         let visibleCount = 0;
+
+        // Toggle search clear button visibility
+        const searchClearBtn = document.querySelector('.search-clear-btn') || document.getElementById('searchClearBtn');
+        if (searchClearBtn) {
+            searchClearBtn.style.display = query ? 'flex' : 'none';
+        }
+
+        // 0. Update active state on all tag badges and chips
+        const allTagBadges = document.querySelectorAll('.file-tag-badge, .info-tag-chip');
+        if (allTagBadges && allTagBadges.length > 0) {
+            allTagBadges.forEach(badge => {
+                const bText = (badge.textContent || '').trim().replace(/^#/, '').toLowerCase();
+                const isActive = queries.length > 0 && queries.includes(bText);
+                if (badge.classList) {
+                    if (isActive) {
+                        badge.classList.add('tag-active');
+                    } else {
+                        badge.classList.remove('tag-active');
+                    }
+                }
+            });
+        }
 
         fileRows.forEach(row => {
             const rowCat = (row.dataset.category || '').toLowerCase();
@@ -563,10 +749,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // 2. Query match (matches either filename or tags)
+            // 2. Query match: AND (intersection) across all comma-separated queries
             let matchQuery = true;
-            if (query) {
-                matchQuery = name.includes(query) || rowTags.includes(query);
+            if (queries.length > 0) {
+                matchQuery = queries.every(q => name.includes(q) || rowTags.includes(q));
             }
 
             if (matchCategory && matchQuery) {
@@ -604,6 +790,73 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Expose globally
     window.applyDriveFilters = applyDriveFilters;
+    // ─── Table Column Sorting State & Persistence ───
+    let currentSortCol = 'date';
+    let currentSortDir = 'desc';
+
+    try {
+        const savedCol = localStorage.getItem('drive_sort_col');
+        const savedDir = localStorage.getItem('drive_sort_dir');
+        if (savedCol && savedCol !== 'date') {
+            currentSortCol = savedCol;
+            currentSortDir = savedDir || 'asc';
+        } else {
+            // Fresh load always enforces Date column to Newest First (desc)
+            currentSortCol = 'date';
+            currentSortDir = 'desc';
+            try {
+                localStorage.setItem('drive_sort_col', 'date');
+                localStorage.setItem('drive_sort_dir', 'desc');
+            } catch (e) {}
+        }
+    } catch (e) {}
+
+    // Perform initial sort on all table containers
+    const tableContainers = document.querySelectorAll('.file-table-container');
+    if (tableContainers && tableContainers.length > 0) {
+        tableContainers.forEach(container => {
+            if (typeof window !== 'undefined' && typeof window.sortDriveTable === 'function') {
+                window.sortDriveTable(container, currentSortCol, currentSortDir);
+            } else if (typeof sortDriveTable === 'function') {
+                sortDriveTable(container, currentSortCol, currentSortDir);
+            }
+        });
+    }
+
+    // Header click event delegation for column sorting
+    document.addEventListener('click', (e) => {
+        const headerCol = e.target.closest ? e.target.closest('.sortable-col') : null;
+        if (headerCol) {
+            e.stopPropagation();
+            const col = headerCol.dataset ? headerCol.dataset.sort : '';
+            if (!col) return;
+
+            if (col === currentSortCol) {
+                currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSortCol = col;
+                currentSortDir = col === 'date' ? 'desc' : 'asc';
+            }
+
+            try {
+                localStorage.setItem('drive_sort_col', currentSortCol);
+                localStorage.setItem('drive_sort_dir', currentSortDir);
+            } catch (e) {}
+
+            const container = headerCol.closest ? headerCol.closest('.file-table-container') : document.querySelector('.file-table-container');
+            if (typeof window !== 'undefined' && typeof window.sortDriveTable === 'function') {
+                window.sortDriveTable(container, currentSortCol, currentSortDir);
+            } else if (typeof sortDriveTable === 'function') {
+                sortDriveTable(container, currentSortCol, currentSortDir);
+            }
+
+            if (typeof window !== 'undefined' && typeof window.applyDriveFilters === 'function') {
+                window.applyDriveFilters();
+            } else if (typeof applyDriveFilters === 'function') {
+                applyDriveFilters();
+            }
+        }
+    });
 
     if (categoryChips && categoryChips.length > 0) {
         categoryChips.forEach(chip => {
@@ -619,6 +872,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (searchInput) {
         searchInput.addEventListener('input', applyDriveFilters);
+
+        // Click listener for one-click search clear button
+        document.addEventListener('click', (e) => {
+            const clearBtn = e.target.closest ? e.target.closest('.search-clear-btn') : null;
+            if (clearBtn) {
+                e.stopPropagation();
+                if (searchInput) {
+                    searchInput.value = '';
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    if (typeof searchInput.focus === 'function') searchInput.focus();
+                }
+            }
+        });
+
+
+        // ─── Interactive One-Click Tag Filter (Event Delegation) ───
+        document.addEventListener('click', (e) => {
+            const tagEl = e.target.closest ? e.target.closest('.file-tag-badge, .info-tag-chip') : null;
+            if (tagEl) {
+                e.stopPropagation();
+                handleTagClick(tagEl, searchInput);
+            }
+        });
     }
 
     // ─── Global Sidebar Storage Refresher ───
@@ -684,7 +960,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storageSection) {
         storageSection.addEventListener('click', (e) => {
             // If clicking directly on storage, toggle open state
-            storageSection.classList.toggle('popover-open');
+            storageSection.classList.remove('popover-open');
+        });
+        storageSection.addEventListener('mouseleave', () => {
+            storageSection.classList.remove('popover-open');
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#sidebarStorageSection, .sidebar-storage, .storage-popover')) {
+                storageSection.classList.remove('popover-open');
+            }
         });
     }
 
@@ -699,7 +983,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('dblclick', (e) => {
         const folderRow = e.target.closest('.folder-row');
         if (folderRow) {
-            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline')) return;
+            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline, .file-tag-badge, .info-tag-chip')) return;
             const folderId = folderRow.dataset.id;
             if (folderId) {
                 navigateToFolder(folderId);
@@ -711,7 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (e) => {
         const folderRow = e.target.closest('.folder-row');
         if (folderRow) {
-            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline')) return;
+            if (e.target.closest('.options-wrapper, .options-dropdown, button, .open-share-modal, .shared-badge-inline, .file-tag-badge, .info-tag-chip')) return;
             const folderId = folderRow.dataset.id;
             if (folderId) {
                 navigateToFolder(folderId);
@@ -731,3 +1015,98 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+}
+
+
+    // Pin / Unpin click delegation for inline icon and 3-dots menu
+    if (typeof document !== 'undefined') {
+        document.addEventListener('click', async (e) => {
+            const pinBtn = e.target.closest ? (e.target.closest('.toggle-pin-action') || e.target.closest('.pin-toggle-btn')) : null;
+            if (!pinBtn) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const fileId = pinBtn.dataset.id || pinBtn.getAttribute('data-id');
+            if (!fileId) return;
+
+            const row = document.querySelector(`.file-row[data-id="${fileId}"]`);
+            const currentPinned = (row && (row.dataset.pinned === 'true' || row.classList.contains('is-pinned'))) ||
+                                  pinBtn.dataset.pinned === 'true';
+
+            try {
+                const res = await fetch(`/api/files/${fileId}/toggle-pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const newPinned = Boolean(data.is_pinned);
+                    if (row) {
+                        row.dataset.pinned = newPinned ? 'true' : 'false';
+                        if (newPinned) {
+                            row.classList.add('is-pinned');
+                        } else {
+                            row.classList.remove('is-pinned');
+                        }
+
+                        // Update inline pin button
+                        const inlineBtn = row.querySelector('.pin-toggle-btn');
+                        if (inlineBtn) {
+                            inlineBtn.dataset.pinned = newPinned ? 'true' : 'false';
+                            if (newPinned) {
+                                inlineBtn.classList.add('is-pinned');
+                                inlineBtn.title = 'Unpin from top';
+                                inlineBtn.setAttribute('aria-label', 'Unpin from top');
+                            } else {
+                                inlineBtn.classList.remove('is-pinned');
+                                inlineBtn.title = 'Pin to top';
+                                inlineBtn.setAttribute('aria-label', 'Pin to top');
+                            }
+                        }
+
+                        // Update 3-dots dropdown item
+                        const menuBtn = row.querySelector('.toggle-pin-action');
+                        if (menuBtn) {
+                            menuBtn.dataset.pinned = newPinned ? 'true' : 'false';
+                            const pinText = menuBtn.querySelector('.pin-text');
+                            if (pinText) pinText.textContent = newPinned ? 'Unpin from top' : 'Pin to top';
+                        }
+
+                        // Re-sort table dynamically to smoothly reposition row
+                        if (typeof window.sortDriveTable === 'function') {
+                            const savedCol = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_col')) || 'date';
+                            const savedDir = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_dir')) || 'desc';
+                            const container = row.closest ? row.closest('.file-table-container') : document.querySelector('.file-table-container');
+                            window.sortDriveTable(container, savedCol, savedDir);
+                        }
+                    }
+
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(data.message || (newPinned ? 'Item pinned to top' : 'Item unpinned'), 'success');
+                    }
+                } else {
+                    if (typeof window.showToast === 'function') {
+                        window.showToast(data.error || 'Failed to update pin state', 'error');
+                    }
+                }
+            } catch (err) {
+                console.error('Toggle pin error:', err);
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Network error while toggling pin', 'error');
+                }
+            }
+        });
+    }
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        handleTagClick,
+        sortDriveTable,
+        applyDriveFilters: (...args) => {
+            if (typeof window !== 'undefined' && typeof window.applyDriveFilters === 'function') {
+                return window.applyDriveFilters(...args);
+            }
+        }
+    };
+}

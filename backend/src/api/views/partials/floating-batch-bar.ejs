@@ -1,0 +1,33 @@
+<!-- Floating Batch Action Bar -->
+<div id="floatingBatchBar" class="floating-batch-bar" aria-live="polite">
+    <div class="batch-bar-info">
+        <span class="batch-bar-badge" id="batchSelectedCount">0</span>
+        <span class="batch-bar-label">selected</span>
+    </div>
+    <div class="batch-bar-actions">
+        <!-- Drive Mode Actions -->
+        <button type="button" id="batchDownloadZipBtn" class="batch-bar-btn batch-btn-zip" title="Download selected as ZIP">
+            <i class="fas fa-file-zipper"></i>
+            <span>Download ZIP</span>
+        </button>
+        <button type="button" id="batchTrashBtn" class="batch-bar-btn batch-btn-trash" title="Move selected to Trash">
+            <i class="fas fa-trash-alt"></i>
+            <span>Move to Trash</span>
+        </button>
+
+        <!-- Trash Mode Actions -->
+        <button type="button" id="batchRestoreBtn" class="batch-bar-btn batch-btn-restore" title="Restore selected items" style="display: none;">
+            <i class="fas fa-rotate-left"></i>
+            <span>Restore</span>
+        </button>
+        <button type="button" id="batchDeleteForeverBtn" class="batch-bar-btn batch-btn-delete-forever" title="Permanently delete selected items" style="display: none;">
+            <i class="fas fa-trash-can"></i>
+            <span>Delete Forever</span>
+        </button>
+
+        <!-- Deselect Action -->
+        <button type="button" id="batchDeselectBtn" class="batch-bar-btn batch-btn-close" aria-label="Deselect all" title="Clear selection (Esc)">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>

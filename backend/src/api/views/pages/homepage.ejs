@@ -23,6 +23,7 @@
                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                 </svg>
                 <input class="search-input" type="text" placeholder="Search in Drive" />
+                <button type="button" class="search-clear-btn" id="searchClearBtn" aria-label="Clear search" title="Clear search" style="display: none;">&times;</button>
             </div>
 
             <div class="new-action-wrapper">
@@ -64,7 +65,7 @@
                         <i class="fas <%= index === 0 ? 'fa-hdd' : 'fa-folder-open' %>"></i> <%= crumb.name %>
                     </span>
                 <% } else { %>
-                    <a href="<%= crumb.url %>" class="crumb-link">
+                    <a href="<%= crumb.url %>" class="crumb-link" data-folder-id="<%= (crumb.url && crumb.url.includes('folder=')) ? decodeURIComponent(crumb.url.split('folder=')[1]) : '' %>">
                         <i class="fas <%= index === 0 ? 'fa-hdd' : 'fa-folder' %>"></i> <%= crumb.name %>
                     </a>
                     <span class="crumb-separator"><i class="fas fa-chevron-right"></i></span>
@@ -74,25 +75,27 @@
 
         <div class="file-table-container">
             <div class="file-table-header">
-                <span>Name</span>
-                <span>Owner</span>
-                <span>Date Uploaded</span>
+                <span class="file-header-name-col"><input type="checkbox" id="selectAllCheckbox" class="row-select-checkbox master-select-checkbox" aria-label="Select all visible files"><span class="sortable-col" data-sort="name">Name <span class="sort-icon"><i class="fas fa-sort"></i></span></span></span>
+                <span class="sortable-col" data-sort="owner">Owner <span class="sort-icon"><i class="fas fa-sort"></i></span></span>
+                <span class="sortable-col sort-active" data-sort="date">Date Uploaded <span class="sort-icon"><i class="fas fa-arrow-down"></i></span></span>
                 <span></span>
             </div>
 
             <% if (typeof files !== 'undefined' && files && files.length > 0) { %>
                 <% files.forEach(function(file) { %>
-                <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %>"
+                <div class="file-row <%= file.type === 'folder' ? 'folder-row' : '' %> <%= file.isPinned ? 'is-pinned' : '' %>"
                      data-id="<%= file.id %>"
                      data-name="<%= file.name %>"
                      data-type="<%= file.type %>"
+                     data-pinned="<%= file.isPinned ? 'true' : 'false' %>"
                      data-size="<%= file.size || '' %>"
-                     data-hash="<%= file.file_hash || '' %>"
                      data-owner="<%= file.owner || 'Admin Rick' %>"
                      data-folder-id="<%= file.folderId || '' %>"
                      data-category="<%= file.category || 'other' %>"
-                     data-tags="<%= (file.tags || []).join(',') %>">
+                     data-tags="<%= (file.tags || []).join(',') %>"
+                     data-date="<%= file.createdAt || file.uploadDate || '' %>">
                     <div class="file-name">
+                        <input type="checkbox" class="row-select-checkbox" data-id="<%= file.id %>" aria-label="Select <%= file.name %>">
                         <% if (file.type === 'folder') { %>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -109,9 +112,11 @@
 
                         <div class="file-tags-wrapper">
                             <% (file.tags || []).forEach(function(tag) { %>
-                                <span class="file-tag-badge" title="Tag: <%= tag %>"><%= tag %></span>
+                                <span class="file-tag-badge" title="Click to filter by tag: <%= tag %>"><%= tag %></span>
                             <% }); %>
                         </div>
+
+                        <button class="pin-toggle-btn <%= file.isPinned ? 'is-pinned' : '' %>" data-id="<%= file.id %>" data-pinned="<%= file.isPinned ? 'true' : 'false' %>" title="<%= file.isPinned ? 'Unpin from top' : 'Pin to top' %>" aria-label="<%= file.isPinned ? 'Unpin from top' : 'Pin to top' %>"><i class="fas fa-thumbtack"></i></button>
 
                         <% if (file.isShared) { %>
                             <span class="shared-badge-inline open-share-modal"
@@ -162,9 +167,16 @@
 <%- include('../modals/confirm-modal') %>
 <%- include('../modals/preview-modal') %>
 <%- include('../modals/info-drawer') %>
+<%- include('../modals/storage-modal') %>
+<%- include('../modals/shortcuts-modal') %>
+<%- include('../partials/floating-batch-bar') %>
 
 <script src="/js/toast.js"></script>
 <script src="/js/menu.js"></script>
 <script src="/js/info-drawer.js"></script>
+<script src="/js/storage-modal.js"></script>
+<script src="/js/drag-move.js"></script>
+<script src="/js/keyboard-shortcuts.js"></script>
+<script src="/js/batch-actions.js"></script>
 </body>
 </html>

@@ -6,6 +6,9 @@
             data-category="<%= typeof file !== 'undefined' && file.category ? file.category : '' %>">
         <i class="fas fa-eye"></i> Preview
     </button>
+        <button class="option-item toggle-pin-action" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-pinned="<%= typeof file !== 'undefined' && file.isPinned ? 'true' : 'false' %>">
+        <i class="fas fa-thumbtack"></i> <span class="pin-text"><%= typeof file !== 'undefined' && file.isPinned ? 'Unpin from top' : 'Pin to top' %></span>
+    </button>
     <button class="option-item download-action" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
     <button class="option-item open-rename-modal" data-id="<%= typeof file !== 'undefined' && (file.id || file.file_id) ? (file.id || file.file_id) : '' %>" data-filename="<%= typeof file !== 'undefined' && file.name ? file.name : '' %>"><i class="fas fa-pencil-alt"></i> Rename</button>
     <button class="option-item open-tags-modal" 
@@ -52,7 +55,6 @@
             data-size="<%= typeof file !== 'undefined' && file.size ? file.size : '' %>"
             data-owner="<%= typeof file !== 'undefined' && file.owner ? file.owner : 'Admin Rick' %>"
             data-created="<%= typeof file !== 'undefined' && (file.createdAt || file.created_at || file.uploadDate) ? (file.createdAt || file.created_at || file.uploadDate) : '' %>"
-            data-hash="<%= typeof file !== 'undefined' && file.file_hash ? file.file_hash : '' %>"
             data-tags="<%= typeof file !== 'undefined' && file.tags ? (Array.isArray(file.tags) ? file.tags.join(',') : file.tags) : '' %>">
         <i class="fas fa-info-circle"></i> Information
     </button>

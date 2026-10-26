@@ -61,7 +61,7 @@
                                 <input type="checkbox" name="remember">
                                 <span>Remember me</span>
                             </label>
-                            <a href="/forgot-password" class="forgot-link">Forgot password?</a>
+                            <a href="/reset-password" class="forgot-link">Forgot password?</a>
                         </div>
 
                         <button type="submit" class="login-btn">
@@ -70,7 +70,8 @@
                         </button>
                     </form>
 
-                    <!-- 1-Click Quick Demo Login Section -->
+                    <% if (typeof showDemoLogin !== 'undefined' && showDemoLogin) { %>
+                    <!-- 1-Click Quick Demo Login Section (Local Dev Mode Only) -->
                     <div class="demo-login-section" style="margin-top: 20px; padding-top: 14px; border-top: 1px dashed #d1c7b7; text-align: center;">
                         <p style="font-size: 12px; color: #736b5e; margin-bottom: 8px; font-weight: 600;">⚡ Quick 1-Click Demo Login (ทดสอบระบบทันที):</p>
                         <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
@@ -78,6 +79,7 @@
                             <button type="button" class="quick-demo-btn" data-user="user@kmitl.ac.th" data-pass="user123" style="background: #846145; color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 5px;">👤 User (Morty)</button>
                         </div>
                     </div>
+                    <% } %>
 
                     <div class="signup-text" style="margin-top: 16px;">
                         Don't have an account?
@@ -100,6 +102,7 @@
             </section>
         </div>
     </main>
+    <% if (typeof showDemoLogin !== 'undefined' && showDemoLogin) { %>
     <script>
     document.querySelectorAll('.quick-demo-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -111,6 +114,33 @@
                 document.getElementById('loginForm')?.submit();
             }
         });
+    });
+    </script>
+    <% } %>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const usernameInput = document.getElementById('usernameInput');
+        const rememberCheckbox = document.querySelector('input[name="remember"]');
+        const loginForm = document.getElementById('loginForm');
+
+        // Restore remembered username/email
+        const savedUser = localStorage.getItem('easydrive_remember_user');
+        if (savedUser && usernameInput) {
+            usernameInput.value = savedUser;
+            if (rememberCheckbox) rememberCheckbox.checked = true;
+        }
+
+        // Save or clear on submission
+        if (loginForm && usernameInput && rememberCheckbox) {
+            loginForm.addEventListener('submit', () => {
+                if (rememberCheckbox.checked) {
+                    localStorage.setItem('easydrive_remember_user', usernameInput.value.trim());
+                } else {
+                    localStorage.removeItem('easydrive_remember_user');
+                }
+            });
+        }
     });
     </script>
 </body>

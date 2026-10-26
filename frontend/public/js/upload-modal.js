@@ -9,6 +9,20 @@ const formatBytes = (bytes) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
+// ฟังก์ชันคำนวณ SHA-256 ของไฟล์
+async function calculateFileHash(file) {
+    if (!file || !window.crypto || !window.crypto.subtle) return null;
+    try {
+        const buffer = await file.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (err) {
+        console.warn('Could not calculate file hash:', err);
+        return null;
+    }
+}
+
 // ตรวจสอบชื่อโฟลเดอร์สำหรับพัฒนาโปรเจกต์ เช่น node_modules, .git
 function isDevDirectoryName(name) {
     if (!name || typeof name !== 'string') return false;
@@ -198,6 +212,7 @@ function readDirectoryEntry(entry, pathOrOptions = '', maybeOptions = {}) {
 
     return new Promise(async (resolve) => {
         if (!entry) return resolve({ rootFolderName: 'New Folder', files: [], totalSize: 0, fileCount: 0, skippedDevFolders: [] });
+
         const rootFolderName = entry.name || 'New Folder';
         const files = [];
         let totalBytes = 0;
@@ -436,10 +451,13 @@ async function uploadFolderRecursive({
                 const contentType = itemFile.type || (itemFile.file && itemFile.file.type) || 'application/octet-stream';
 
                 let uploadUrl;
+                let isDeduplicated = false;
                 const cached = urlMap.get(index);
                 if (cached && cached.uploadUrl) {
                     uploadUrl = cached.uploadUrl;
+                    isDeduplicated = Boolean(cached.deduplicated);
                 } else {
+                    const fileHash = itemFile.file ? await calculateFileHash(itemFile.file) : null;
                     const urlRes = await safeFetchWithRetry('/api/files/upload-url', { apiFetch,
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -447,7 +465,8 @@ async function uploadFolderRecursive({
                             filename: filename,
                             size: fileSize,
                             contentType: contentType,
-                            folder_id: targetFolderId
+                            folder_id: targetFolderId,
+                            file_hash: fileHash
                         })
                     });
                     const urlData = await urlRes.json();
@@ -455,17 +474,20 @@ async function uploadFolderRecursive({
                         throw new Error(urlData.error || `Failed to get upload URL for "${filename}"`);
                     }
                     uploadUrl = urlData.uploadUrl;
+                    isDeduplicated = Boolean(urlData.deduplicated);
                 }
 
-                const uploadBody = itemFile.file || (typeof Blob !== 'undefined' ? new Blob(['EasyDrive Mock File Content'], { type: contentType }) : 'EasyDrive Mock File Content');
+                if (!isDeduplicated && uploadUrl) {
+                    const uploadBody = itemFile.file || (typeof Blob !== 'undefined' ? new Blob(['EasyDrive Mock File Content'], { type: contentType }) : 'EasyDrive Mock File Content');
 
-                const putRes = await safeFetchWithRetry(uploadUrl, { apiFetch,
-                    method: 'PUT',
-                    headers: { 'Content-Type': contentType },
-                    body: uploadBody
-                });
-                if (!putRes.ok) {
-                    throw new Error(`Failed to upload content for "${filename}"`);
+                    const putRes = await safeFetchWithRetry(uploadUrl, { apiFetch,
+                        method: 'PUT',
+                        headers: { 'Content-Type': contentType },
+                        body: uploadBody
+                    });
+                    if (!putRes.ok) {
+                        throw new Error(`Failed to upload content for "${filename}"`);
+                    }
                 }
 
                 completedCount++;
@@ -766,15 +788,28 @@ async function processDroppedItems(dataTransfer, options = {}) {
     const readEntryFn = customReadEntry || (typeof readDirectoryEntry !== 'undefined' ? readDirectoryEntry : null);
 
     if (dataTransfer.items && dataTransfer.items.length > 0) {
+        // สำคัญมาก: ต้องดึง Entry และ File ออกจาก dataTransfer ทันทีแบบ Synchronous 
+        // ก่อนที่จะใช้ await มิฉะนั้นเบราว์เซอร์จะล้างค่า dataTransfer ทิ้ง!
+        const capturedItems = [];
         for (let i = 0; i < dataTransfer.items.length; i++) {
             const item = dataTransfer.items[i];
             if (item.kind !== 'file') continue;
 
-            // 1. ลองใช้ getAsFileSystemHandle() ของเบราว์เซอร์ยุคใหม่ก่อน (มี Parallel Streaming Batching)
+            capturedItems.push({
+                entry: typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null,
+                file: typeof item.getAsFile === 'function' ? item.getAsFile() : null,
+                handlePromise: typeof item.getAsFileSystemHandle === 'function' ? item.getAsFileSystemHandle().catch(() => null) : null
+            });
+        }
+
+        // วนลูปประมวลผลจากรายการที่เก็บไว้แล้ว
+        for (const captured of capturedItems) {
             let handled = false;
-            if (typeof item.getAsFileSystemHandle === 'function' && traverseFn) {
+
+            // 1. ลองใช้ FileSystemHandle ก่อน (ถ้ามีและเป็นโฟลเดอร์)
+            if (captured.handlePromise && traverseFn) {
                 try {
-                    const handle = await item.getAsFileSystemHandle();
+                    const handle = await captured.handlePromise;
                     if (handle && handle.kind === 'directory') {
                         onScanningState(true, { folderName: handle.name });
                         try {
@@ -794,8 +829,8 @@ async function processDroppedItems(dataTransfer, options = {}) {
             }
             if (handled) continue;
 
-            // 2. Fallback ไปยัง webkitGetAsEntry()
-            const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+            // 2. ใช้ webkitGetAsEntry เป็นตัวหลัก/Fallback
+            const entry = captured.entry;
             if (entry) {
                 if (entry.isDirectory && readEntryFn) {
                     onScanningState(true, { folderName: entry.name });
@@ -809,12 +844,15 @@ async function processDroppedItems(dataTransfer, options = {}) {
                         onScanningState(false);
                     }
                 } else if (entry.isFile) {
-                    const file = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
-                    onFileScanned(file, file ? file.name : entry.name);
+                    if (captured.file) {
+                        onFileScanned(captured.file, captured.file.name);
+                    } else {
+                        const f = await new Promise((res) => entry.file(res, () => res(null)));
+                        if (f) onFileScanned(f, f.name);
+                    }
                 }
-            } else if (typeof item.getAsFile === 'function') {
-                const file = item.getAsFile();
-                if (file) onFileScanned(file, file.name);
+            } else if (captured.file) {
+                onFileScanned(captured.file, captured.file.name);
             }
         }
     } else if (dataTransfer.files && dataTransfer.files.length > 0) {
@@ -823,6 +861,7 @@ async function processDroppedItems(dataTransfer, options = {}) {
         });
     }
 }
+
 
 // ส่งออก Helper functions เพื่อการทดสอบ
 if (typeof window !== 'undefined') {
@@ -1240,7 +1279,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             e.stopPropagation();
             uploadDropzone.classList.remove('dragover');
-
+            
             const skipDevFolders = uploadSkipDevFoldersCheckbox ? uploadSkipDevFoldersCheckbox.checked : true;
             await processDroppedItems(e.dataTransfer, {
                 skipDevFolders,
@@ -1252,6 +1291,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 readDirectoryEntry
             });
             renderQueue();
+        });
+        // เพิ่ม: ลากไฟล์จากคอมพิวเตอร์มาวางที่ไหนก็ได้บนหน้าเว็บเพื่อเปิด Upload Modal อัตโนมัติ
+        window.addEventListener('dragover', (e) => {
+            // เช็คว่าเป็นการลากไฟล์มาจากนอกเบราว์เซอร์ (ไม่ใช่การลากแถวตารางใน drag-move.js)
+            const isExternalFileDrag = e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files') && !document.querySelector('.dragging-active');
+            if (isExternalFileDrag) {
+                e.preventDefault();
+                if (uploadModal && uploadModal.style.display !== 'flex') {
+                    uploadModal.style.display = 'flex';
+                }
+            }
+        });
+
+        window.addEventListener('drop', async (e) => {
+            const isExternalFileDrag = e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files') && !document.querySelector('.dragging-active');
+            // ถ้าปล่อยเมาส์นอกกรอบ uploadDropzone แต่เปิด Modal อยู่ ให้รับไฟล์เข้าคิวด้วย
+            if (isExternalFileDrag && !e.target.closest('#uploadDropzone')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (uploadModal && uploadModal.style.display !== 'flex') {
+                    uploadModal.style.display = 'flex';
+                }
+                const skipDevFolders = uploadSkipDevFoldersCheckbox ? uploadSkipDevFoldersCheckbox.checked : true;
+                await processDroppedItems(e.dataTransfer, {
+                    skipDevFolders,
+                    onScanningState: (state, stats) => setScanningState(state, stats),
+                    onProgress: (p) => updateScanningProgress(p),
+                    onFolderScanned: (folderData) => addFolderItemToQueue(folderData),
+                    onFileScanned: (file, name) => addItemToQueue(name, 'file', file),
+                    traverseDirectoryHandle,
+                    readDirectoryEntry
+                });
+                renderQueue();
+            }
         });
     }
 
@@ -1373,6 +1446,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         updateOverallProgress(item.name);
                         const fileSize = item.file ? item.file.size : 1024;
                         const contentType = item.file ? (item.file.type || 'application/octet-stream') : 'application/octet-stream';
+                        const fileHash = item.file ? await calculateFileHash(item.file) : null;
 
                         const urlRes = await fetch('/api/files/upload-url', {
                             method: 'POST',
@@ -1381,7 +1455,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 filename: item.name,
                                 size: fileSize,
                                 contentType: contentType,
-                                folder_id: currentFolderId
+                                folder_id: currentFolderId,
+                                file_hash: fileHash // ส่ง hash ไปเช็ค
                             })
                         });
 
@@ -1390,17 +1465,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         fileId = urlData.file_id;
                         uploadedFileRecord = urlData.file;
-                        const uploadUrl = urlData.uploadUrl;
 
-                        // 3. PUT binary data ไปยัง S3 / Mock Storage
-                        const uploadBody = item.file || new Blob(['EasyDrive Mock File Content'], { type: contentType });
-                        const putRes = await fetch(uploadUrl, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': contentType },
-                            body: uploadBody
-                        });
+                        // 3. PUT binary data ไปยัง S3 / Mock Storage (เฉพาะกรณีไม่ใช่ไฟล์ซ้ำ)
+                        if (!urlData.deduplicated && urlData.uploadUrl) {
+                            const uploadBody = item.file || new Blob(['EasyDrive Mock File Content'], { type: contentType });
+                            const putRes = await fetch(urlData.uploadUrl, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': contentType },
+                                body: uploadBody
+                            });
+                            if (!putRes.ok) throw new Error('Failed to upload file content to storage');
+                        }
 
-                        if (!putRes.ok) throw new Error('Failed to upload file content to storage');
                         overallCompleted++;
                         updateOverallProgress(item.name);
                     }
@@ -1416,7 +1492,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     // 4. แทรกแถวลงในหน้าจอ (Realtime DOM Update)
-                    if (fileContainer) {
+                    if (!urlData.deduplicated && fileContainer) {
                         const emptyNotice = fileContainer.querySelector('.empty-state, p');
                         if (emptyNotice) emptyNotice.remove();
 
@@ -1439,6 +1515,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const menuContent = isFolder
                             ? `<div class="options-dropdown folder-options">
                                    <button class="option-item open-folder-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-folder-open"></i> Open</button>
+                                   <button class="option-item toggle-pin-action" data-type="folder" data-id="${fileId}" data-pinned="false"><i class="fas fa-thumbtack"></i> <span class="pin-text">Pin to top</span></button>
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
@@ -1448,6 +1525,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                </div>`
                             : `<div class="options-dropdown file-options">
                                    <button class="option-item open-preview-modal" data-id="${fileId}" data-filename="${safeName}" data-category="${fileCat}"><i class="fas fa-eye"></i> Preview</button>
+                                   <button class="option-item toggle-pin-action" data-id="${fileId}" data-pinned="false"><i class="fas fa-thumbtack"></i> <span class="pin-text">Pin to top</span></button>
                                    <button class="option-item download-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-download"></i> <span class="download-text">Download</span></button>
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item open-tags-modal" data-id="${fileId}" data-filename="${safeName}" data-tags="${tagsJoined}"><i class="fas fa-tags"></i> Edit Tags</button>
@@ -1465,13 +1543,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         newRow.dataset.folderId = currentFolderId || '';
                         newRow.dataset.category = fileCat;
                         newRow.dataset.tags = tagsJoined;
+                        newRow.dataset.pinned = 'false';
+                        newRow.dataset.date = (uploadedFileRecord && (uploadedFileRecord.created_at || uploadedFileRecord.createdAt)) || new Date().toISOString();
                         newRow.innerHTML = `
                             <div class="file-name">
+                                <input type="checkbox" class="row-select-checkbox" data-id="${fileId}" aria-label="Select ${safeName}">
                                 ${iconSvg}
                                 <span class="file-name-text">${safeName}</span>
                                 <div class="file-tags-wrapper">
-                                    ${fileTags.map(t => `<span class="file-tag-badge" title="Tag: ${t}">${t}</span>`).join('')}
+                                    ${fileTags.map(t => `<span class="file-tag-badge" title="Click to filter by tag: ${t}">${t}</span>`).join('')}
                                 </div>
+                                <button class="pin-toggle-btn" data-id="${fileId}" data-pinned="false" title="Pin to top" aria-label="Pin to top"><i class="fas fa-thumbtack"></i></button>
                             </div>
                             <div class="file-owner">
                                 <div class="owner-avatar">
@@ -1509,6 +1591,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Refresh sidebar storage and filters
                 if (window.refreshSidebarStorage) {
                     window.refreshSidebarStorage();
+                }
+                if (typeof window !== 'undefined' && typeof window.sortDriveTable === 'function') {
+                    const savedCol = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_col')) || 'date';
+                    const savedDir = (typeof localStorage !== 'undefined' && localStorage.getItem('drive_sort_dir')) || 'desc';
+                    window.sortDriveTable(fileContainer, savedCol, savedDir);
                 }
                 if (window.applyDriveFilters) {
                     window.applyDriveFilters();

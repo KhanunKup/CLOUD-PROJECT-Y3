@@ -2,11 +2,22 @@
 const fs = require('fs');
 const path = require('path');
 
-const STORAGE_DIR = path.resolve(__dirname, '../../storage');
+const isLambda = !!(process.env.AWS_EXECUTION_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.LAMBDA_TASK_ROOT);
+const isCloudMode = process.env.USE_MOCK !== 'true' && !process.env.LOCAL_RUNNER;
+
+// In Lambda or read-only environments, fallback safely to /tmp/storage
+const STORAGE_DIR = process.env.LOCAL_STORAGE_DIR || (isLambda ? path.join('/tmp', 'storage') : path.resolve(__dirname, '../../storage'));
 
 function ensureStorageDir() {
+  if (isCloudMode && isLambda) {
+    return;
+  }
   if (!fs.existsSync(STORAGE_DIR)) {
-    fs.mkdirSync(STORAGE_DIR, { recursive: true });
+    try {
+      fs.mkdirSync(STORAGE_DIR, { recursive: true });
+    } catch (e) {
+      console.warn('[Storage Warning] Could not create local storage directory:', e.message);
+    }
   }
 }
 
@@ -153,6 +164,9 @@ function createMinimalPngBuffer() {
 }
 
 function seedDefaultFiles() {
+  if (isCloudMode && isLambda) {
+    return;
+  }
   ensureStorageDir();
 
   const seedFiles = [
@@ -171,6 +185,18 @@ function seedDefaultFiles() {
     {
       key: 'File1.txt',
       data: Buffer.from('ที่มาของคณะไอที ลาดกระบัง\n\nโครงการจัดตั้งคณะเทคโนโลยีสารสนเทศ ได้รับความเห็นชอบจากสภา สถาบันเทคโนโลยีพระจอมเกล้า เจ้าคุณทหารลาดกระบัง เมื่อวันที่ 12 กรกฎาคม 2537', 'utf-8')
+    },
+    {
+      key: 'folders/user-admin-01/file-adm-001/Admin_Security_Policy.pdf',
+      data: createMinimalPdfBuffer('Admin Security Policy: Cloud Infrastructure & Compliance Standards')
+    },
+    {
+      key: 'folders/user-admin-01/file-adm-002/System_Architecture.png',
+      data: createMinimalPngBuffer()
+    },
+    {
+      key: 'folders/user-admin-01/folder-adm-01/file-adm-003/Deployment_Config.yaml',
+      data: Buffer.from('env: production\nreplicas: 3\nregion: ap-southeast-1\nservices:\n  - api\n  - worker\n', 'utf-8')
     }
   ];
 
@@ -183,28 +209,43 @@ function seedDefaultFiles() {
     if (!fs.existsSync(targetPath)) {
       fs.writeFileSync(targetPath, item.data);
     }
-    // Also ensure a copy at the direct basename in storage for easy lookup
-    const baseNamePath = getStoragePath(path.basename(item.key));
-    if (!fs.existsSync(baseNamePath)) {
-      fs.writeFileSync(baseNamePath, item.data);
-    }
+
   }
 }
 
 // Seed upon module loading
-seedDefaultFiles();
+if (!isCloudMode && !isLambda) {
+  seedDefaultFiles();
+}
 
 const METADATA_FILE = path.join(STORAGE_DIR, 'mock-files.json');
 let saveTimeout = null;
 let pendingFilesToSave = null;
 
 function loadMockFiles(defaultFiles = []) {
+  if (isCloudMode && isLambda) {
+    return defaultFiles || [];
+  }
   ensureStorageDir();
   try {
     if (fs.existsSync(METADATA_FILE)) {
       const raw = fs.readFileSync(METADATA_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(defaultFiles) && defaultFiles.length > 0) {
+          const existingOwners = new Set(parsed.map(f => f.owner_id));
+          const existingIds = new Set(parsed.map(f => f.file_id));
+          let changed = false;
+          defaultFiles.forEach(item => {
+            if (!existingOwners.has(item.owner_id) && !existingIds.has(item.file_id)) {
+              parsed.push(item);
+              changed = true;
+            }
+          });
+          if (changed) {
+            saveMockFiles(parsed, true);
+          }
+        }
         return parsed;
       }
     }
@@ -216,6 +257,7 @@ function loadMockFiles(defaultFiles = []) {
 }
 
 function flushMockFilesSync() {
+  if (isCloudMode && isLambda) return;
   if (!pendingFilesToSave) return;
   ensureStorageDir();
   try {
@@ -233,6 +275,7 @@ function flushMockFilesSync() {
 }
 
 function saveMockFiles(files = [], immediate = false) {
+  if (isCloudMode && isLambda) return;
   ensureStorageDir();
   pendingFilesToSave = files;
 
