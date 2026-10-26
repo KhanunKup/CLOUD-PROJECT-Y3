@@ -177,11 +177,13 @@
             quickPreviewBtn.style.display = isFolder ? 'none' : 'inline-flex';
         }
 
-        // Ownership & Role check (Activity history is restricted to owner and admin)
+        // Ownership & Role check (Dynamic User Detection)
         const currentUserRole = (infoDrawer && infoDrawer.dataset.currentUserRole) || window.currentUserRole || 'user';
+        const currentUserName = (infoDrawer && infoDrawer.dataset.currentUserName) || window.currentUserName || 'You';
         const isAdmin = currentUserRole === 'admin';
-        const isOwner = (data.isOwner === true || data.isOwner === 'true' || data.owner === 'me' || data.owner === 'Admin Rick') && data.isOwner !== false && data.isOwner !== 'false';
+        const isOwner = (data.isOwner === true || data.isOwner === 'true' || data.owner === 'me' || data.owner === currentUserName) && data.isOwner !== false && data.isOwner !== 'false';
         const canViewActivity = isOwner || isAdmin;
+        const displayOwnerName = isOwner ? `${currentUserName} (You)` : (data.owner || 'Collaborator');
 
         // Manage Access button & Edit Tags button only available for owner
         if (manageAccessBtn) {
@@ -201,7 +203,7 @@
 
         // Owner Info & Access Section
         if (infoOwnerName) {
-            infoOwnerName.textContent = isOwner ? 'Admin Rick (You)' : (data.owner || 'Collaborator');
+            infoOwnerName.textContent = displayOwnerName;
         }
         if (infoOwnerRole) {
             infoOwnerRole.textContent = isOwner ? 'Owner' : 'Shared by owner';
@@ -232,7 +234,7 @@
         if (propLocationEl) {
             propLocationEl.textContent = isOwner ? (data.location || 'My Drive') : 'Shared with me';
         }
-        if (propOwnerEl) propOwnerEl.textContent = isOwner ? 'Admin Rick' : (data.owner || 'Collaborator');
+        if (propOwnerEl) propOwnerEl.textContent = isOwner ? currentUserName : (data.owner || 'Collaborator');
         if (propModifiedEl) propModifiedEl.textContent = formatDate(data.updated || data.updatedAt || data.created);
         if (propCreatedEl) propCreatedEl.textContent = formatDate(data.created || data.createdAt || data.date);
 
@@ -282,7 +284,7 @@
                     <span class="info-timeline-dot"><i class="fas fa-pen"></i></span>
                     <div class="info-timeline-content">
                         <span class="info-timeline-action">Modified / Synced</span>
-                        <span class="info-timeline-user">by ${data.owner || 'Admin Rick'}</span>
+                        <span class="info-timeline-user">by ${isOwner ? currentUserName : (data.owner || 'Owner')}</span>
                         <span class="info-timeline-time">${modTimeStr}</span>
                     </div>
                 </div>
@@ -290,7 +292,7 @@
                     <span class="info-timeline-dot"><i class="fas fa-cloud-upload-alt"></i></span>
                     <div class="info-timeline-content">
                         <span class="info-timeline-action">Uploaded to EasyDrive S3</span>
-                        <span class="info-timeline-user">by ${data.owner || 'Admin Rick'}</span>
+                        <span class="info-timeline-user">by ${isOwner ? currentUserName : (data.owner || 'Owner')}</span>
                         <span class="info-timeline-time">${timeStr}</span>
                     </div>
                 </div>
@@ -527,7 +529,7 @@
                 const category = infoBtn.dataset.category || (row && row.dataset.category) || '';
                 const tags = infoBtn.dataset.tags || (row && row.dataset.tags) || '';
                 const size = infoBtn.dataset.size || (row && row.dataset.size) || '';
-                const owner = infoBtn.dataset.owner || (row && row.querySelector('.file-owner')?.textContent.trim()) || 'Admin Rick';
+                const owner = infoBtn.dataset.owner || (row && row.querySelector('.file-owner')?.textContent.trim()) || 'me';
                 const created = infoBtn.dataset.created || (row && row.querySelector('.file-date')?.textContent.trim()) || '';
 
                 openDrawer({
