@@ -1068,7 +1068,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isFolder) {
                     iconClass = 'fas fa-folder';
                 } else {
-                    const ext = item.name.split('.').pop().toLowerCase();
+                    const ext = displayName.split('.').pop().toLowerCase();
                     if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
                         iconClass = 'fas fa-image';
                     }

@@ -438,6 +438,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         textSpan.textContent = originalText;
                     }, 1500);
                 }
+            } else {
+                if (window.showToast) {
+                    window.showToast('No public share link created yet. Use Edit Share to create one.', 'info');
+                }
             }
             return;
         }
