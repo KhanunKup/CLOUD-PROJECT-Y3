@@ -765,6 +765,10 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
 app.post(['/api/auth/signup', '/signup'], async (req, res) => {
   const { username, email, password, confirmPassword } = req.body;
 
+  const isLengthValid = password.length >= 8;
+  const isCaseValid = /(?=.*[a-z])(?=.*[A-Z])/.test(password);
+  const isNumSymValid = /(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-])/.test(password);
+
   if (!username || !email || !password) {
     if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
       return res.render('pages/signup', { error: 'Please fill in all required fields' });
@@ -777,6 +781,13 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
       return res.render('pages/signup', { error: 'Passwords do not match' });
     }
     return res.status(400).json({ error: 'Passwords do not match' });
+  }
+
+  if (!isLengthValid || !isCaseValid || !isNumSymValid) {
+    if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+      return res.render('pages/signup', { error: 'Please ensure your password meets the requirements' });
+    }
+    return res.status(400).json({ error: 'Please ensure your password meets the requirements' });
   }
 
   const regRes = await authService.registerUser({
@@ -1174,8 +1185,7 @@ function getSharedWithMeForUser(user) {
 
   return [
     ...defaultSharedWithMe.filter(d => !Array.isArray(d.dismissed_by) || (!d.dismissed_by.includes(user.user_id) && !d.dismissed_by.includes(userEmail))),
-    ...invitedFiles,
-    ...publicSharedWithMe
+    ...invitedFiles
   ];
 }
 
@@ -1285,6 +1295,15 @@ app.get('/shared', requireAuthWeb, async (req, res) => {
     sharedWithMe = [...sharedWithMe, ...demoItems];
   }
 
+  // กำจัดไฟล์ซ้ำ (Deduplicate) โดยอิงตาม id หรือ shareId ไม่ให้แสดงซ้ำในตาราง
+  const seenIds = new Set();
+  sharedWithMe = sharedWithMe.filter(item => {
+    const key = item.id || item.shareId;
+    if (!key || seenIds.has(key)) return false;
+    seenIds.add(key);
+    return true;
+  });
+  
   const storage = await fileRepo.getUserStorage(req.user.user_id);
 
   res.render('pages/shared', {
@@ -1317,7 +1336,8 @@ function filterRootTrashedFiles(files = mockFiles, userId) {
 
 // 4.5 Trash Page (Protected)
 app.get('/trash', requireAuthWeb, async (req, res) => {
-  const trashedFiles = await fileRepo.getUserTrash({ userId: req.user.user_id });
+  const rawTrashedFiles = await fileRepo.getUserTrash({ userId: req.user.user_id });
+  const trashedFiles = filterRootTrashedFiles(rawTrashedFiles, req.user.user_id);
   const userStorage = await fileRepo.getUserStorage(req.user.user_id);
 
   res.render('pages/trash', {

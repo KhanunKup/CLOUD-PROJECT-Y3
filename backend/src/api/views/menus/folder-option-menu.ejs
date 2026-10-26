@@ -21,7 +21,7 @@
             data-type="folder"
             data-category="folder"
             data-size="0"
-            data-owner="<%= typeof file !== 'undefined' && file.owner ? file.owner : 'Admin Rick' %>"
+            data-owner="<%= typeof file !== 'undefined' && file.owner ? file.owner : 'me' %>"
             data-created="<%= typeof file !== 'undefined' && (file.createdAt || file.created_at || file.uploadDate) ? (file.createdAt || file.created_at || file.uploadDate) : '' %>"
             data-tags="<%= typeof file !== 'undefined' && file.tags ? (Array.isArray(file.tags) ? file.tags.join(',') : file.tags) : 'folder' %>">
         <i class="fas fa-info-circle"></i> Information
