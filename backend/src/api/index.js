@@ -1328,7 +1328,8 @@ function filterRootTrashedFiles(files = mockFiles, userId) {
 
 // 4.5 Trash Page (Protected)
 app.get('/trash', requireAuthWeb, async (req, res) => {
-  const trashedFiles = await fileRepo.getUserTrash({ userId: req.user.user_id });
+  const rawTrashedFiles = await fileRepo.getUserTrash({ userId: req.user.user_id });
+  const trashedFiles = filterRootTrashedFiles(rawTrashedFiles, req.user.user_id);
   const userStorage = await fileRepo.getUserStorage(req.user.user_id);
 
   res.render('pages/trash', {
