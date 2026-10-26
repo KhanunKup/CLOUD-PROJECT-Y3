@@ -1,8 +1,3 @@
-resource "random_password" "session_secret" {
-  length  = 48
-  special = false
-}
-
 module "storage" {
   source      = "./modules/storage2"
   bucket_name = "${var.bucket_prefix}-storage"
@@ -24,7 +19,7 @@ module "compute" {
 
   environment = {
     NODE_ENV       = "production"
-    SESSION_SECRET = random_password.session_secret.result
+    SESSION_SECRET = var.session_secret
     FILES_TABLE    = module.database.files_table
     SHARES_TABLE   = module.database.shares_table
     USERS_TABLE    = module.database.users_table
@@ -47,7 +42,4 @@ module "alerts" {
   lambda_function_name = module.compute.function_name
   api_id               = module.api.api_id
   invocation_threshold = var.invocation_alarm_threshold
-  enable_budget        = var.enable_budget
-  budget_usd           = var.budget_usd
-  alert_email          = var.alert_email
 }

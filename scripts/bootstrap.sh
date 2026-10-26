@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time setup per Learner Lab account: creates the S3 buckets Terraform expects and writes backend.hcl.
+# One-time setup per Learner Lab account: creates the storage S3 bucket.
 # Safe to re-run. The data bucket is created here (not in Terraform) because Learner Lab SCPs block
 # the s3:GetBucketObjectLockConfiguration call that aws_s3_bucket makes.
 set -euo pipefail
@@ -26,18 +26,6 @@ create_bucket() {
   fi
 }
 
-create_bucket "$STATE_BUCKET"
-aws s3api put-bucket-versioning --bucket "$STATE_BUCKET" \
-  --versioning-configuration Status=Enabled --region "$REGION"
-
 create_bucket "$STORAGE_BUCKET"
 
-cat > "${INFRA_DIR}/backend.hcl" <<EOF
-bucket       = "${STATE_BUCKET}"
-key          = "easydrive/terraform.tfstate"
-region       = "${REGION}"
-use_lockfile = true
-EOF
-
-echo "Wrote ${INFRA_DIR}/backend.hcl"
-echo "Bootstrap complete. Next: scripts/deploy.sh"
+echo "Bootstrap complete. Storage bucket is ready. Next: scripts/deploy.sh"

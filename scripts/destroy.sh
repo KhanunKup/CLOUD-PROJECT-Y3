@@ -44,18 +44,12 @@ purge_bucket() {
 }
 
 cd "${INFRA_DIR}"
-if [ -f backend.hcl ]; then
-  terraform init -input=false -backend-config=backend.hcl >/dev/null
-  terraform destroy -input=false -auto-approve \
-    -var "region=${REGION}" -var "bucket_prefix=${PREFIX}"
-else
-  echo "No backend.hcl found; skipping terraform destroy."
-fi
+terraform init -input=false >/dev/null
+terraform destroy -input=false -auto-approve \
+  -var "region=${REGION}" -var "bucket_prefix=${PREFIX}"
 
 if [ "$PURGE" -eq 1 ]; then
   purge_bucket "$STORAGE_BUCKET"
-  purge_bucket "$STATE_BUCKET"
-  rm -f "${INFRA_DIR}/backend.hcl"
 fi
 
 echo "Done."

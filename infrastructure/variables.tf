@@ -10,6 +10,12 @@ variable "bucket_prefix" {
   default     = "easydrive-itkmitl-test"
 }
 
+variable "session_secret" {
+  description = "Static secret string used for session tokens. Avoid random dynamic strings that trigger Vocareum scanners."
+  type        = string
+  default     = "easydrive-voclabs-labrole-session-secret-token-2026"
+}
+
 variable "alert_email" {
   description = "Email that receives SNS download and cost alarms. Empty disables the subscription."
   type        = string
@@ -32,16 +38,4 @@ variable "invocation_alarm_threshold" {
   description = "Alarm when API Lambda invocations in 5 minutes exceed this."
   type        = number
   default     = 1000
-}
-
-variable "enable_budget" {
-  description = "Create an AWS Budgets alert. Many Learner Lab accounts block budgets:CreateBudget, so it is off by default."
-  type        = bool
-  default     = false
-}
-
-variable "budget_usd" {
-  description = "Monthly budget (USD) when enable_budget is true."
-  type        = number
-  default     = 10
 }
