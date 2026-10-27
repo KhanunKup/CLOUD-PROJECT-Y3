@@ -216,7 +216,8 @@
             if (isOwner) {
                 accessStatusText.textContent = isShared ? 'Shared (Collaborative link active)' : 'Private (Only you have access)';
             } else {
-                accessStatusText.textContent = 'Shared with you (Viewer access)';
+                const canEdit = Boolean(data.canEdit || data.permission === 'can edit');
+                accessStatusText.textContent = canEdit ? 'Shared with you (Editor access)' : 'Shared with you (Viewer access)';
             }
         }
         if (accessStatusEl) {
@@ -351,6 +352,8 @@
         const tags = row.dataset.tags ? row.dataset.tags.split(',') : [];
         const date = row.querySelector('.file-date')?.textContent.trim() || '';
         const owner = row.querySelector('.file-owner')?.textContent.trim() || 'me';
+        const canEdit = row.dataset.canEdit === 'true' || row.dataset.permission === 'can edit';
+        const permission = row.dataset.permission || (canEdit ? 'can edit' : 'can view');
 
         openDrawer({
             id: id,
@@ -363,7 +366,9 @@
             date: date,
             created: date,
             updated: date,
-            owner: owner
+            owner: owner,
+            canEdit: canEdit,
+            permission: permission
         });
     }
 
@@ -532,6 +537,8 @@
                 const size = infoBtn.dataset.size || (row && row.dataset.size) || '';
                 const owner = infoBtn.dataset.owner || (row && row.querySelector('.file-owner')?.textContent.trim()) || 'me';
                 const created = infoBtn.dataset.created || (row && row.querySelector('.file-date')?.textContent.trim()) || '';
+                const canEdit = infoBtn.dataset.canEdit === 'true' || (row && row.dataset.canEdit === 'true') || infoBtn.dataset.permission === 'can edit' || (row && row.dataset.permission === 'can edit');
+                const permission = infoBtn.dataset.permission || (row && row.dataset.permission) || (canEdit ? 'can edit' : 'can view');
 
                 openDrawer({
                     id: fileId,
@@ -544,7 +551,9 @@
                     size: size,
                     owner: owner,
                     created: created,
-                    updated: created
+                    updated: created,
+                    canEdit: canEdit,
+                    permission: permission
                 });
             }
         });

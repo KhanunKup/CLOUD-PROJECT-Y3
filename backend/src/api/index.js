@@ -21,7 +21,8 @@ const {
   DeleteCommand, 
   ScanCommand 
 } = require('@aws-sdk/lib-dynamodb');
-const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+// const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+const { resolveUniqueName } = require('./filename-resolver');
 const storage = require('./storage');
 const ArchiveStreamer = require('./archive-streamer');
 const AccessPolicy = require('./access-policy');
@@ -84,7 +85,7 @@ const FILES_TABLE = process.env.FILES_TABLE;
 const SHARES_TABLE = process.env.SHARES_TABLE;
 const USERS_TABLE = process.env.USERS_TABLE;
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET;
-const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN;
+// const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN;
 const REGION = process.env.AWS_REGION;
 
 // Strict mode selection from .env
@@ -108,12 +109,12 @@ if (!IS_MOCK_MODE) {
 console.log(`[EasyDrive API] Mode: ${IS_MOCK_MODE ? '🟡 LOCAL MOCK MODE' : '🟢 AWS CLOUD MODE'}`);
 
 // Initialize AWS Clients (Used when not in mock mode)
-let s3Client, docClient, snsClient;
+let s3Client, docClient;
 if (!IS_MOCK_MODE) {
   s3Client = new S3Client({ region: REGION });
   const ddbClient = new DynamoDBClient({ region: REGION });
   docClient = DynamoDBDocumentClient.from(ddbClient);
-  snsClient = new SNSClient({ region: REGION });
+  // snsClient = new SNSClient({ region: REGION });
 }
 
 // Unified Deep FileRepository
@@ -1724,12 +1725,22 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
     }
   }
 
+  const effectiveFolderName = await resolveUniqueName({
+    isMockMode: IS_MOCK_MODE,
+    mockFiles,
+    docClient,
+    filesTable: FILES_TABLE,
+    userId: req.user.user_id,
+    folderId: parentFolderId,
+    requestedName: folderName
+  });
+
   const fileId = `folder-${crypto.randomUUID()}`;
   const newFolder = {
     file_id: fileId,
     owner_id: req.user.user_id,
     folder_id: parentFolderId,
-    filename: folderName,
+    filename: effectiveFolderName,
     size: 0,
     category: 'folder',
     tags: ['folder'],
@@ -1742,7 +1753,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
   if (IS_MOCK_MODE) {
     mockFiles.unshift(newFolder);
     storage.saveMockFiles(mockFiles);
-    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
+    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${effectiveFolderName}"` });
     return res.json({ success: true, file: newFolder });
   }
 
@@ -1751,7 +1762,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
       TableName: FILES_TABLE,
       Item: newFolder
     }));
-    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
+    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${effectiveFolderName}"` });
     res.json({ success: true, file: newFolder });
   } catch (err) {
     console.error('Create folder error:', err);
@@ -2194,12 +2205,21 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
   if (!filename) return res.status(400).json({ error: 'filename is required' });
 
   if (IS_MOCK_MODE) {
-    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
-    if (!file) return res.status(404).json({ error: 'File not found' });
-    file.filename = filename;
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user, 'edit'));
+    if (!file) return res.status(404).json({ error: 'File not found or permission denied' });
+    const targetFolder = file.folder_id || 'root';
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: true,
+      mockFiles,
+      userId: file.owner_id || req.user.user_id,
+      folderId: targetFolder,
+      requestedName: filename,
+      excludeFileId: fileId
+    });
+    file.filename = effectiveFilename;
     file.updated_at = new Date().toISOString();
     storage.saveMockFiles(mockFiles);
-    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
+    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${effectiveFilename}"` });
     return res.json({ success: true, file });
   }
 
@@ -2296,6 +2316,16 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
       }
     }
 
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: true,
+      mockFiles,
+      userId: file.owner_id || req.user.user_id,
+      folderId: targetFolderId || 'root',
+      requestedName: file.filename,
+      excludeFileId: fileId
+    });
+
+    file.filename = effectiveFilename;
     file.folder_id = targetFolderId;
     file.updated_at = new Date().toISOString();
     storage.saveMockFiles(mockFiles);
@@ -2351,12 +2381,23 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
       }
     }
 
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: false,
+      docClient,
+      filesTable: FILES_TABLE,
+      userId: file.owner_id || req.user.user_id,
+      folderId: targetFolderId || 'root',
+      requestedName: file.filename,
+      excludeFileId: fileId
+    });
+
     const updateRes = await docClient.send(new UpdateCommand({
       TableName: FILES_TABLE,
       Key: { file_id: fileId },
-      UpdateExpression: 'SET folder_id = :fid, updated_at = :up',
+      UpdateExpression: 'SET folder_id = :fid, filename = :fn, updated_at = :up',
       ExpressionAttributeValues: {
         ':fid': targetFolderId || 'root',
+        ':fn': effectiveFilename,
         ':up': new Date().toISOString()
       },
       ReturnValues: 'ALL_NEW'
@@ -3505,14 +3546,8 @@ app.post('/api/shares/:id/verify', async (req, res) => {
     });
     const downloadUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 300 });
 
-    // Send SNS Notification Alert to File Owner
-    if (!IS_MOCK_MODE && snsClient && SNS_TOPIC_ARN) {
-      snsClient.send(new PublishCommand({
-        TopicArn: SNS_TOPIC_ARN,
-        Subject: `[EasyDrive Alert] ไฟล์ของคุณถูกดาวน์โหลด: ${file.filename}`,
-        Message: `มีผู้เข้าดาวน์โหลดไฟล์ "${file.filename}" ผ่านลิงก์แชร์ (${shareId}) เมื่อเวลา ${new Date().toLocaleString('th-TH')}`
-      })).catch(err => console.error('SNS Notification error:', err));
-    }
+    // SNS Notification commented out for Learner Lab policy compliance
+    // if (!IS_MOCK_MODE && snsClient && SNS_TOPIC_ARN) { ... }
 
     res.json({
       success: true,

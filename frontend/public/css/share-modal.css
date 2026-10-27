@@ -108,18 +108,19 @@
 
 .invite-input-container {
     flex: 1;
-    background-color: #3b4131; /* Dark grey-olive for the input area background if we follow the image, wait, image shows #3b4131 for background of modal in image 2 but maybe it's just e2e2e2 in original */
     background-color: #e2e2e2;
     border-radius: 8px;
     display: flex;
     align-items: center;
     padding: 0 10px 0 20px;
-    outline: 2px solid transparent;
-    transition: outline 0.2s;
+    outline: none;
+    border: none;
+    transition: background-color 0.2s;
 }
 .invite-input-container:focus-within {
-    outline: 2px solid #6d7463;
-    background-color: #c5c6c4;
+    outline: none;
+    border: none;
+    background-color: #e2e2e2;
 }
 .invite-input-container:focus-within .invite-input {
     color: #333;
@@ -127,22 +128,37 @@
 
 .invite-input {
     flex: 1;
-    background-color: transparent;
+    background-color: transparent !important;
+    background: transparent !important;
     border: none;
     font-size: 16px;
     font-family: 'Outfit', 'Kanit', sans-serif;
     color: #333;
     padding: 12px 0;
     min-width: 0;
+    outline: none;
+    box-shadow: none !important;
 }
 .invite-input:focus {
     outline: none;
+    box-shadow: none !important;
 }
 .invite-input::placeholder {
-    color: #333; /* Darker placeholder color */
+    color: #616758;
 }
 .invite-input:focus::placeholder {
-    color: #616758; /* Keep placeholder color same on focus */
+    color: #616758;
+}
+
+/* Override Chrome / WebKit Autofill pale-blue/white box */
+.invite-input:-webkit-autofill,
+.invite-input:-webkit-autofill:hover, 
+.invite-input:-webkit-autofill:focus, 
+.invite-input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #e2e2e2 inset !important;
+    -webkit-text-fill-color: #333 !important;
+    transition: background-color 5000s ease-in-out 0s;
+    caret-color: #333;
 }
 
 .invite-permission-dropdown {
@@ -248,6 +264,23 @@
     font-size: 13px;
     white-space: nowrap;
     flex-shrink: 0;
+}
+
+select.permission-dropdown {
+    background-color: #798369;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url('data:image/svg+xml;utf8,<svg fill="white" height="16" viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    padding-right: 26px;
+}
+select.permission-dropdown:focus {
+    outline: 2px solid #555e46;
+}
+select.permission-dropdown option {
+    background-color: #4b5240;
+    color: white;
 }
 
 .permission-dropdown {

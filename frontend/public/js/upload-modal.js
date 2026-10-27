@@ -1064,7 +1064,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isFolder) {
                     iconClass = 'fas fa-folder';
                 } else {
-                    const ext = item.name.split('.').pop().toLowerCase();
+                    const ext = displayName.split('.').pop().toLowerCase();
                     if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
                         iconClass = 'fas fa-image';
                     }
@@ -1492,11 +1492,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     // 4. แทรกแถวลงในหน้าจอ (Realtime DOM Update)
-                    if (!urlData.deduplicated && fileContainer) {
+                    if (fileContainer) {
                         const emptyNotice = fileContainer.querySelector('.empty-state, p');
                         if (emptyNotice) emptyNotice.remove();
 
-                        const safeName = item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        const displayName = (urlData && (urlData.filename || (urlData.file && urlData.file.filename))) || item.name;
+                        const safeName = displayName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
                         const iconSvg = isFolder
                             ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

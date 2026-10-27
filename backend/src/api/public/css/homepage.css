@@ -176,9 +176,15 @@ body {
 }
 
 .search-wrapper:focus-within,
-.search-container:focus-within,
-.search-input:focus {
-    box-shadow: 0 0 0 2px #C4A071;
+.search-container:focus-within {
+    border-color: #C4A071;
+    box-shadow: 0 0 0 2px rgba(196, 160, 113, 0.4), 0 8px 22px rgba(82, 57, 39, 0.08);
+}
+
+.search-input:focus,
+.search-container input:focus {
+    outline: none !important;
+    box-shadow: none !important;
 }
 
 /* ── Page Header / Title — Figma: fill=#423E3B fs=70 ─────── */
@@ -889,10 +895,12 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.82);
     border-radius: 16px;
     box-shadow: 0 8px 22px rgba(82, 57, 39, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .search-wrapper:focus-within {
-    box-shadow: 0 0 0 3px rgba(191, 146, 97, 0.18), 0 10px 24px rgba(82, 57, 39, 0.08);
+    border-color: #C4A071;
+    box-shadow: 0 0 0 2px rgba(196, 160, 113, 0.4), 0 10px 24px rgba(82, 57, 39, 0.08);
 }
 
 .search-icon {

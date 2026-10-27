@@ -145,12 +145,58 @@ window.renderAccessList = function(accessList = [], triggerBtn = null) {
                 </div>
                 <div class="access-details">
                     <span class="time-remaining">${timeRemainingText}</span>
-                    <button class="permission-dropdown">${collab.permission || 'can view'}</button>
+                    <select class="permission-dropdown permission-select" data-email="${userEmail}">
+                        <option value="can view" ${collab.permission !== 'can edit' ? 'selected' : ''}>can view</option>
+                        <option value="can edit" ${collab.permission === 'can edit' ? 'selected' : ''}>can edit</option>
+                    </select>
                     <button type="button" class="remove-access-btn" data-email="${userEmail}" title="Remove collaborator" style="background: none; border: none; color: #ffb4b4; cursor: pointer; padding: 4px 6px; font-size: 15px; margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;"><i class="fas fa-times"></i></button>
                 </div>
             </div>
         `;
         container.insertAdjacentHTML('beforeend', html);
+    });
+
+    // Event listener for inline permission dropdown change
+    container.querySelectorAll('.permission-select').forEach(select => {
+        select.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+        select.addEventListener('change', async (e) => {
+            e.stopPropagation();
+            const targetEmail = (select.dataset.email || '').toLowerCase();
+            const newPerm = select.value;
+            const targetCollab = (window.currentAccessList || []).find(a => (a.email || a.name || '').toLowerCase() === targetEmail);
+            if (targetCollab) {
+                targetCollab.permission = newPerm;
+            }
+
+            // Auto-save to backend immediately
+            const fileId = window.activeShareFileBtn ? (window.activeShareFileBtn.dataset.id || window.activeShareFileBtn.dataset.folderId) : null;
+            if (fileId) {
+                const specificCollaborators = (window.currentAccessList || []).filter(acc => {
+                    const n = (acc.name || acc.email || '').toLowerCase();
+                    return n !== 'anyone' && n !== 'everyone';
+                });
+
+                try {
+                    const res = await fetch(`/api/files/${fileId}/access`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ accessList: specificCollaborators })
+                    });
+                    const data = await res.json();
+                    if (!data.success) throw new Error(data.error || 'Failed to update access');
+                    if (window.showToast) {
+                        window.showToast(`Updated permission for ${targetEmail} to "${newPerm}"`, 'success');
+                    }
+                } catch (err) {
+                    console.error('Auto-save permission error:', err);
+                    if (window.showToast) {
+                        window.showToast('Failed to update permission: ' + err.message, 'error');
+                    }
+                }
+            }
+        });
     });
 
     // Event listener for removing collaborators from access list
@@ -465,14 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const inviteInput = document.getElementById('invite-input');
     const invitePermission = document.getElementById('invite-permission');
     
-    if (inviteInput && invitePermission) {
-        inviteInput.addEventListener('input', (e) => {
-            if (e.target.value.trim().length > 0) {
-                invitePermission.style.display = 'block';
-            } else {
-                invitePermission.style.display = 'none';
-            }
-        });
+    if (invitePermission) {
+        invitePermission.style.display = 'block';
     }
 
     // เมื่อกดปุ่ม Invite: ตรวจสอบความถูกต้องของอีเมล เพิ่มเข้าสู่ currentAccessList และ render ใหม่
@@ -544,6 +584,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ accessList: specificCollaborators })
                 }).then(res => res.json()).then(data => {
                     if (!data.success) throw new Error(data.error);
+                    if (window.markFileAsShared) {
+                        window.markFileAsShared(fileId, {
+                            shareId: `invite-${fileId}`,
+                            accessList: specificCollaborators,
+                            hasPassword: false,
+                            expireHours: '24',
+                            maxDownloads: 0
+                        });
+                    }
                 }).catch(err => {
                     console.error('Auto-save collaborator error:', err);
                 });
@@ -551,7 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             inviteBtn.textContent = 'Invited!';
             if (inviteInput) inviteInput.value = '';
-            if (invitePermission) invitePermission.style.display = 'none';
+            // invitePermission stays visible
 
             setTimeout(() => {
                 inviteBtn.textContent = 'Invite';
