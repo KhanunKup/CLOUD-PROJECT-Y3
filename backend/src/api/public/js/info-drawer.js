@@ -14,7 +14,8 @@
     let quickPreviewBtn, quickDownloadBtn, manageAccessBtn, editTagsBtn;
     let tabBtns, tabPanes, timelineEl;
     let detailsTabBtn = null, activityTabBtn = null;
-
+    let infoOwnerName, infoOwnerRole, cloudSectionEl;
+    
     function initElements() {
         infoDrawer = document.getElementById('infoDrawer');
         infoDrawerOverlay = document.getElementById('infoDrawerOverlay');
@@ -177,11 +178,13 @@
             quickPreviewBtn.style.display = isFolder ? 'none' : 'inline-flex';
         }
 
-        // Ownership & Role check (Activity history is restricted to owner and admin)
+        // Ownership & Role check (Dynamic User Detection)
         const currentUserRole = (infoDrawer && infoDrawer.dataset.currentUserRole) || window.currentUserRole || 'user';
+        const currentUserName = (infoDrawer && infoDrawer.dataset.currentUserName) || window.currentUserName || 'You';
         const isAdmin = currentUserRole === 'admin';
-        const isOwner = (data.isOwner === true || data.isOwner === 'true' || data.owner === 'me' || data.owner === 'Admin Rick') && data.isOwner !== false && data.isOwner !== 'false';
+        const isOwner = (data.isOwner === true || data.isOwner === 'true' || data.owner === 'me' || data.owner === currentUserName) && data.isOwner !== false && data.isOwner !== 'false';
         const canViewActivity = isOwner || isAdmin;
+        const displayOwnerName = isOwner ? `${currentUserName} (You)` : (data.owner || 'Collaborator');
 
         // Manage Access button & Edit Tags button only available for owner
         if (manageAccessBtn) {
@@ -201,7 +204,7 @@
 
         // Owner Info & Access Section
         if (infoOwnerName) {
-            infoOwnerName.textContent = isOwner ? 'Admin Rick (You)' : (data.owner || 'Collaborator');
+            infoOwnerName.textContent = displayOwnerName;
         }
         if (infoOwnerRole) {
             infoOwnerRole.textContent = isOwner ? 'Owner' : 'Shared by owner';
@@ -213,7 +216,8 @@
             if (isOwner) {
                 accessStatusText.textContent = isShared ? 'Shared (Collaborative link active)' : 'Private (Only you have access)';
             } else {
-                accessStatusText.textContent = 'Shared with you (Viewer access)';
+                const canEdit = Boolean(data.canEdit || data.permission === 'can edit');
+                accessStatusText.textContent = canEdit ? 'Shared with you (Editor access)' : 'Shared with you (Viewer access)';
             }
         }
         if (accessStatusEl) {
@@ -232,7 +236,7 @@
         if (propLocationEl) {
             propLocationEl.textContent = isOwner ? (data.location || 'My Drive') : 'Shared with me';
         }
-        if (propOwnerEl) propOwnerEl.textContent = isOwner ? 'Admin Rick' : (data.owner || 'Collaborator');
+        if (propOwnerEl) propOwnerEl.textContent = isOwner ? currentUserName : (data.owner || 'Collaborator');
         if (propModifiedEl) propModifiedEl.textContent = formatDate(data.updated || data.updatedAt || data.created);
         if (propCreatedEl) propCreatedEl.textContent = formatDate(data.created || data.createdAt || data.date);
 
@@ -282,7 +286,7 @@
                     <span class="info-timeline-dot"><i class="fas fa-pen"></i></span>
                     <div class="info-timeline-content">
                         <span class="info-timeline-action">Modified / Synced</span>
-                        <span class="info-timeline-user">by ${data.owner || 'Admin Rick'}</span>
+                        <span class="info-timeline-user">by ${isOwner ? currentUserName : (data.owner || 'Owner')}</span>
                         <span class="info-timeline-time">${modTimeStr}</span>
                     </div>
                 </div>
@@ -290,7 +294,7 @@
                     <span class="info-timeline-dot"><i class="fas fa-cloud-upload-alt"></i></span>
                     <div class="info-timeline-content">
                         <span class="info-timeline-action">Uploaded to EasyDrive S3</span>
-                        <span class="info-timeline-user">by ${data.owner || 'Admin Rick'}</span>
+                        <span class="info-timeline-user">by ${isOwner ? currentUserName : (data.owner || 'Owner')}</span>
                         <span class="info-timeline-time">${timeStr}</span>
                     </div>
                 </div>
@@ -348,6 +352,8 @@
         const tags = row.dataset.tags ? row.dataset.tags.split(',') : [];
         const date = row.querySelector('.file-date')?.textContent.trim() || '';
         const owner = row.querySelector('.file-owner')?.textContent.trim() || 'me';
+        const canEdit = row.dataset.canEdit === 'true' || row.dataset.permission === 'can edit';
+        const permission = row.dataset.permission || (canEdit ? 'can edit' : 'can view');
 
         openDrawer({
             id: id,
@@ -360,7 +366,9 @@
             date: date,
             created: date,
             updated: date,
-            owner: owner
+            owner: owner,
+            canEdit: canEdit,
+            permission: permission
         });
     }
 
@@ -527,8 +535,10 @@
                 const category = infoBtn.dataset.category || (row && row.dataset.category) || '';
                 const tags = infoBtn.dataset.tags || (row && row.dataset.tags) || '';
                 const size = infoBtn.dataset.size || (row && row.dataset.size) || '';
-                const owner = infoBtn.dataset.owner || (row && row.querySelector('.file-owner')?.textContent.trim()) || 'Admin Rick';
+                const owner = infoBtn.dataset.owner || (row && row.querySelector('.file-owner')?.textContent.trim()) || 'me';
                 const created = infoBtn.dataset.created || (row && row.querySelector('.file-date')?.textContent.trim()) || '';
+                const canEdit = infoBtn.dataset.canEdit === 'true' || (row && row.dataset.canEdit === 'true') || infoBtn.dataset.permission === 'can edit' || (row && row.dataset.permission === 'can edit');
+                const permission = infoBtn.dataset.permission || (row && row.dataset.permission) || (canEdit ? 'can edit' : 'can view');
 
                 openDrawer({
                     id: fileId,
@@ -541,7 +551,9 @@
                     size: size,
                     owner: owner,
                     created: created,
-                    updated: created
+                    updated: created,
+                    canEdit: canEdit,
+                    permission: permission
                 });
             }
         });

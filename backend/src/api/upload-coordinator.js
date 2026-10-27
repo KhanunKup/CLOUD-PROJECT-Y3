@@ -1,10 +1,11 @@
 // backend/src/api/upload-coordinator.js
-// Deep module coordinating pre-upload quota headroom verification and S3 pre-signed upload URL generation
+// Deep module coordinating pre-upload quota headroom verification, folder-scoped duplicate filename resolution, and S3 pre-signed upload URL generation
 
 const crypto = require('crypto');
 const { PutObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
 const { PutCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { getUniqueFilename, getExistingFilenamesInMock, getExistingFilenamesInCloud } = require('./filename-resolver');
 
 // Pending uploads that are never completed expire via DynamoDB TTL (expires_at)
 const PENDING_TTL_SECONDS = 24 * 60 * 60;
@@ -51,7 +52,7 @@ class UploadCoordinator {
   }
 
   /**
-   * Prepares pre-signed upload tokens and reserves quota
+   * Prepares pre-signed upload tokens and reserves quota with in-folder unique naming
    * @param {Object} user - Authenticated user context
    * @param {Array<{filename: string, size: number, folder_id?: string, parent_id?: string, contentType?: string}>} fileRequests
    * @param {Object} context - { host, protocol }
@@ -64,6 +65,7 @@ class UploadCoordinator {
     }
 
     const userId = user.user_id || user.id || 'anonymous';
+    const userName = user.name || user.username || user.email || 'User';
 
     // 1. Quota Guard: Enforce storage quota limits across requested files
     const totalRequestedBytes = fileRequests.reduce((acc, f) => acc + (Number(f.size) || 0), 0);
@@ -79,11 +81,28 @@ class UploadCoordinator {
     const items = [];
     const newMockRecords = [];
 
+    // Preload and cache existing filenames per folder in this batch (Single query per folder)
+    const folderNamesMap = new Map();
+    const getFolderNames = async (fId) => {
+      const normFId = (!fId || fId === 'root') ? 'root' : fId;
+      if (!folderNamesMap.has(normFId)) {
+        let names = [];
+        if (this.isMockMode) {
+          const liveMockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
+          names = getExistingFilenamesInMock(liveMockFiles, userId, normFId);
+        } else {
+          names = await getExistingFilenamesInCloud(this.docClient, this.filesTable, userId, normFId);
+        }
+        folderNamesMap.set(normFId, new Set(names.map(n => (n || '').trim())));
+      }
+      return folderNamesMap.get(normFId);
+    };
+
     for (const req of fileRequests) {
-      const filename = req.filename || req.name;
+      const originalFilename = req.filename || req.name;
       const size = Number(req.size) || 0;
-      const incomingHash = req.file_hash || req.hash || null; // รับค่า Hash จาก Frontend
-      if (!filename || size <= 0) {
+      const incomingHash = req.file_hash || req.hash || null;
+      if (!originalFilename || size <= 0) {
         const err = new Error('filename and positive size are required for all items');
         err.statusCode = 400;
         throw err;
@@ -91,72 +110,24 @@ class UploadCoordinator {
 
       const rawFolderId = req.folder_id || req.parent_id;
       const effectiveFolderId = (rawFolderId && rawFolderId !== 'root') ? rawFolderId : 'root';
-      const category = getCategoryFromExtension(filename);
+      const category = getCategoryFromExtension(originalFilename);
 
-      // --- 1. ตรวจสอบ Deduplication บน Local Mock Mode ---
+      // Resolve unique filename within effectiveFolderId (same folder cannot have duplicates)
+      const existingFolderNames = await getFolderNames(effectiveFolderId);
+      const filename = getUniqueFilename(existingFolderNames, originalFilename);
+      existingFolderNames.add(filename); // Register for subsequent files in this batch
+
+      const fileId = `file-${crypto.randomUUID()}`;
+      const s3Key = effectiveFolderId !== 'root'
+        ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
+        : `uploads/${userId}/${fileId}/${filename}`;
+
       if (this.isMockMode) {
-        const liveMockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
-        // ค้นหาไฟล์เดิมของผู้ใช้ที่มี Hash ตรงกัน
-        const duplicateFile = incomingHash 
-          ? liveMockFiles.find(f => f.owner_id === userId && f.status === 'active' && f.file_hash === incomingHash)
-          : null;
-
-        if (duplicateFile) {
-          const liveMockFiles = typeof this.mockFilesRef === 'function' ? this.mockFilesRef() : [];
-          
-          // แยกชื่อไฟล์กับนามสกุลเพื่อเติม index เช่น "test.txt" -> base: "test", ext: ".txt"
-          const lastDotIndex = filename.lastIndexOf('.');
-          const baseName = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
-          const extName = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
-
-          // หาว่าในโฟลเดอร์เดียวกันนี้ของผู้ใช้ มีชื่อขึ้นต้นแบบนี้ไปแล้วกี่อัน
-          let index = 1;
-          let newFilename = `${baseName} (${index})${extName}`;
-          while (liveMockFiles.some(f => f.owner_id === userId && f.folder_id === effectiveFolderId && f.status === 'active' && f.filename === newFilename)) {
-            index++;
-            newFilename = `${baseName} (${index})${extName}`;
-          }
-
-          const newFileId = `file-${crypto.randomUUID()}`;
-          const newMockRecord = {
-            file_id: newFileId,
-            owner_id: userId,
-            folder_id: effectiveFolderId,
-            filename: newFilename, // ใช้ชื่อใหม่ที่มี index
-            size,
-            category,
-            tags: [category, newFilename.split('.').pop().toLowerCase()],
-            file_hash: incomingHash,
-            s3_key: duplicateFile.s3_key, // ใช้ไฟล์ binary เดิมบน S3
-            status: 'active',
-            is_duplicate: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-
-          newMockRecords.push(newMockRecord);
-          items.push({
-            file_id: newFileId,
-            filename: newFilename,
-            key: duplicateFile.s3_key,
-            s3Key: duplicateFile.s3_key,
-            category,
-            uploadUrl: null, // ไม่ต้อง PUT binary ขึ้น S3 ซ้ำ
-            deduplicated: true,
-            file: newMockRecord
-          });
-          continue;
-        }
-
-        // กรณีเป็นไฟล์ใหม่ (ไม่ซ้ำ)
-        const fileId = `file-${crypto.randomUUID()}`;
-        const s3Key = effectiveFolderId !== 'root'
-          ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
-          : `uploads/${userId}/${fileId}/${filename}`;
         const uploadUrl = `${protocol}://${host}/mock-upload?key=${encodeURIComponent(s3Key)}&filename=${encodeURIComponent(filename)}&folder_id=${encodeURIComponent(effectiveFolderId)}`;
         const mockFileRecord = {
           file_id: fileId,
           owner_id: userId,
+          owner_name: userName,
           folder_id: effectiveFolderId,
           filename,
           size,
@@ -181,101 +152,7 @@ class UploadCoordinator {
           file: mockFileRecord
         });
       } else {
-        // --- 2. ตรวจสอบ Deduplication บน AWS Cloud Mode (DynamoDB) ---
-        let duplicateCloudFile = null;
-        if (incomingHash && this.docClient && this.filesTable) {
-          try {
-            const { QueryCommand } = require('@aws-sdk/lib-dynamodb');
-            // ค้นหาไฟล์ของผู้ใช้ที่มีสถานะ active
-            const qRes = await this.docClient.send(new QueryCommand({
-              TableName: this.filesTable,
-              IndexName: 'OwnerIndex',
-              KeyConditionExpression: 'owner_id = :owner',
-              FilterExpression: '#st = :status AND file_hash = :hash',
-              ExpressionAttributeNames: { '#st': 'status' },
-              ExpressionAttributeValues: {
-                ':owner': userId,
-                ':status': 'active',
-                ':hash': incomingHash
-              }
-            }));
-            if (qRes.Items && qRes.Items.length > 0) {
-              duplicateCloudFile = qRes.Items[0];
-            }
-          } catch (dupErr) {
-            console.warn('[UploadCoordinator] Deduplication check skipped:', dupErr.message);
-          }
-        }
-
-        if (duplicateCloudFile) {
-          const lastDotIndex = filename.lastIndexOf('.');
-          const baseName = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
-          const extName = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
-
-          // ดึงไฟล์ทั้งหมดในโฟลเดอร์เพื่อหาเลข index ที่ไม่ซ้ำ
-          let nextIndex = 1;
-          let newFilename = `${baseName} (${nextIndex})${extName}`;
-          try {
-            const listRes = await this.docClient.send(new QueryCommand({
-              TableName: this.filesTable,
-              IndexName: 'OwnerIndex',
-              KeyConditionExpression: 'owner_id = :owner',
-              FilterExpression: '#st = :status AND folder_id = :fid',
-              ExpressionAttributeNames: { '#st': 'status' },
-              ExpressionAttributeValues: {
-                ':owner': userId,
-                ':status': 'active',
-                ':fid': effectiveFolderId
-              }
-            }));
-            const existingNames = new Set((listRes.Items || []).map(f => f.filename));
-            while (existingNames.has(newFilename)) {
-              nextIndex++;
-              newFilename = `${baseName} (${nextIndex})${extName}`;
-            }
-          } catch (_) {}
-
-          const newFileId = `file-${crypto.randomUUID()}`;
-          const cloudRecord = {
-            file_id: newFileId,
-            owner_id: userId,
-            folder_id: effectiveFolderId,
-            filename: newFilename,
-            size,
-            category,
-            tags: [category, newFilename.split('.').pop().toLowerCase()],
-            file_hash: incomingHash,
-            s3_key: duplicateCloudFile.s3_key,
-            status: 'active',
-            is_duplicate: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-
-          await this.docClient.send(new PutCommand({
-            TableName: this.filesTable,
-            Item: cloudRecord
-          }));
-
-          items.push({
-            file_id: newFileId,
-            filename: newFilename,
-            key: duplicateCloudFile.s3_key,
-            s3Key: duplicateCloudFile.s3_key,
-            category,
-            uploadUrl: null,
-            deduplicated: true,
-            file: cloudRecord
-          });
-          continue;
-        }
-
-        // กรณีไฟล์ใหม่: ออก S3 Presigned URL ตามปกติ
-        const fileId = `file-${crypto.randomUUID()}`;
-        const s3Key = effectiveFolderId !== 'root'
-          ? `uploads/${userId}/${effectiveFolderId}/${fileId}/${filename}`
-          : `uploads/${userId}/${fileId}/${filename}`;
-
+        // AWS Cloud Mode
         let uploadUrl = '';
         if (this.s3Client && this.storageBucket) {
           const command = new PutObjectCommand({
@@ -290,7 +167,6 @@ class UploadCoordinator {
               original_name: encodeURIComponent(filename)
             }
           });
-          // signableHeaders forces content-length into the signature so S3 rejects size mismatches
           uploadUrl = await getSignedUrl(this.s3Client, command, {
             expiresIn: 3600,
             signableHeaders: new Set(['content-length'])
@@ -300,6 +176,7 @@ class UploadCoordinator {
         const cloudFileRecord = {
           file_id: fileId,
           owner_id: userId,
+          owner_name: userName,
           folder_id: effectiveFolderId,
           filename,
           size,

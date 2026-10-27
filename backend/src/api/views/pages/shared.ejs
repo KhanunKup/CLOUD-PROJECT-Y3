@@ -72,7 +72,9 @@
              data-is-owner="<%= file.isOwner ? 'true' : 'false' %>"
              data-date="<%= file.createdAt || file.uploadDate || '' %>"
              data-tags="<%= (file.tags || []).join(',') %>"
-             data-share-url="<%= file.shareUrl || '' %>">
+             data-share-url="<%= file.shareUrl || '' %>"
+             data-permission="<%= file.permission || 'can view' %>"
+             data-can-edit="<%= (file.permission === 'can edit' || file.canEdit) ? 'true' : 'false' %>">
           <div class="file-name">
             <% if (file.type === 'folder') { %>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -131,7 +133,9 @@
              data-is-owner="true"
              data-date="<%= file.createdAt || file.uploadDate || '' %>"
              data-tags="<%= (file.tags || []).join(',') %>"
-             data-share-url="<%= file.shareUrl || '' %>">
+             data-share-url="<%= file.shareUrl || '' %>"
+             data-permission="<%= file.permission || 'can view' %>"
+             data-can-edit="<%= (file.permission === 'can edit' || file.canEdit) ? 'true' : 'false' %>">
           <div class="file-name">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -153,8 +157,10 @@
                data-access="<%= encodeURIComponent(JSON.stringify(file.accessList || [])) %>">
             <% if (file.hasPassword) { %>
               <span class="badge-share-status badge-pw" title="Password Protected"><i class="fas fa-lock"></i> Password</span>
-            <% } else { %>
+            <% } else if (file.shareUrl) { %>
               <span class="badge-share-status badge-public" title="Public Link"><i class="fas fa-globe"></i> Public</span>
+            <% } else { %>
+              <span class="badge-share-status badge-public" style="background: rgba(107, 115, 92, 0.25); color: #555e46;" title="Shared with collaborators"><i class="fas fa-users"></i> Shared</span>
             <% } %>
 
             <% if (file.remainingHours !== null) { %>
@@ -196,7 +202,7 @@
 
 <!-- เรียกใช้ JS ของ Menu Dropdown -->
 <script src="/js/toast.js"></script>
-<script src="/js/menu.js"></script>
+<script src="/js/menu.js?v=<%= Date.now() %>"></script>
 <script src="/js/info-drawer.js"></script>
 <script src="/js/storage-modal.js"></script>
 </body>

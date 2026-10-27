@@ -361,7 +361,7 @@ async function uploadFolderRecursive({
         body: JSON.stringify({
             folderName: folderItem.name,
             folder_id: parentFolderId,
-            reuseExisting: true
+            reuseExisting: false
         })
     });
     const rootData = await rootRes.json();
@@ -1068,7 +1068,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isFolder) {
                     iconClass = 'fas fa-folder';
                 } else {
-                    const ext = item.name.split('.').pop().toLowerCase();
+                    const ext = (item.name || '').split('.').pop().toLowerCase();
                     if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
                         iconClass = 'fas fa-image';
                     }
@@ -1413,6 +1413,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
+                const renamedItems = [];
+
                 for (const item of selectedFiles) {
                     const isFolder = item.type === 'folder';
                     let fileId = `file-${Date.now()}`;
@@ -1512,7 +1514,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         const emptyNotice = fileContainer.querySelector('.empty-state, p');
                         if (emptyNotice) emptyNotice.remove();
 
-                        const displayName = urlData?.filename || urlData?.file?.filename || item.name;
+                        const displayName = urlData?.filename || urlData?.file?.filename || uploadedFileRecord?.filename || item.name;
+                        if (displayName && displayName !== item.name) {
+                            renamedItems.push({ original: item.name, newName: displayName });
+                        }
                         const safeName = displayName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
                         const iconSvg = isFolder
@@ -1537,7 +1542,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                    <button class="option-item open-rename-modal" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-pencil-alt"></i> Rename</button>
                                    <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
                                    <button class="option-item open-share-modal" data-id="${fileId}" data-filename="${safeName}" data-access="[]"><i class="fas fa-share"></i> Share</button>
-                                   <button class="option-item open-info-drawer" data-id="${fileId}" data-filename="${safeName}" data-type="${isFolder ? 'folder' : 'file'}" data-category="${fileCat}"><i class="fas fa-info-circle"></i> Information</button>
+                                   <button class="option-item open-info-drawer" data-id="${fileId}" data-filename="${safeName}" data-type="${isFolder ? 'folder' : 'file'}" data-category="${fileCat}" data-owner="me"><i class="fas fa-info-circle"></i> Information</button>
                                    <button class="option-item open-delete-modal move-to-trash-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
                                </div>`
                             : `<div class="options-dropdown file-options">
@@ -1548,7 +1553,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                    <button class="option-item open-tags-modal" data-id="${fileId}" data-filename="${safeName}" data-tags="${tagsJoined}"><i class="fas fa-tags"></i> Edit Tags</button>
                                    <button class="option-item copy-link-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-link"></i> <span class="copy-link-text">Copy link</span></button>
                                    <button class="option-item open-share-modal" data-id="${fileId}" data-filename="${safeName}" data-access="[]"><i class="fas fa-share"></i> Share</button>
-                                   <button class="option-item open-info-drawer" data-id="${fileId}" data-filename="${safeName}" data-type="${isFolder ? 'folder' : 'file'}" data-category="${fileCat}"><i class="fas fa-info-circle"></i> Information</button>
+                                   <button class="option-item open-info-drawer" data-id="${fileId}" data-filename="${safeName}" data-category="${fileCat}" data-owner="me"><i class="fas fa-info-circle"></i> Information</button>
                                    <button class="option-item open-delete-modal move-to-trash-action" data-id="${fileId}" data-filename="${safeName}"><i class="fas fa-trash-alt"></i> <span class="move-to-trash-text">Move to Trash</span></button>
                                </div>`;
 
@@ -1601,8 +1606,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                if (successCount > 0 && window.showToast) {
-                    window.showToast(`Uploaded ${successCount} item(s) successfully!`, 'success');
+                if (window.showToast) {
+                    if (renamedItems.length > 0) {
+                        if (selectedFiles.length === 1) {
+                            window.showToast(`Uploaded "${renamedItems[0].newName}" (renamed from duplicate)`, 'success');
+                        } else {
+                            const renamedList = renamedItems.map(r => `"${r.newName}"`).join(', ');
+                            window.showToast(`Uploaded ${successCount} item(s) successfully! (${renamedList} renamed from duplicate)`, 'success');
+                        }
+                    } else {
+                        window.showToast(`Uploaded ${successCount} item(s) successfully!`, 'success');
+                    }
                 }
 
                 // Refresh sidebar storage and filters

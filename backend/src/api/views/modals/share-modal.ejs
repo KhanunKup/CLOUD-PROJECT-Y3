@@ -88,11 +88,11 @@
         <!-- Invite -->
         <div class="invite-section">
             <div class="invite-input-container">
-                <input type="text" class="invite-input" id="invite-input" placeholder="Add comma separated emails to invite">
-                <select class="invite-permission-dropdown" id="invite-permission" style="display: none;">
+                <input type="text" class="invite-input" id="invite-input" placeholder="Add comma separated emails to invite" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                <select class="invite-permission-dropdown" id="invite-permission">
                     <option value="can view">can view</option>
                     <option value="can edit">can edit</option>
-                    <option value="can comment">can comment</option>
+
                 </select>
             </div>
             <button class="invite-btn" id="invite-btn">Invite</button>
@@ -117,4 +117,4 @@
     </div>
 </div>
 
-<script src="/js/share-modal.js"></script>
+<script src="/js/share-modal.js?v=<%= Date.now() %>"></script>

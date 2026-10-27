@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 
 class FileRepository {
-  constructor({ isMockMode, storage, docClient, s3Client, storageBucket, filesTable, usersTable, defaultQuota = 53687091200 }) {
+  constructor({ isMockMode, storage, docClient, s3Client, storageBucket, filesTable, usersTable, defaultQuota = 53687091200, getUserQuota = null }) {
     this.isMockMode = isMockMode;
     this.storage = storage;
     this.docClient = docClient;
@@ -15,6 +15,7 @@ class FileRepository {
     this.filesTable = filesTable;
     this.usersTable = usersTable || process.env.USERS_TABLE || "easydrive-users";
     this.defaultQuota = defaultQuota;
+    this.getUserQuota = getUserQuota;
   }
 
   canAccess(file, user) {
@@ -260,13 +261,38 @@ class FileRepository {
       const files = this.storage.loadMockFiles();
       const activeFolderIds = new Set(files.filter(f => f.status === 'active' && f.category === 'folder').map(f => f.file_id));
 
+      // Collect all descendants for any folders in idSet
+      const allDescendantsToRestore = new Set();
       files.forEach(f => {
-        if (idSet.has(f.file_id) && this.canAccess(f, user)) {
+        if (idSet.has(f.file_id) && f.category === 'folder') {
+          activeFolderIds.add(f.file_id);
+          const queue = [f.file_id];
+          while (queue.length > 0) {
+            const pid = queue.shift();
+            files.forEach(child => {
+              if (child.folder_id === pid && child.status === 'trash' && !idSet.has(child.file_id)) {
+                allDescendantsToRestore.add(child.file_id);
+                if (child.category === 'folder') {
+                  activeFolderIds.add(child.file_id);
+                  queue.push(child.file_id);
+                }
+              }
+            });
+          }
+        }
+      });
+
+      const itemsToRestore = new Set([...idSet, ...allDescendantsToRestore]);
+
+      files.forEach(f => {
+        if (itemsToRestore.has(f.file_id) && this.canAccess(f, user)) {
           f.status = 'active';
           delete f.trashed_at;
-          affectedCount++;
+          if (idSet.has(f.file_id)) {
+            affectedCount++;
+          }
 
-          // If parent folder is no longer active, move restored item to root
+          // If parent folder is no longer active and not being restored, move restored item to root
           if (f.folder_id && !activeFolderIds.has(f.folder_id)) {
             f.folder_id = null;
           }
@@ -289,22 +315,21 @@ class FileRepository {
 
       // Find active folder IDs
       const activeFolderIds = new Set(userFiles.filter(f => f.status === 'active' && f.category === 'folder').map(f => f.file_id));
-      userFiles.forEach(f => {
-        if (idSet.has(f.file_id) && f.category === 'folder') {
-          activeFolderIds.add(f.file_id);
-        }
-      });
 
       const allDescendantsToRestore = new Set();
       userFiles.forEach(f => {
         if (idSet.has(f.file_id) && f.category === 'folder') {
+          activeFolderIds.add(f.file_id);
           const queue = [f.file_id];
           while (queue.length > 0) {
             const pid = queue.shift();
             userFiles.forEach(child => {
               if (child.folder_id === pid && child.status === 'trash' && !idSet.has(child.file_id)) {
                 allDescendantsToRestore.add(child.file_id);
-                if (child.category === 'folder') queue.push(child.file_id);
+                if (child.category === 'folder') {
+                  activeFolderIds.add(child.file_id);
+                  queue.push(child.file_id);
+                }
               }
             });
           }
@@ -452,7 +477,7 @@ class FileRepository {
         breakdown[cat] = (breakdown[cat] || 0) + sz;
       }
     }
-    const quota = DEFAULT_STORAGE_QUOTA;
+    const quota = (this.getUserQuota && typeof this.getUserQuota === 'function') ? this.getUserQuota(userId) : (this.defaultQuota || DEFAULT_STORAGE_QUOTA);
     const free = Math.max(0, quota - totalUsed);
     const percent = quota > 0 ? parseFloat(Math.min(100, (totalUsed / quota) * 100).toFixed(1)) : 0;
 

@@ -1,6 +1,8 @@
 <!-- backend/src/api/views/modals/info-drawer.ejs -->
 <div class="info-drawer-overlay" id="infoDrawerOverlay" style="display: none;"></div>
-<aside class="info-drawer" id="infoDrawer" aria-hidden="true" data-current-user-role="<%= typeof user !== 'undefined' && user && user.role ? user.role : 'user' %>">
+<aside class="info-drawer" id="infoDrawer" aria-hidden="true" 
+    data-current-user-role="<%= typeof user !== 'undefined' && user && user.role ? user.role : 'user' %>"
+    data-current-user-name="<%= typeof user !== 'undefined' && user && (user.name || user.username) ? (user.name || user.username) : 'You' %>">
     <!-- Drawer Header -->
     <div class="info-drawer-header">
         <div class="info-drawer-title-group">
@@ -56,7 +58,7 @@
                         <i class="fas fa-user"></i>
                     </div>
                     <div class="info-user-info">
-                        <span class="info-user-name" id="infoOwnerName">Admin Rick</span>
+                        <span class="info-user-name" id="infoOwnerName">—</span>
                         <span class="info-user-role" id="infoOwnerRole">Owner</span>
                     </div>
                 </div>
@@ -88,7 +90,7 @@
                 </div>
                 <div class="info-prop-row">
                     <span class="info-prop-label">Owner</span>
-                    <span class="info-prop-value" id="infoPropOwner">Admin Rick</span>
+                    <span class="info-prop-value" id="infoPropOwner">—</span>
                 </div>
                 <div class="info-prop-row">
                     <span class="info-prop-label">Modified</span>

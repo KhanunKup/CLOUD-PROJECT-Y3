@@ -89,7 +89,7 @@
                      data-type="<%= file.type %>"
                      data-pinned="<%= file.isPinned ? 'true' : 'false' %>"
                      data-size="<%= file.size || '' %>"
-                     data-owner="<%= file.owner || 'Admin Rick' %>"
+                     data-owner="<%= file.owner || 'me' %>"
                      data-folder-id="<%= file.folderId || '' %>"
                      data-category="<%= file.category || 'other' %>"
                      data-tags="<%= (file.tags || []).join(',') %>"
@@ -172,7 +172,7 @@
 <%- include('../partials/floating-batch-bar') %>
 
 <script src="/js/toast.js"></script>
-<script src="/js/menu.js"></script>
+<script src="/js/menu.js?v=<%= Date.now() %>"></script>
 <script src="/js/info-drawer.js"></script>
 <script src="/js/storage-modal.js"></script>
 <script src="/js/drag-move.js"></script>
