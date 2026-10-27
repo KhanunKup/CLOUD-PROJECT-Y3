@@ -41,4 +41,5 @@ module "alerts" {
   lambda_function_name = module.compute.function_name
   api_id               = module.api.api_id
   invocation_threshold = var.invocation_alarm_threshold
+  region               = var.region
 }
