@@ -537,14 +537,6 @@
                 </select>
             </div>
 
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 13px; font-weight: 600; color: #554335; margin-bottom: 6px;">Account Status:</label>
-                <select id="editUserStatus" style="width: 100%; padding: 10px 14px; border: 1.5px solid #d1bdae; border-radius: 10px; box-sizing: border-box; font-size: 14px; outline: none; font-family: inherit;">
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
-            </div>
-
             <div style="margin-bottom: 24px;">
                 <label style="display: block; font-size: 13px; font-weight: 600; color: #554335; margin-bottom: 6px;">Storage Quota:</label>
                 <select id="editUserQuota" style="width: 100%; padding: 10px 14px; border: 1.5px solid #d1bdae; border-radius: 10px; box-sizing: border-box; font-size: 14px; outline: none; font-family: inherit;">
@@ -615,7 +607,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const editUserId = document.getElementById('editUserId');
     const editUserName = document.getElementById('editUserName');
     const editUserRole = document.getElementById('editUserRole');
-    const editUserStatus = document.getElementById('editUserStatus');
     const editUserQuota = document.getElementById('editUserQuota');
 
     function closeEditModal() {
@@ -635,7 +626,6 @@ document.addEventListener('DOMContentLoaded', () => {
             editUserId.value = btn.dataset.id;
             editUserName.value = btn.dataset.name;
             editUserRole.value = btn.dataset.role;
-            editUserStatus.value = btn.dataset.status || 'active';
             if (btn.dataset.quota) {
                 editUserQuota.value = btn.dataset.quota;
             }
@@ -653,7 +643,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const userId = editUserId.value;
             const newRole = editUserRole.value;
-            const newStatus = editUserStatus.value;
             const newQuota = parseInt(editUserQuota.value);
 
             try {
@@ -662,8 +651,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         role: newRole,
-                        status: newStatus,
-                        quota: newQuota
+                                                quota: newQuota
                     })
                 });
 
@@ -676,21 +664,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const row = document.querySelector(`.user-row[data-id="${userId}"]`);
                 if (row) {
                     row.dataset.role = newRole;
-                    row.dataset.status = newStatus;
                     const roleBadge = row.querySelector('.badge');
                     if (roleBadge) {
                         roleBadge.className = `badge ${newRole === 'admin' ? 'badge-admin' : 'badge-user'}`;
                         roleBadge.textContent = newRole === 'admin' ? 'Admin' : 'User';
                     }
-                    const statusBadge = row.querySelector('.badge-status');
-                    if (statusBadge) {
-                        statusBadge.className = `badge-status ${newStatus === 'active' ? 'status-active' : 'status-inactive'}`;
-                        statusBadge.textContent = newStatus === 'active' ? 'Active' : 'Inactive';
-                    }
                     const editBtn = row.querySelector('.open-edit-user-btn');
                     if (editBtn) {
                         editBtn.dataset.role = newRole;
-                        editBtn.dataset.status = newStatus;
                         editBtn.dataset.quota = newQuota;
                     }
                 }

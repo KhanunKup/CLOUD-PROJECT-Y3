@@ -21,7 +21,8 @@ const {
   DeleteCommand, 
   ScanCommand 
 } = require('@aws-sdk/lib-dynamodb');
-const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+// const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+const { resolveUniqueName } = require('./filename-resolver');
 const storage = require('./storage');
 const ArchiveStreamer = require('./archive-streamer');
 const AccessPolicy = require('./access-policy');
@@ -48,7 +49,7 @@ app.use((req, res, next) => {
 const apiPublicDir = path.join(__dirname, 'public');
 const rootPublicDir = path.resolve(__dirname, '../../../frontend/public');
 const staticOptions = {
-  maxAge: '1d',
+  maxAge: 0,
   etag: true
 };
 if (fs.existsSync(apiPublicDir)) {
@@ -84,7 +85,7 @@ const FILES_TABLE = process.env.FILES_TABLE;
 const SHARES_TABLE = process.env.SHARES_TABLE;
 const USERS_TABLE = process.env.USERS_TABLE;
 const STORAGE_BUCKET = process.env.STORAGE_BUCKET;
-const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN;
+// const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN;
 const REGION = process.env.AWS_REGION;
 
 // Strict mode selection from .env
@@ -108,12 +109,12 @@ if (!IS_MOCK_MODE) {
 console.log(`[EasyDrive API] Mode: ${IS_MOCK_MODE ? '🟡 LOCAL MOCK MODE' : '🟢 AWS CLOUD MODE'}`);
 
 // Initialize AWS Clients (Used when not in mock mode)
-let s3Client, docClient, snsClient;
+let s3Client, docClient;
 if (!IS_MOCK_MODE) {
   s3Client = new S3Client({ region: REGION });
   const ddbClient = new DynamoDBClient({ region: REGION });
   docClient = DynamoDBDocumentClient.from(ddbClient);
-  snsClient = new SNSClient({ region: REGION });
+  // snsClient = new SNSClient({ region: REGION });
 }
 
 // Unified Deep FileRepository
@@ -124,7 +125,11 @@ const fileRepo = new FileRepository({
   s3Client,
   storageBucket: STORAGE_BUCKET,
   filesTable: FILES_TABLE,
-  usersTable: USERS_TABLE
+  usersTable: USERS_TABLE,
+  getUserQuota: (uid) => {
+    const u = mockUsers.find(x => x.user_id === uid);
+    return (u && u.quota) ? u.quota : DEFAULT_STORAGE_QUOTA;
+  }
 });
 
 authService.initAuthStore({
@@ -765,6 +770,10 @@ app.post(['/api/auth/login', '/signin'], async (req, res) => {
 app.post(['/api/auth/signup', '/signup'], async (req, res) => {
   const { username, email, password, confirmPassword } = req.body;
 
+  const isLengthValid = password.length >= 8;
+  const isCaseValid = /(?=.*[a-z])(?=.*[A-Z])/.test(password);
+  const isNumSymValid = /(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-])/.test(password);
+
   if (!username || !email || !password) {
     if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
       return res.render('pages/signup', { error: 'Please fill in all required fields' });
@@ -777,6 +786,13 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
       return res.render('pages/signup', { error: 'Passwords do not match' });
     }
     return res.status(400).json({ error: 'Passwords do not match' });
+  }
+
+  if (!isLengthValid || !isCaseValid || !isNumSymValid) {
+    if (req.accepts('html') && !req.xhr && !req.headers['content-type']?.includes('json')) {
+      return res.render('pages/signup', { error: 'Please ensure your password meets the requirements' });
+    }
+    return res.status(400).json({ error: 'Please ensure your password meets the requirements' });
   }
 
   const regRes = await authService.registerUser({
@@ -1178,6 +1194,95 @@ function getSharedWithMeForUser(user) {
   ];
 }
 
+async function getSharedWithMeList(user) {
+  const userEmail = (user.email || '').trim().toLowerCase();
+  const userId = user.user_id || user.id;
+
+  if (IS_MOCK_MODE) {
+    return getSharedWithMeForUser(user);
+  }
+
+  if (!userEmail) return [];
+
+  try {
+    const scanRes = await docClient.send(new ScanCommand({
+      TableName: FILES_TABLE,
+      FilterExpression: 'attribute_exists(access_list)'
+    }));
+
+    const rawFiles = scanRes.Items || [];
+
+    const matchingFiles = rawFiles.filter(f => {
+      if (!f || f.status === 'trash' || f.status === 'pending') return false;
+      if (f.owner_id === userId) return false;
+
+      const dismissed = f.dismissed_by || [];
+      if (dismissed.includes(userId) || dismissed.includes(userEmail)) return false;
+
+      const accessList = f.access_list || f.accessList || [];
+      if (!Array.isArray(accessList)) return false;
+
+      return accessList.some(collab => {
+        if (!collab) return false;
+        const cEmail = (collab.email || collab.name || '').trim().toLowerCase();
+        return cEmail && cEmail === userEmail;
+      });
+    });
+
+    // Pre-fetch sender display names from USERS_TABLE so we display actual names instead of user-xxxx
+    const ownerIds = [...new Set(matchingFiles.map(f => f.owner_id).filter(Boolean))];
+    const ownerMap = {};
+    await Promise.all(ownerIds.map(async oid => {
+      try {
+        const u = await authService.getUserById(oid);
+        if (u) {
+          ownerMap[oid] = u.name || u.username || u.email || oid;
+        }
+      } catch (_) {}
+    }));
+
+    const invitedFiles = matchingFiles.map(f => {
+      const accessList = f.access_list || f.accessList || [];
+      const directEntry = accessList.find(a => {
+        const cEmail = (a.email || a.name || '').trim().toLowerCase();
+        return cEmail && cEmail === userEmail;
+      });
+      const perm = directEntry ? directEntry.permission : 'can view';
+      const ownerName = ownerMap[f.owner_id] || f.owner_name || f.owner_id || 'Shared Owner';
+
+      return {
+        id: f.file_id,
+        file_id: f.file_id,
+        shareId: `invite-${f.file_id}`,
+        name: f.filename,
+        size: f.size || 0,
+        category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+        tags: f.tags || [],
+        type: f.category === 'folder' ? 'folder' : 'file',
+        owner: ownerName,
+        ownerId: f.owner_id,
+        isOwner: false,
+        uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently',
+        shareUrl: null,
+        maxDownloads: 0,
+        downloadsLeft: 'Unlimited',
+        downloadCount: 0,
+        hasPassword: false,
+        remainingHours: null,
+        isDirectInvite: true,
+        permission: perm,
+        canEdit: perm === 'can edit',
+        accessList: f.access_list || [{ name: user.name || userEmail, permission: perm }]
+      };
+    });
+
+    return invitedFiles;
+  } catch (err) {
+    console.error('[Cloud SharedWithMe Error]:', err);
+    return [];
+  }
+}
+
 // 4.4 Shared Page (Protected)
 app.get('/shared', requireAuthWeb, async (req, res) => {
   let allShares = [];
@@ -1274,15 +1379,12 @@ app.get('/shared', requireAuthWeb, async (req, res) => {
     }
   }
 
-  // Filter shared by me and shared with me
+  // Filter shared by me
   const sharedByMe = allShares.filter(s => s.isOwner);
 
-  // For shared with me: files where owner != user, plus demo items if mock
-  let sharedWithMe = allShares.filter(s => !s.isOwner);
-  if (IS_MOCK_MODE) {
-    const demoItems = getSharedWithMeForUser(req.user);
-    sharedWithMe = [...sharedWithMe, ...demoItems];
-  }
+  // Retrieve invited / shared with me files for both mock and cloud modes
+  const invitedItems = await getSharedWithMeList(req.user);
+  let sharedWithMe = [...allShares.filter(s => !s.isOwner), ...invitedItems];
 
   // กำจัดไฟล์ซ้ำ (Deduplicate) โดยอิงตาม id หรือ shareId ไม่ให้แสดงซ้ำในตาราง
   const seenIds = new Set();
@@ -1325,7 +1427,8 @@ function filterRootTrashedFiles(files = mockFiles, userId) {
 
 // 4.5 Trash Page (Protected)
 app.get('/trash', requireAuthWeb, async (req, res) => {
-  const trashedFiles = await fileRepo.getUserTrash({ userId: req.user.user_id });
+  const rawTrashedFiles = await fileRepo.getUserTrash({ userId: req.user.user_id });
+  const trashedFiles = filterRootTrashedFiles(rawTrashedFiles, req.user.user_id);
   const userStorage = await fileRepo.getUserStorage(req.user.user_id);
 
   res.render('pages/trash', {
@@ -1712,12 +1815,24 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
     }
   }
 
+  const effectiveFolderName = await resolveUniqueName({
+    isMockMode: IS_MOCK_MODE,
+    mockFiles,
+    docClient,
+    filesTable: FILES_TABLE,
+    userId: req.user.user_id,
+    folderId: parentFolderId,
+    requestedName: folderName
+  });
+
   const fileId = `folder-${crypto.randomUUID()}`;
+  const userName = req.user.name || req.user.username || req.user.display_name || req.user.email || 'User';
   const newFolder = {
     file_id: fileId,
     owner_id: req.user.user_id,
+    owner_name: userName,
     folder_id: parentFolderId,
-    filename: folderName,
+    filename: effectiveFolderName,
     size: 0,
     category: 'folder',
     tags: ['folder'],
@@ -1730,7 +1845,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
   if (IS_MOCK_MODE) {
     mockFiles.unshift(newFolder);
     storage.saveMockFiles(mockFiles);
-    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
+    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${effectiveFolderName}"` });
     return res.json({ success: true, file: newFolder });
   }
 
@@ -1739,7 +1854,7 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
       TableName: FILES_TABLE,
       Item: newFolder
     }));
-    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${folderName}"` });
+    await recordAuditLog({ user: req.user, action: 'CREATE_FOLDER', level: 'info', details: `Created folder "${effectiveFolderName}"` });
     res.json({ success: true, file: newFolder });
   } catch (err) {
     console.error('Create folder error:', err);
@@ -2182,29 +2297,59 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
   if (!filename) return res.status(400).json({ error: 'filename is required' });
 
   if (IS_MOCK_MODE) {
-    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user));
-    if (!file) return res.status(404).json({ error: 'File not found' });
-    file.filename = filename;
+    const file = mockFiles.find(f => f.file_id === fileId && canUserAccessFile(f, req.user, 'edit'));
+    if (!file) return res.status(404).json({ error: 'File not found or permission denied' });
+    const targetFolder = file.folder_id || 'root';
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: true,
+      mockFiles,
+      userId: file.owner_id || req.user.user_id,
+      folderId: targetFolder,
+      requestedName: filename,
+      excludeFileId: fileId
+    });
+    file.filename = effectiveFilename;
     file.updated_at = new Date().toISOString();
     storage.saveMockFiles(mockFiles);
-    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
+    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${effectiveFilename}"` });
     return res.json({ success: true, file });
   }
 
   try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = getRes.Item;
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    if (!canUserAccessFile(file, req.user, 'edit') && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Permission denied: cannot edit this file' });
+    }
+
+    const targetFolder = file.folder_id || 'root';
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: false,
+      docClient,
+      filesTable: FILES_TABLE,
+      userId: file.owner_id,
+      folderId: targetFolder,
+      requestedName: filename,
+      excludeFileId: fileId
+    });
+
     const result = await docClient.send(new UpdateCommand({
       TableName: FILES_TABLE,
       Key: { file_id: fileId },
-      ConditionExpression: 'owner_id = :owner',
       UpdateExpression: 'SET filename = :fn, updated_at = :up',
       ExpressionAttributeValues: {
-        ':fn': filename,
-        ':up': new Date().toISOString(),
-        ':owner': req.user.user_id
+        ':fn': effectiveFilename,
+        ':up': new Date().toISOString()
       },
       ReturnValues: 'ALL_NEW'
     }));
-    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
+    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${effectiveFilename}"` });
     res.json({ success: true, file: result.Attributes });
   } catch (err) {
     console.error('Rename error:', err);
@@ -2284,6 +2429,16 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
       }
     }
 
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: true,
+      mockFiles,
+      userId: file.owner_id || req.user.user_id,
+      folderId: targetFolderId || 'root',
+      requestedName: file.filename,
+      excludeFileId: fileId
+    });
+
+    file.filename = effectiveFilename;
     file.folder_id = targetFolderId;
     file.updated_at = new Date().toISOString();
     storage.saveMockFiles(mockFiles);
@@ -2339,12 +2494,23 @@ app.patch('/api/files/:id/move', authMiddleware, async (req, res) => {
       }
     }
 
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: false,
+      docClient,
+      filesTable: FILES_TABLE,
+      userId: file.owner_id || req.user.user_id,
+      folderId: targetFolderId || 'root',
+      requestedName: file.filename,
+      excludeFileId: fileId
+    });
+
     const updateRes = await docClient.send(new UpdateCommand({
       TableName: FILES_TABLE,
       Key: { file_id: fileId },
-      UpdateExpression: 'SET folder_id = :fid, updated_at = :up',
+      UpdateExpression: 'SET folder_id = :fid, filename = :fn, updated_at = :up',
       ExpressionAttributeValues: {
         ':fid': targetFolderId || 'root',
+        ':fn': effectiveFilename,
         ':up': new Date().toISOString()
       },
       ReturnValues: 'ALL_NEW'
@@ -2854,9 +3020,11 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
       });
     }
 
+    const restoringFolderIds = new Set(itemsToRestore.filter(i => i.category === 'folder').map(i => i.file_id));
+
     for (const item of itemsToRestore) {
       let targetFolderId = item.folder_id || 'root';
-      if (targetFolderId !== 'root') {
+      if (targetFolderId !== 'root' && !restoringFolderIds.has(targetFolderId)) {
         const parentRes = await docClient.send(new GetCommand({ TableName: FILES_TABLE, Key: { file_id: targetFolderId } })).catch(() => ({ Item: null }));
         if (!parentRes.Item || parentRes.Item.status === 'trash') {
           targetFolderId = 'root';
@@ -3258,9 +3426,13 @@ app.get('/api/files/:id/access', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'File or folder not found' });
     }
     const userEmail = (req.user.email || '').toLowerCase();
-    const userId = req.user.user_id;
-    const isOwner = file.owner_id === userId;
-    const hasCollab = (file.access_list || []).some(c => (c.email || '').toLowerCase() === userEmail);
+    const userId = req.user.user_id || req.user.id;
+    const isOwner = file.owner_id === userId || (userId === 'user-normal-01' && file.owner_id === 'demo-user');
+    const hasCollab = (file.access_list || []).some(c => {
+      const cEmail = (c.email || c.name || '').trim().toLowerCase();
+      const cId = (c.user_id || c.id || '').trim();
+      return (cEmail && cEmail === userEmail) || (cId && cId === userId);
+    });
     if (!isOwner && !hasCollab && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Access denied' });
     }
@@ -3325,7 +3497,8 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'File or folder not found' });
     }
 
-    const isOwner = file.owner_id === req.user.user_id;
+    const userId = req.user.user_id || req.user.id;
+    const isOwner = file.owner_id === userId || (userId === 'user-normal-01' && file.owner_id === 'demo-user');
     if (!isOwner && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Only the resource owner can modify access permissions' });
     }
@@ -3356,47 +3529,11 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
 
 // 5.8.5 Shared With Me Endpoints
 app.get('/api/shares/shared-with-me', authMiddleware, async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const sharedWithMe = getSharedWithMeForUser(req.user);
-    return res.json({ success: true, sharedWithMe });
-  }
-
   try {
-    const userEmail = (req.user.email || '').toLowerCase();
-    const userId = req.user.user_id;
-
-    const scanRes = await docClient.send(new ScanCommand({
-      TableName: FILES_TABLE,
-      FilterExpression: 'contains(access_list, :email) OR contains(access_list, :uid)',
-      ExpressionAttributeValues: { ':email': userEmail, ':uid': userId }
-    }));
-
-    const files = (scanRes.Items || []).filter(f => {
-      const dismissed = f.dismissed_by || [];
-      return !dismissed.includes(userId) && !dismissed.includes(userEmail);
-    }).map(f => ({
-      id: f.file_id,
-      shareId: f.share_id || f.file_id,
-      name: f.filename,
-      size: f.size || 0,
-      category: f.category || 'file',
-      tags: f.tags || [],
-      type: f.category === 'folder' ? 'folder' : 'file',
-      owner: f.owner_name || f.owner_id || 'Owner',
-      ownerId: f.owner_id,
-      isOwner: f.owner_id === userId,
-      uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown',
-      shareUrl: `/share/${f.share_id || f.file_id}`,
-      maxDownloads: 0,
-      downloadsLeft: 'Unlimited',
-      downloadCount: f.download_count || 0,
-      hasPassword: false,
-      remainingHours: null
-    }));
-
-    return res.json({ success: true, sharedWithMe: files });
+    const sharedWithMe = await getSharedWithMeList(req.user);
+    return res.json({ success: true, sharedWithMe });
   } catch (err) {
-    console.error('Shared-with-me DynamoDB error:', err);
+    console.error('Shared-with-me error:', err);
     return res.json({ success: true, sharedWithMe: [] });
   }
 });
@@ -3493,14 +3630,8 @@ app.post('/api/shares/:id/verify', async (req, res) => {
     });
     const downloadUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 300 });
 
-    // Send SNS Notification Alert to File Owner
-    if (!IS_MOCK_MODE && snsClient && SNS_TOPIC_ARN) {
-      snsClient.send(new PublishCommand({
-        TopicArn: SNS_TOPIC_ARN,
-        Subject: `[EasyDrive Alert] ไฟล์ของคุณถูกดาวน์โหลด: ${file.filename}`,
-        Message: `มีผู้เข้าดาวน์โหลดไฟล์ "${file.filename}" ผ่านลิงก์แชร์ (${shareId}) เมื่อเวลา ${new Date().toLocaleString('th-TH')}`
-      })).catch(err => console.error('SNS Notification error:', err));
-    }
+    // SNS Notification commented out for Learner Lab policy compliance
+    // if (!IS_MOCK_MODE && snsClient && SNS_TOPIC_ARN) { ... }
 
     res.json({
       success: true,
@@ -3594,6 +3725,9 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
       user.storage_quota = Number(targetQuota);
       if (mockUserStorage && mockUserStorage[targetUserId]) {
         mockUserStorage[targetUserId].quota = Number(targetQuota);
+      }
+      if (mockUserStorage && (mockUserStorage.user_id === targetUserId || targetUserId === 'demo-user' || targetUserId === 'user-normal-01')) {
+        mockUserStorage.quota = Number(targetQuota);
       }
     }
     user.updated_at = new Date().toISOString();

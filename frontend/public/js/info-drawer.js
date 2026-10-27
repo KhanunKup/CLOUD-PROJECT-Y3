@@ -10,13 +10,12 @@
     // Elements
     let filenameEl, categoryEl, iconEl, previewGraphicEl;
     let propTypeEl, propSizeEl, propStorageEl, propLocationEl, propOwnerEl, propModifiedEl, propCreatedEl;
-    let tagsContainerEl, hashCodeEl, copyHashBtn, toggleHashBtn, accessStatusEl, accessStatusText;
-    let currentFullHash = '';
-    let isHashRevealed = false;
+    let tagsContainerEl, accessStatusEl, accessStatusText;
     let quickPreviewBtn, quickDownloadBtn, manageAccessBtn, editTagsBtn;
     let tabBtns, tabPanes, timelineEl;
     let detailsTabBtn = null, activityTabBtn = null;
-
+    let infoOwnerName, infoOwnerRole, cloudSectionEl;
+    
     function initElements() {
         infoDrawer = document.getElementById('infoDrawer');
         infoDrawerOverlay = document.getElementById('infoDrawerOverlay');
@@ -37,8 +36,6 @@
         propCreatedEl = document.getElementById('infoPropCreated');
 
         tagsContainerEl = document.getElementById('infoTagsContainer');
-        hashCodeEl = document.getElementById('infoHashCode');
-        copyHashBtn = document.getElementById('infoCopyHashBtn');
         accessStatusEl = document.getElementById('infoAccessStatus');
         accessStatusText = document.getElementById('infoAccessStatusText');
 
@@ -48,7 +45,6 @@
         editTagsBtn = document.getElementById('infoEditTagsBtn');
         infoOwnerName = document.getElementById('infoOwnerName');
         infoOwnerRole = document.getElementById('infoOwnerRole');
-        toggleHashBtn = document.getElementById('infoToggleHashBtn');
         cloudSectionEl = document.querySelector('.info-section-cloud');
 
         tabBtns = document.querySelectorAll('.info-tab-btn');
@@ -153,25 +149,6 @@
         };
     }
 
-    function updateHashDisplay() {
-        if (!hashCodeEl) return;
-        if (isHashRevealed) {
-            hashCodeEl.textContent = currentFullHash;
-            hashCodeEl.style.letterSpacing = 'normal';
-            if (toggleHashBtn) {
-                toggleHashBtn.innerHTML = '<i class="far fa-eye-slash"></i>';
-                toggleHashBtn.title = 'Hide Checksum';
-            }
-        } else {
-            hashCodeEl.textContent = '••••••••••••••••••••••••••••••••';
-            hashCodeEl.style.letterSpacing = '2px';
-            if (toggleHashBtn) {
-                toggleHashBtn.innerHTML = '<i class="far fa-eye"></i>';
-                toggleHashBtn.title = 'Reveal Checksum';
-            }
-        }
-    }
-
     function renderDrawerContent(data) {
         if (!infoDrawer) initElements();
         activeFile = data;
@@ -201,11 +178,13 @@
             quickPreviewBtn.style.display = isFolder ? 'none' : 'inline-flex';
         }
 
-        // Ownership & Role check (Activity history is restricted to owner and admin)
+        // Ownership & Role check (Dynamic User Detection)
         const currentUserRole = (infoDrawer && infoDrawer.dataset.currentUserRole) || window.currentUserRole || 'user';
+        const currentUserName = (infoDrawer && infoDrawer.dataset.currentUserName) || window.currentUserName || 'You';
         const isAdmin = currentUserRole === 'admin';
-        const isOwner = (data.isOwner === true || data.isOwner === 'true' || data.owner === 'me' || data.owner === 'Admin Rick') && data.isOwner !== false && data.isOwner !== 'false';
+        const isOwner = (data.isOwner === true || data.isOwner === 'true' || data.owner === 'me' || data.owner === currentUserName) && data.isOwner !== false && data.isOwner !== 'false';
         const canViewActivity = isOwner || isAdmin;
+        const displayOwnerName = isOwner ? `${currentUserName} (You)` : (data.owner || 'Collaborator');
 
         // Manage Access button & Edit Tags button only available for owner
         if (manageAccessBtn) {
@@ -225,7 +204,7 @@
 
         // Owner Info & Access Section
         if (infoOwnerName) {
-            infoOwnerName.textContent = isOwner ? 'Admin Rick (You)' : (data.owner || 'Collaborator');
+            infoOwnerName.textContent = displayOwnerName;
         }
         if (infoOwnerRole) {
             infoOwnerRole.textContent = isOwner ? 'Owner' : 'Shared by owner';
@@ -237,7 +216,8 @@
             if (isOwner) {
                 accessStatusText.textContent = isShared ? 'Shared (Collaborative link active)' : 'Private (Only you have access)';
             } else {
-                accessStatusText.textContent = 'Shared with you (Viewer access)';
+                const canEdit = Boolean(data.canEdit || data.permission === 'can edit');
+                accessStatusText.textContent = canEdit ? 'Shared with you (Editor access)' : 'Shared with you (Viewer access)';
             }
         }
         if (accessStatusEl) {
@@ -256,7 +236,7 @@
         if (propLocationEl) {
             propLocationEl.textContent = isOwner ? (data.location || 'My Drive') : 'Shared with me';
         }
-        if (propOwnerEl) propOwnerEl.textContent = isOwner ? 'Admin Rick' : (data.owner || 'Collaborator');
+        if (propOwnerEl) propOwnerEl.textContent = isOwner ? currentUserName : (data.owner || 'Collaborator');
         if (propModifiedEl) propModifiedEl.textContent = formatDate(data.updated || data.updatedAt || data.created);
         if (propCreatedEl) propCreatedEl.textContent = formatDate(data.created || data.createdAt || data.date);
 
@@ -289,11 +269,6 @@
             }
         }
 
-        // SHA-256 Hash (Masked by default)
-        currentFullHash = data.file_hash || data.hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-        isHashRevealed = false;
-        updateHashDisplay();
-
         // Activity Timeline
         if (timelineEl) {
             const timeStr = formatDate(data.created || data.date || new Date().toISOString());
@@ -311,7 +286,7 @@
                     <span class="info-timeline-dot"><i class="fas fa-pen"></i></span>
                     <div class="info-timeline-content">
                         <span class="info-timeline-action">Modified / Synced</span>
-                        <span class="info-timeline-user">by ${data.owner || 'Admin Rick'}</span>
+                        <span class="info-timeline-user">by ${isOwner ? currentUserName : (data.owner || 'Owner')}</span>
                         <span class="info-timeline-time">${modTimeStr}</span>
                     </div>
                 </div>
@@ -319,7 +294,7 @@
                     <span class="info-timeline-dot"><i class="fas fa-cloud-upload-alt"></i></span>
                     <div class="info-timeline-content">
                         <span class="info-timeline-action">Uploaded to EasyDrive S3</span>
-                        <span class="info-timeline-user">by ${data.owner || 'Admin Rick'}</span>
+                        <span class="info-timeline-user">by ${isOwner ? currentUserName : (data.owner || 'Owner')}</span>
                         <span class="info-timeline-time">${timeStr}</span>
                     </div>
                 </div>
@@ -377,6 +352,8 @@
         const tags = row.dataset.tags ? row.dataset.tags.split(',') : [];
         const date = row.querySelector('.file-date')?.textContent.trim() || '';
         const owner = row.querySelector('.file-owner')?.textContent.trim() || 'me';
+        const canEdit = row.dataset.canEdit === 'true' || row.dataset.permission === 'can edit';
+        const permission = row.dataset.permission || (canEdit ? 'can edit' : 'can view');
 
         openDrawer({
             id: id,
@@ -389,7 +366,9 @@
             date: date,
             created: date,
             updated: date,
-            owner: owner
+            owner: owner,
+            canEdit: canEdit,
+            permission: permission
         });
     }
 
@@ -533,32 +512,6 @@
             });
         }
 
-        // Toggle Reveal / Mask SHA-256 Hash
-        if (toggleHashBtn) {
-            toggleHashBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                isHashRevealed = !isHashRevealed;
-                updateHashDisplay();
-            });
-        }
-
-        // Copy SHA-256 Hash (Always copies real unmasked hash)
-        if (copyHashBtn) {
-            copyHashBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (!currentFullHash) return;
-                navigator.clipboard.writeText(currentFullHash).then(() => {
-                    copyHashBtn.innerHTML = '<i class="fas fa-check" style="color: #16a34a;"></i>';
-                    setTimeout(() => {
-                        copyHashBtn.innerHTML = '<i class="far fa-copy"></i>';
-                    }, 1500);
-                    if (window.showToast) window.showToast('Copied SHA-256 checksum to clipboard', 'success');
-                }).catch(() => {
-                    if (window.showToast) window.showToast('Failed to copy checksum', 'error');
-                });
-            });
-        }
-
         // Event delegation: clicking Information from dropdown menus
         document.addEventListener('click', (e) => {
             const infoBtn = e.target.closest('.open-info-drawer');
@@ -582,9 +535,10 @@
                 const category = infoBtn.dataset.category || (row && row.dataset.category) || '';
                 const tags = infoBtn.dataset.tags || (row && row.dataset.tags) || '';
                 const size = infoBtn.dataset.size || (row && row.dataset.size) || '';
-                const owner = infoBtn.dataset.owner || (row && row.querySelector('.file-owner')?.textContent.trim()) || 'Admin Rick';
+                const owner = infoBtn.dataset.owner || (row && row.querySelector('.file-owner')?.textContent.trim()) || 'me';
                 const created = infoBtn.dataset.created || (row && row.querySelector('.file-date')?.textContent.trim()) || '';
-                const hash = infoBtn.dataset.hash || '';
+                const canEdit = infoBtn.dataset.canEdit === 'true' || (row && row.dataset.canEdit === 'true') || infoBtn.dataset.permission === 'can edit' || (row && row.dataset.permission === 'can edit');
+                const permission = infoBtn.dataset.permission || (row && row.dataset.permission) || (canEdit ? 'can edit' : 'can view');
 
                 openDrawer({
                     id: fileId,
@@ -598,7 +552,8 @@
                     owner: owner,
                     created: created,
                     updated: created,
-                    file_hash: hash
+                    canEdit: canEdit,
+                    permission: permission
                 });
             }
         });
