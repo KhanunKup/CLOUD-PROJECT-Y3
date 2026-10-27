@@ -260,13 +260,38 @@ class FileRepository {
       const files = this.storage.loadMockFiles();
       const activeFolderIds = new Set(files.filter(f => f.status === 'active' && f.category === 'folder').map(f => f.file_id));
 
+      // Collect all descendants for any folders in idSet
+      const allDescendantsToRestore = new Set();
       files.forEach(f => {
-        if (idSet.has(f.file_id) && this.canAccess(f, user)) {
+        if (idSet.has(f.file_id) && f.category === 'folder') {
+          activeFolderIds.add(f.file_id);
+          const queue = [f.file_id];
+          while (queue.length > 0) {
+            const pid = queue.shift();
+            files.forEach(child => {
+              if (child.folder_id === pid && child.status === 'trash' && !idSet.has(child.file_id)) {
+                allDescendantsToRestore.add(child.file_id);
+                if (child.category === 'folder') {
+                  activeFolderIds.add(child.file_id);
+                  queue.push(child.file_id);
+                }
+              }
+            });
+          }
+        }
+      });
+
+      const itemsToRestore = new Set([...idSet, ...allDescendantsToRestore]);
+
+      files.forEach(f => {
+        if (itemsToRestore.has(f.file_id) && this.canAccess(f, user)) {
           f.status = 'active';
           delete f.trashed_at;
-          affectedCount++;
+          if (idSet.has(f.file_id)) {
+            affectedCount++;
+          }
 
-          // If parent folder is no longer active, move restored item to root
+          // If parent folder is no longer active and not being restored, move restored item to root
           if (f.folder_id && !activeFolderIds.has(f.folder_id)) {
             f.folder_id = null;
           }
@@ -289,22 +314,21 @@ class FileRepository {
 
       // Find active folder IDs
       const activeFolderIds = new Set(userFiles.filter(f => f.status === 'active' && f.category === 'folder').map(f => f.file_id));
-      userFiles.forEach(f => {
-        if (idSet.has(f.file_id) && f.category === 'folder') {
-          activeFolderIds.add(f.file_id);
-        }
-      });
 
       const allDescendantsToRestore = new Set();
       userFiles.forEach(f => {
         if (idSet.has(f.file_id) && f.category === 'folder') {
+          activeFolderIds.add(f.file_id);
           const queue = [f.file_id];
           while (queue.length > 0) {
             const pid = queue.shift();
             userFiles.forEach(child => {
               if (child.folder_id === pid && child.status === 'trash' && !idSet.has(child.file_id)) {
                 allDescendantsToRestore.add(child.file_id);
-                if (child.category === 'folder') queue.push(child.file_id);
+                if (child.category === 'folder') {
+                  activeFolderIds.add(child.file_id);
+                  queue.push(child.file_id);
+                }
               }
             });
           }

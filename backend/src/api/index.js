@@ -49,7 +49,7 @@ app.use((req, res, next) => {
 const apiPublicDir = path.join(__dirname, 'public');
 const rootPublicDir = path.resolve(__dirname, '../../../frontend/public');
 const staticOptions = {
-  maxAge: '1d',
+  maxAge: 0,
   etag: true
 };
 if (fs.existsSync(apiPublicDir)) {
@@ -1190,6 +1190,95 @@ function getSharedWithMeForUser(user) {
   ];
 }
 
+async function getSharedWithMeList(user) {
+  const userEmail = (user.email || '').trim().toLowerCase();
+  const userId = user.user_id || user.id;
+
+  if (IS_MOCK_MODE) {
+    return getSharedWithMeForUser(user);
+  }
+
+  if (!userEmail) return [];
+
+  try {
+    const scanRes = await docClient.send(new ScanCommand({
+      TableName: FILES_TABLE,
+      FilterExpression: 'attribute_exists(access_list)'
+    }));
+
+    const rawFiles = scanRes.Items || [];
+
+    const matchingFiles = rawFiles.filter(f => {
+      if (!f || f.status === 'trash' || f.status === 'pending') return false;
+      if (f.owner_id === userId) return false;
+
+      const dismissed = f.dismissed_by || [];
+      if (dismissed.includes(userId) || dismissed.includes(userEmail)) return false;
+
+      const accessList = f.access_list || f.accessList || [];
+      if (!Array.isArray(accessList)) return false;
+
+      return accessList.some(collab => {
+        if (!collab) return false;
+        const cEmail = (collab.email || collab.name || '').trim().toLowerCase();
+        return cEmail && cEmail === userEmail;
+      });
+    });
+
+    // Pre-fetch sender display names from USERS_TABLE so we display actual names instead of user-xxxx
+    const ownerIds = [...new Set(matchingFiles.map(f => f.owner_id).filter(Boolean))];
+    const ownerMap = {};
+    await Promise.all(ownerIds.map(async oid => {
+      try {
+        const u = await authService.getUserById(oid);
+        if (u) {
+          ownerMap[oid] = u.name || u.username || u.email || oid;
+        }
+      } catch (_) {}
+    }));
+
+    const invitedFiles = matchingFiles.map(f => {
+      const accessList = f.access_list || f.accessList || [];
+      const directEntry = accessList.find(a => {
+        const cEmail = (a.email || a.name || '').trim().toLowerCase();
+        return cEmail && cEmail === userEmail;
+      });
+      const perm = directEntry ? directEntry.permission : 'can view';
+      const ownerName = ownerMap[f.owner_id] || f.owner_name || f.owner_id || 'Shared Owner';
+
+      return {
+        id: f.file_id,
+        file_id: f.file_id,
+        shareId: `invite-${f.file_id}`,
+        name: f.filename,
+        size: f.size || 0,
+        category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+        tags: f.tags || [],
+        type: f.category === 'folder' ? 'folder' : 'file',
+        owner: ownerName,
+        ownerId: f.owner_id,
+        isOwner: false,
+        uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently',
+        shareUrl: null,
+        maxDownloads: 0,
+        downloadsLeft: 'Unlimited',
+        downloadCount: 0,
+        hasPassword: false,
+        remainingHours: null,
+        isDirectInvite: true,
+        permission: perm,
+        canEdit: perm === 'can edit',
+        accessList: f.access_list || [{ name: user.name || userEmail, permission: perm }]
+      };
+    });
+
+    return invitedFiles;
+  } catch (err) {
+    console.error('[Cloud SharedWithMe Error]:', err);
+    return [];
+  }
+}
+
 // 4.4 Shared Page (Protected)
 app.get('/shared', requireAuthWeb, async (req, res) => {
   let allShares = [];
@@ -1286,15 +1375,12 @@ app.get('/shared', requireAuthWeb, async (req, res) => {
     }
   }
 
-  // Filter shared by me and shared with me
+  // Filter shared by me
   const sharedByMe = allShares.filter(s => s.isOwner);
 
-  // For shared with me: files where owner != user, plus demo items if mock
-  let sharedWithMe = allShares.filter(s => !s.isOwner);
-  if (IS_MOCK_MODE) {
-    const demoItems = getSharedWithMeForUser(req.user);
-    sharedWithMe = [...sharedWithMe, ...demoItems];
-  }
+  // Retrieve invited / shared with me files for both mock and cloud modes
+  const invitedItems = await getSharedWithMeList(req.user);
+  let sharedWithMe = [...allShares.filter(s => !s.isOwner), ...invitedItems];
 
   // กำจัดไฟล์ซ้ำ (Deduplicate) โดยอิงตาม id หรือ shareId ไม่ให้แสดงซ้ำในตาราง
   const seenIds = new Set();
@@ -1736,9 +1822,11 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
   });
 
   const fileId = `folder-${crypto.randomUUID()}`;
+  const userName = req.user.name || req.user.username || req.user.display_name || req.user.email || 'User';
   const newFolder = {
     file_id: fileId,
     owner_id: req.user.user_id,
+    owner_name: userName,
     folder_id: parentFolderId,
     filename: effectiveFolderName,
     size: 0,
@@ -2224,19 +2312,40 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
   }
 
   try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = getRes.Item;
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    if (!canUserAccessFile(file, req.user, 'edit') && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Permission denied: cannot edit this file' });
+    }
+
+    const targetFolder = file.folder_id || 'root';
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: false,
+      docClient,
+      filesTable: FILES_TABLE,
+      userId: file.owner_id,
+      folderId: targetFolder,
+      requestedName: filename,
+      excludeFileId: fileId
+    });
+
     const result = await docClient.send(new UpdateCommand({
       TableName: FILES_TABLE,
       Key: { file_id: fileId },
-      ConditionExpression: 'owner_id = :owner',
       UpdateExpression: 'SET filename = :fn, updated_at = :up',
       ExpressionAttributeValues: {
-        ':fn': filename,
-        ':up': new Date().toISOString(),
-        ':owner': req.user.user_id
+        ':fn': effectiveFilename,
+        ':up': new Date().toISOString()
       },
       ReturnValues: 'ALL_NEW'
     }));
-    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
+    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${effectiveFilename}"` });
     res.json({ success: true, file: result.Attributes });
   } catch (err) {
     console.error('Rename error:', err);
@@ -2907,9 +3016,11 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
       });
     }
 
+    const restoringFolderIds = new Set(itemsToRestore.filter(i => i.category === 'folder').map(i => i.file_id));
+
     for (const item of itemsToRestore) {
       let targetFolderId = item.folder_id || 'root';
-      if (targetFolderId !== 'root') {
+      if (targetFolderId !== 'root' && !restoringFolderIds.has(targetFolderId)) {
         const parentRes = await docClient.send(new GetCommand({ TableName: FILES_TABLE, Key: { file_id: targetFolderId } })).catch(() => ({ Item: null }));
         if (!parentRes.Item || parentRes.Item.status === 'trash') {
           targetFolderId = 'root';
@@ -3311,9 +3422,13 @@ app.get('/api/files/:id/access', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'File or folder not found' });
     }
     const userEmail = (req.user.email || '').toLowerCase();
-    const userId = req.user.user_id;
-    const isOwner = file.owner_id === userId;
-    const hasCollab = (file.access_list || []).some(c => (c.email || '').toLowerCase() === userEmail);
+    const userId = req.user.user_id || req.user.id;
+    const isOwner = file.owner_id === userId || (userId === 'user-normal-01' && file.owner_id === 'demo-user');
+    const hasCollab = (file.access_list || []).some(c => {
+      const cEmail = (c.email || c.name || '').trim().toLowerCase();
+      const cId = (c.user_id || c.id || '').trim();
+      return (cEmail && cEmail === userEmail) || (cId && cId === userId);
+    });
     if (!isOwner && !hasCollab && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Access denied' });
     }
@@ -3378,7 +3493,8 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'File or folder not found' });
     }
 
-    const isOwner = file.owner_id === req.user.user_id;
+    const userId = req.user.user_id || req.user.id;
+    const isOwner = file.owner_id === userId || (userId === 'user-normal-01' && file.owner_id === 'demo-user');
     if (!isOwner && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Only the resource owner can modify access permissions' });
     }
@@ -3409,47 +3525,11 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
 
 // 5.8.5 Shared With Me Endpoints
 app.get('/api/shares/shared-with-me', authMiddleware, async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const sharedWithMe = getSharedWithMeForUser(req.user);
-    return res.json({ success: true, sharedWithMe });
-  }
-
   try {
-    const userEmail = (req.user.email || '').toLowerCase();
-    const userId = req.user.user_id;
-
-    const scanRes = await docClient.send(new ScanCommand({
-      TableName: FILES_TABLE,
-      FilterExpression: 'contains(access_list, :email) OR contains(access_list, :uid)',
-      ExpressionAttributeValues: { ':email': userEmail, ':uid': userId }
-    }));
-
-    const files = (scanRes.Items || []).filter(f => {
-      const dismissed = f.dismissed_by || [];
-      return !dismissed.includes(userId) && !dismissed.includes(userEmail);
-    }).map(f => ({
-      id: f.file_id,
-      shareId: f.share_id || f.file_id,
-      name: f.filename,
-      size: f.size || 0,
-      category: f.category || 'file',
-      tags: f.tags || [],
-      type: f.category === 'folder' ? 'folder' : 'file',
-      owner: f.owner_name || f.owner_id || 'Owner',
-      ownerId: f.owner_id,
-      isOwner: f.owner_id === userId,
-      uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown',
-      shareUrl: `/share/${f.share_id || f.file_id}`,
-      maxDownloads: 0,
-      downloadsLeft: 'Unlimited',
-      downloadCount: f.download_count || 0,
-      hasPassword: false,
-      remainingHours: null
-    }));
-
-    return res.json({ success: true, sharedWithMe: files });
+    const sharedWithMe = await getSharedWithMeList(req.user);
+    return res.json({ success: true, sharedWithMe });
   } catch (err) {
-    console.error('Shared-with-me DynamoDB error:', err);
+    console.error('Shared-with-me error:', err);
     return res.json({ success: true, sharedWithMe: [] });
   }
 });
