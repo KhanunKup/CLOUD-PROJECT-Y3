@@ -838,8 +838,13 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
 // In-memory store for password-reset tokens (mock mode only; resets on server restart)
 const passwordResetTokens = new Map(); // token -> { userId, expiresAt }
 
-// GET /forgot-password - Show forgot-password page
-// POST /forgot-password - Process email submission
+// GET /forgot-password - Redirect to unified reset password
+app.get('/forgot-password', (req, res) => {
+  const email = (req.query.email || '').trim();
+  res.redirect(email ? `/reset-password?email=${encodeURIComponent(email)}` : '/reset-password');
+});
+
+// POST /forgot-password - Process email submission and forward to reset-password
 app.post('/forgot-password', async (req, res) => {
   const email = (req.body.email || '').trim().toLowerCase();
   if (!email) {
@@ -851,7 +856,6 @@ app.post('/forgot-password', async (req, res) => {
     foundUser = mockUsers.find(u => (u.email || '').toLowerCase() === email);
   } else {
     try {
-      // 1. ลอง Query ผ่าน EmailIndex
       const queryRes = await docClient.send(new QueryCommand({
         TableName: USERS_TABLE,
         IndexName: 'EmailIndex',
@@ -861,7 +865,6 @@ app.post('/forgot-password', async (req, res) => {
       foundUser = queryRes && queryRes.Items && queryRes.Items[0];
 
       if (!foundUser) {
-        // Fallback scan
         const scanRes = await docClient.send(new ScanCommand({
           TableName: USERS_TABLE,
           FilterExpression: 'contains(email, :e)',
@@ -874,12 +877,11 @@ app.post('/forgot-password', async (req, res) => {
     }
   }
 
-  // สร้าง Token เสมอ (แม้จะหาไม่เจอ เพื่อให้ Demo / Reset ผ่านได้เลย ไม่ติดค้างหน้าเดิม)
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 30 * 60 * 1000;
   const targetUserId = foundUser ? foundUser.user_id : 'demo-user';
 
-  passwordResetTokens.set(token, { userId: targetUserId, expiresAt });
+  passwordResetTokens.set(token, { userId: targetUserId, email, expiresAt });
 
   if (!IS_MOCK_MODE && docClient && FILES_TABLE) {
     try {
@@ -891,6 +893,7 @@ app.post('/forgot-password', async (req, res) => {
           folder_id: 'reset',
           status: 'reset',
           user_id: targetUserId,
+          email,
           expires_at: Math.floor(expiresAt / 1000),
           created_at: new Date().toISOString()
         }
@@ -906,116 +909,218 @@ app.post('/forgot-password', async (req, res) => {
     req
   });
 
-  // เด้งไปยังหน้า Reset Password ทันที 100%
-  return res.redirect(`/reset-password?token=${token}`);
+  return res.redirect(`/reset-password?email=${encodeURIComponent(email)}&token=${token}`);
 });
 
-// GET /reset-password - Show reset password form
+// GET /reset-password - Show unified reset password form with Target Account info
 app.get('/reset-password', async (req, res) => {
   const token = (req.query.token || '').trim();
-  
-  // ถ้าไม่มี token ให้สร้าง token ชั่วคราวให้เลย จะได้ไม่เด้งกลับไปหน้ากรอกเมล
-  if (!token) {
-    const dummyToken = crypto.randomBytes(16).toString('hex');
-    passwordResetTokens.set(dummyToken, { userId: 'demo-user', expiresAt: Date.now() + 1800000 });
-    return res.render('pages/reset-password', { token: dummyToken, error: null, success: null });
+  const queryEmail = (req.query.email || '').trim().toLowerCase();
+
+  let targetUser = null;
+  let resolvedEmail = queryEmail;
+
+  if (token && token !== 'direct') {
+    let entry = passwordResetTokens.get(token);
+    if (!entry && !IS_MOCK_MODE && docClient && FILES_TABLE) {
+      try {
+        const getRes = await docClient.send(new GetCommand({
+          TableName: FILES_TABLE,
+          Key: { file_id: `pwdreset-${token}` }
+        }));
+        if (getRes.Item) {
+          entry = {
+            userId: getRes.Item.user_id,
+            email: getRes.Item.email,
+            expiresAt: (getRes.Item.expires_at || 0) * 1000
+          };
+        }
+      } catch (_) {}
+    }
+
+    if (entry && (entry.userId || entry.email)) {
+      if (IS_MOCK_MODE) {
+        targetUser = mockUsers.find(u => (entry.userId && u.user_id === entry.userId) || (entry.email && (u.email || '').toLowerCase() === entry.email.toLowerCase()));
+      } else if (docClient && USERS_TABLE) {
+        try {
+          if (entry.userId) {
+            const userRes = await docClient.send(new GetCommand({
+              TableName: USERS_TABLE,
+              Key: { user_id: entry.userId }
+            }));
+            targetUser = userRes.Item;
+          }
+        } catch (_) {}
+      }
+      if (targetUser && targetUser.email) {
+        resolvedEmail = targetUser.email;
+      } else if (entry.email) {
+        resolvedEmail = entry.email;
+      }
+    }
   }
 
-  res.render('pages/reset-password', { token, error: null, success: null });
+  if (!targetUser && resolvedEmail) {
+    if (IS_MOCK_MODE) {
+      targetUser = mockUsers.find(u => (u.email || '').toLowerCase() === resolvedEmail);
+    } else if (docClient && USERS_TABLE) {
+      try {
+        const qRes = await docClient.send(new QueryCommand({
+          TableName: USERS_TABLE,
+          IndexName: 'EmailIndex',
+          KeyConditionExpression: 'email = :e',
+          ExpressionAttributeValues: { ':e': resolvedEmail }
+        })).catch(() => null);
+        targetUser = qRes && qRes.Items && qRes.Items[0];
+      } catch (_) {}
+    }
+  }
+
+  res.render('pages/reset-password', {
+    token: token || 'direct',
+    email: resolvedEmail,
+    targetUser,
+    error: null,
+    success: null
+  });
 });
 
-// POST /reset-password - Process new password
+// POST /reset-password - Process new password for the specified email
 app.post('/reset-password', async (req, res) => {
-  const { token, password, confirmPassword } = req.body;
-  const trimmedToken = (token || '').trim();
+  const { token, email, password, confirmPassword } = req.body;
+  const normEmail = (email || '').trim().toLowerCase();
 
-  if (!trimmedToken) {
-    return res.render('pages/reset-password', { token: null, error: 'Invalid reset link.', success: null });
-  }
-
-  let entry = passwordResetTokens.get(trimmedToken);
-  if (!entry && !IS_MOCK_MODE && docClient && FILES_TABLE) {
-    try {
-      const getRes = await docClient.send(new GetCommand({
-        TableName: FILES_TABLE,
-        Key: { file_id: `pwdreset-${trimmedToken}` }
-      }));
-      if (getRes.Item) {
-        entry = {
-          userId: getRes.Item.user_id,
-          expiresAt: (getRes.Item.expires_at || 0) * 1000
-        };
-      }
-    } catch (_) {}
-  }
-
-  if (!entry || Date.now() > entry.expiresAt) {
+  if (!normEmail) {
     return res.render('pages/reset-password', {
-      token: null,
-      error: 'This reset link has expired or is invalid. Please request a new one.',
+      token: token || 'direct',
+      email: '',
+      targetUser: null,
+      error: 'Please enter your account email address.',
       success: null
     });
   }
 
-  if (!password || password.length < 6) {
+  const isLengthValid = password && password.length >= 8;
+  const isCaseValid = /(?=.*[a-z])(?=.*[A-Z])/.test(password || '');
+  const isNumSymValid = /(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-])/.test(password || '');
+
+  if (!isLengthValid || !isCaseValid || !isNumSymValid) {
     return res.render('pages/reset-password', {
-      token: trimmedToken,
-      error: 'Password must be at least 6 characters long.',
+      token: token || 'direct',
+      email: normEmail,
+      targetUser: null,
+      error: 'Password must contain at least 8 characters, including uppercase, lowercase, numbers, and symbols.',
       success: null
     });
   }
 
   if (password !== confirmPassword) {
     return res.render('pages/reset-password', {
-      token: trimmedToken,
+      token: token || 'direct',
+      email: normEmail,
+      targetUser: null,
       error: 'Passwords do not match.',
+      success: null
+    });
+  }
+
+  // 1. Locate User in Mock or Cloud
+  let targetUser = null;
+  if (IS_MOCK_MODE) {
+    targetUser = mockUsers.find(u => (u.email || '').toLowerCase() === normEmail);
+  } else {
+    try {
+      if (docClient && USERS_TABLE) {
+        const queryRes = await docClient.send(new QueryCommand({
+          TableName: USERS_TABLE,
+          IndexName: 'EmailIndex',
+          KeyConditionExpression: 'email = :e',
+          ExpressionAttributeValues: { ':e': normEmail }
+        })).catch(() => null);
+        targetUser = queryRes && queryRes.Items && queryRes.Items[0];
+
+        if (!targetUser) {
+          const scanRes = await docClient.send(new ScanCommand({
+            TableName: USERS_TABLE,
+            FilterExpression: 'contains(email, :e)',
+            ExpressionAttributeValues: { ':e': normEmail }
+          }));
+          targetUser = scanRes.Items && scanRes.Items[0];
+        }
+      }
+    } catch (err) {
+      console.error('Password reset user query error:', err);
+    }
+  }
+
+  if (!targetUser) {
+    return res.render('pages/reset-password', {
+      token: token || 'direct',
+      email: normEmail,
+      targetUser: null,
+      error: `No EasyDrive account found with email "${normEmail}". Please check your email address.`,
       success: null
     });
   }
 
   const newHash = await bcrypt.hash(password, 10);
 
-  // Update in DynamoDB USERS_TABLE
+  // 2. Update password in DynamoDB USERS_TABLE
   if (!IS_MOCK_MODE && docClient && USERS_TABLE) {
     try {
       await docClient.send(new UpdateCommand({
         TableName: USERS_TABLE,
-        Key: { user_id: entry.userId },
+        Key: { user_id: targetUser.user_id },
         UpdateExpression: 'SET password_hash = :p, updated_at = :u',
         ExpressionAttributeValues: {
           ':p': newHash,
           ':u': new Date().toISOString()
         }
       }));
-      // Clean up token
-      await docClient.send(new DeleteCommand({
-        TableName: FILES_TABLE,
-        Key: { file_id: `pwdreset-${trimmedToken}` }
-      })).catch(() => {});
     } catch (upErr) {
-      console.error('Update user password error:', upErr);
+      console.error('Update user password error in DynamoDB:', upErr);
+      return res.render('pages/reset-password', {
+        token: token || 'direct',
+        email: normEmail,
+        targetUser,
+        error: 'Failed to update password in database. Please try again.',
+        success: null
+      });
     }
   }
 
-  passwordResetTokens.delete(trimmedToken);
+  // 3. Update in-memory / mock stores
+  targetUser.password_hash = newHash;
+  targetUser.password = password;
+  targetUser.updated_at = new Date().toISOString();
+  if (typeof authService.updateInMemoryUserPassword === 'function') {
+    authService.updateInMemoryUserPassword(targetUser.user_id, password, newHash);
+  }
 
-  const foundUser = mockUsers.find(u => u.user_id === entry.userId);
-  if (foundUser) {
-    foundUser.password_hash = newHash;
-    foundUser.password = password;
+  // Clean up any reset tokens
+  if (token && token !== 'direct') {
+    passwordResetTokens.delete(token);
+    if (!IS_MOCK_MODE && docClient && FILES_TABLE) {
+      await docClient.send(new DeleteCommand({
+        TableName: FILES_TABLE,
+        Key: { file_id: `pwdreset-${token}` }
+      })).catch(() => {});
+    }
   }
 
   await recordAuditLog({
-    user: { user_id: entry.userId, name: foundUser ? foundUser.name : 'User', email: foundUser ? foundUser.email : 'user@easydrive.internal', role: foundUser ? foundUser.role : 'user' },
+    user: { user_id: targetUser.user_id, name: targetUser.name || 'User', email: targetUser.email, role: targetUser.role || 'user' },
     action: 'RESET_PASSWORD',
     level: 'warning',
-    details: 'User password was reset successfully'
+    details: `Password reset successfully for "${targetUser.email}" (${targetUser.name || targetUser.user_id})`
   });
 
   return res.render('pages/reset-password', {
     token: null,
+    email: targetUser.email,
+    targetUser,
     error: null,
-    success: 'Your password has been updated! You can now sign in with your new password.'
+    success: `Password has been successfully updated for ${targetUser.email}! You can now sign in with your new password.`
   });
 });
 

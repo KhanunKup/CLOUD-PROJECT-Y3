@@ -17,3 +17,13 @@ output "storage_bucket" {
 #  description = "SNS topic for download and cost alerts"
 #  value       = module.notifications.topic_arn
 #}
+
+output "cloudwatch_dashboard_name" {
+  description = "Name of the operational CloudWatch dashboard."
+  value       = module.alerts.dashboard_name
+}
+
+output "cloudwatch_dashboard_url" {
+  description = "Direct URL to open the CloudWatch dashboard in AWS Management Console."
+  value       = module.alerts.dashboard_url
+}
