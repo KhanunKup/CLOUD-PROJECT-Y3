@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { GetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
 
 class FileRepository {
-  constructor({ isMockMode, storage, docClient, s3Client, storageBucket, filesTable, usersTable, defaultQuota = 53687091200 }) {
+  constructor({ isMockMode, storage, docClient, s3Client, storageBucket, filesTable, usersTable, defaultQuota = 53687091200, getUserQuota = null }) {
     this.isMockMode = isMockMode;
     this.storage = storage;
     this.docClient = docClient;
@@ -15,6 +15,7 @@ class FileRepository {
     this.filesTable = filesTable;
     this.usersTable = usersTable || process.env.USERS_TABLE || "easydrive-users";
     this.defaultQuota = defaultQuota;
+    this.getUserQuota = getUserQuota;
   }
 
   canAccess(file, user) {
@@ -476,7 +477,7 @@ class FileRepository {
         breakdown[cat] = (breakdown[cat] || 0) + sz;
       }
     }
-    const quota = DEFAULT_STORAGE_QUOTA;
+    const quota = (this.getUserQuota && typeof this.getUserQuota === 'function') ? this.getUserQuota(userId) : (this.defaultQuota || DEFAULT_STORAGE_QUOTA);
     const free = Math.max(0, quota - totalUsed);
     const percent = quota > 0 ? parseFloat(Math.min(100, (totalUsed / quota) * 100).toFixed(1)) : 0;
 

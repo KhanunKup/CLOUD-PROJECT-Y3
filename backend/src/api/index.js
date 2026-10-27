@@ -125,7 +125,11 @@ const fileRepo = new FileRepository({
   s3Client,
   storageBucket: STORAGE_BUCKET,
   filesTable: FILES_TABLE,
-  usersTable: USERS_TABLE
+  usersTable: USERS_TABLE,
+  getUserQuota: (uid) => {
+    const u = mockUsers.find(x => x.user_id === uid);
+    return (u && u.quota) ? u.quota : DEFAULT_STORAGE_QUOTA;
+  }
 });
 
 authService.initAuthStore({
@@ -3721,6 +3725,9 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
       user.storage_quota = Number(targetQuota);
       if (mockUserStorage && mockUserStorage[targetUserId]) {
         mockUserStorage[targetUserId].quota = Number(targetQuota);
+      }
+      if (mockUserStorage && (mockUserStorage.user_id === targetUserId || targetUserId === 'demo-user' || targetUserId === 'user-normal-01')) {
+        mockUserStorage.quota = Number(targetQuota);
       }
     }
     user.updated_at = new Date().toISOString();
