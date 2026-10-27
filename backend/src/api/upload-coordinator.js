@@ -65,6 +65,7 @@ class UploadCoordinator {
     }
 
     const userId = user.user_id || user.id || 'anonymous';
+    const userName = user.name || user.username || user.email || 'User';
 
     // 1. Quota Guard: Enforce storage quota limits across requested files
     const totalRequestedBytes = fileRequests.reduce((acc, f) => acc + (Number(f.size) || 0), 0);
@@ -126,6 +127,7 @@ class UploadCoordinator {
         const mockFileRecord = {
           file_id: fileId,
           owner_id: userId,
+          owner_name: userName,
           folder_id: effectiveFolderId,
           filename,
           size,
@@ -174,6 +176,7 @@ class UploadCoordinator {
         const cloudFileRecord = {
           file_id: fileId,
           owner_id: userId,
+          owner_name: userName,
           folder_id: effectiveFolderId,
           filename,
           size,

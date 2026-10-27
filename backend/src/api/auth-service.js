@@ -570,6 +570,17 @@ async function listUsers() {
   return inMemoryUsers;
 }
 
+function updateInMemoryUserPassword(userIdOrEmail, password, passwordHash) {
+  const norm = (userIdOrEmail || "").trim().toLowerCase();
+  const u = inMemoryUsers.find(x => x.user_id === norm || (x.email || "").trim().toLowerCase() === norm);
+  if (u) {
+    u.password = password;
+    u.password_hash = passwordHash;
+    return true;
+  }
+  return false;
+}
+
 async function getUserById(userId) {
   if (!userId) return null;
   if (!authConfig.isMockMode && authConfig.docClient && authConfig.usersTable) {
@@ -593,6 +604,7 @@ module.exports = {
   registerUser,
   authenticateUser,
   getUserById,
+  updateInMemoryUserPassword,
   listUsers,
   inMemoryUsers,
   parseCookies,

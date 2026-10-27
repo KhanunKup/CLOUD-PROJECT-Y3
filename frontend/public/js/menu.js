@@ -284,6 +284,30 @@ document.addEventListener('DOMContentLoaded', () => {
             e.stopPropagation();
             const textSpan = copyBtn.querySelector('.copy-link-text') || copyBtn;
             const originalText = textSpan.textContent;
+
+            if (copyBtn.dataset.url) {
+                const fullUrl = window.location.origin + copyBtn.dataset.url;
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(fullUrl);
+                    } else {
+                        const tempInput = document.createElement('input');
+                        tempInput.value = fullUrl;
+                        document.body.appendChild(tempInput);
+                        tempInput.select();
+                        document.execCommand('copy');
+                        tempInput.remove();
+                    }
+                    if (window.showToast) window.showToast('Share link copied to clipboard!', 'success');
+                    textSpan.textContent = 'Copied!';
+                } catch (e) {
+                    console.warn('Copy link error:', e);
+                } finally {
+                    setTimeout(() => { textSpan.textContent = originalText; }, 1500);
+                }
+                return;
+            }
+
             textSpan.textContent = 'Generating...';
 
             const fileId = copyBtn.dataset.id;
@@ -407,13 +431,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Copy Share Link (from Shared By Me menu)
+        // Copy Share Link (from Shared By Me menu or Shared With Me)
         const copyShareBtn = e.target.closest('.copy-share-link-btn');
         if (copyShareBtn) {
             e.stopPropagation();
             const textSpan = copyShareBtn.querySelector('.copy-link-text') || copyShareBtn;
             const originalText = textSpan.textContent;
-            const shareUrl = copyShareBtn.dataset.url;
+            let shareUrl = copyShareBtn.dataset.url;
+            const fileId = copyShareBtn.dataset.id;
             if (shareUrl) {
                 const fullUrl = window.location.origin + shareUrl;
                 try {
@@ -438,6 +463,42 @@ document.addEventListener('DOMContentLoaded', () => {
                         textSpan.textContent = originalText;
                     }, 1500);
                 }
+            } else if (fileId) {
+                textSpan.textContent = 'Generating...';
+                fetch('/api/shares', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_id: fileId, expireHours: 24, maxDownloads: 0 })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.shareUrl) {
+                        copyShareBtn.dataset.url = data.shareUrl;
+                        const fullUrl = window.location.origin + data.shareUrl;
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(fullUrl);
+                        } else {
+                            const tempInput = document.createElement('input');
+                            tempInput.value = fullUrl;
+                            document.body.appendChild(tempInput);
+                            tempInput.select();
+                            document.execCommand('copy');
+                            tempInput.remove();
+                        }
+                        if (window.showToast) window.showToast('Share link copied to clipboard!', 'success');
+                        textSpan.textContent = 'Copied!';
+                    } else {
+                        if (window.showToast) window.showToast(data.error || 'Failed to create share link', 'error');
+                        textSpan.textContent = originalText;
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to create share link:', err);
+                    textSpan.textContent = originalText;
+                })
+                .finally(() => {
+                    setTimeout(() => { textSpan.textContent = originalText; }, 1500);
+                });
             } else {
                 if (window.showToast) {
                     window.showToast('No public share link created yet. Use Edit Share to create one.', 'info');

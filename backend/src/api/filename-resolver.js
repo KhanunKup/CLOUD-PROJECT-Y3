@@ -83,47 +83,30 @@ async function getExistingFilenamesInCloud(docClient, filesTable, userId, folder
     if (!QueryCommand) {
       QueryCommand = require('@aws-sdk/lib-dynamodb').QueryCommand;
     }
-    // 1. Try OwnerFolderIndex
-    try {
-      const res = await docClient.send(new QueryCommand({
-        TableName: filesTable,
-        IndexName: 'OwnerFolderIndex',
-        KeyConditionExpression: 'owner_id = :owner AND folder_id = :folder',
-        FilterExpression: '#st = :status',
-        ExpressionAttributeNames: { '#st': 'status' },
-        ExpressionAttributeValues: {
-          ':owner': userId,
-          ':folder': normFolder,
-          ':status': 'active'
-        }
-      }));
-      (res.Items || []).forEach(item => {
-        if (!excludeFileId || item.file_id !== excludeFileId) {
-          if (item.filename) names.push(item.filename);
-        }
-      });
-      return names;
-    } catch (gsiErr) {
-      // 2. Fallback to OwnerIndex
-      const res = await docClient.send(new QueryCommand({
-        TableName: filesTable,
-        IndexName: 'OwnerIndex',
-        KeyConditionExpression: 'owner_id = :owner',
-        FilterExpression: '#st = :status AND folder_id = :folder',
-        ExpressionAttributeNames: { '#st': 'status' },
-        ExpressionAttributeValues: {
-          ':owner': userId,
-          ':folder': normFolder,
-          ':status': 'active'
-        }
-      }));
-      (res.Items || []).forEach(item => {
-        if (!excludeFileId || item.file_id !== excludeFileId) {
-          if (item.filename) names.push(item.filename);
-        }
-      });
-      return names;
-    }
+
+    // Query all active files for this owner via OwnerIndex and filter by folder in memory.
+    // This reliably catches all folder variations ('root', null, undefined).
+    const res = await docClient.send(new QueryCommand({
+      TableName: filesTable,
+      IndexName: 'OwnerIndex',
+      KeyConditionExpression: 'owner_id = :owner',
+      FilterExpression: '#st = :status',
+      ExpressionAttributeNames: { '#st': 'status' },
+      ExpressionAttributeValues: {
+        ':owner': userId,
+        ':status': 'active'
+      }
+    }));
+
+    (res.Items || []).forEach(item => {
+      if (excludeFileId && item.file_id === excludeFileId) return;
+      const fFolder = (!item.folder_id || item.folder_id === 'root') ? 'root' : item.folder_id;
+      if (fFolder === normFolder && item.filename) {
+        names.push(item.filename);
+      }
+    });
+
+    return names;
   } catch (err) {
     console.warn('[getExistingFilenamesInCloud] Query error:', err.message);
     return names;
@@ -139,23 +122,27 @@ async function resolveUniqueName({
   docClient = null,
   filesTable = '',
   userId = '',
+  ownerId = '',
   folderId = 'root',
   requestedName = '',
+  desiredName = '',
   excludeFileId = null,
   knownExistingNames = null
 }) {
+  const targetName = requestedName || desiredName || '';
+  const effectiveUserId = userId || ownerId || '';
   const normFolder = (!folderId || folderId === 'root') ? 'root' : folderId;
   let existingNames = knownExistingNames;
 
   if (!existingNames) {
     if (isMockMode) {
-      existingNames = getExistingFilenamesInMock(mockFiles, userId, normFolder, excludeFileId);
+      existingNames = getExistingFilenamesInMock(mockFiles, effectiveUserId, normFolder, excludeFileId);
     } else {
-      existingNames = await getExistingFilenamesInCloud(docClient, filesTable, userId, normFolder, excludeFileId);
+      existingNames = await getExistingFilenamesInCloud(docClient, filesTable, effectiveUserId, normFolder, excludeFileId);
     }
   }
 
-  return getUniqueFilename(existingNames, requestedName);
+  return getUniqueFilename(existingNames, targetName);
 }
 
 module.exports = {

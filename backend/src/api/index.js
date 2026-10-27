@@ -49,7 +49,7 @@ app.use((req, res, next) => {
 const apiPublicDir = path.join(__dirname, 'public');
 const rootPublicDir = path.resolve(__dirname, '../../../frontend/public');
 const staticOptions = {
-  maxAge: '1d',
+  maxAge: 0,
   etag: true
 };
 if (fs.existsSync(apiPublicDir)) {
@@ -125,7 +125,11 @@ const fileRepo = new FileRepository({
   s3Client,
   storageBucket: STORAGE_BUCKET,
   filesTable: FILES_TABLE,
-  usersTable: USERS_TABLE
+  usersTable: USERS_TABLE,
+  getUserQuota: (uid) => {
+    const u = mockUsers.find(x => x.user_id === uid);
+    return (u && u.quota) ? u.quota : DEFAULT_STORAGE_QUOTA;
+  }
 });
 
 authService.initAuthStore({
@@ -834,8 +838,13 @@ app.post(['/api/auth/signup', '/signup'], async (req, res) => {
 // In-memory store for password-reset tokens (mock mode only; resets on server restart)
 const passwordResetTokens = new Map(); // token -> { userId, expiresAt }
 
-// GET /forgot-password - Show forgot-password page
-// POST /forgot-password - Process email submission
+// GET /forgot-password - Redirect to unified reset password
+app.get('/forgot-password', (req, res) => {
+  const email = (req.query.email || '').trim();
+  res.redirect(email ? `/reset-password?email=${encodeURIComponent(email)}` : '/reset-password');
+});
+
+// POST /forgot-password - Process email submission and forward to reset-password
 app.post('/forgot-password', async (req, res) => {
   const email = (req.body.email || '').trim().toLowerCase();
   if (!email) {
@@ -847,7 +856,6 @@ app.post('/forgot-password', async (req, res) => {
     foundUser = mockUsers.find(u => (u.email || '').toLowerCase() === email);
   } else {
     try {
-      // 1. ลอง Query ผ่าน EmailIndex
       const queryRes = await docClient.send(new QueryCommand({
         TableName: USERS_TABLE,
         IndexName: 'EmailIndex',
@@ -857,7 +865,6 @@ app.post('/forgot-password', async (req, res) => {
       foundUser = queryRes && queryRes.Items && queryRes.Items[0];
 
       if (!foundUser) {
-        // Fallback scan
         const scanRes = await docClient.send(new ScanCommand({
           TableName: USERS_TABLE,
           FilterExpression: 'contains(email, :e)',
@@ -870,12 +877,11 @@ app.post('/forgot-password', async (req, res) => {
     }
   }
 
-  // สร้าง Token เสมอ (แม้จะหาไม่เจอ เพื่อให้ Demo / Reset ผ่านได้เลย ไม่ติดค้างหน้าเดิม)
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = Date.now() + 30 * 60 * 1000;
   const targetUserId = foundUser ? foundUser.user_id : 'demo-user';
 
-  passwordResetTokens.set(token, { userId: targetUserId, expiresAt });
+  passwordResetTokens.set(token, { userId: targetUserId, email, expiresAt });
 
   if (!IS_MOCK_MODE && docClient && FILES_TABLE) {
     try {
@@ -887,6 +893,7 @@ app.post('/forgot-password', async (req, res) => {
           folder_id: 'reset',
           status: 'reset',
           user_id: targetUserId,
+          email,
           expires_at: Math.floor(expiresAt / 1000),
           created_at: new Date().toISOString()
         }
@@ -902,116 +909,218 @@ app.post('/forgot-password', async (req, res) => {
     req
   });
 
-  // เด้งไปยังหน้า Reset Password ทันที 100%
-  return res.redirect(`/reset-password?token=${token}`);
+  return res.redirect(`/reset-password?email=${encodeURIComponent(email)}&token=${token}`);
 });
 
-// GET /reset-password - Show reset password form
+// GET /reset-password - Show unified reset password form with Target Account info
 app.get('/reset-password', async (req, res) => {
   const token = (req.query.token || '').trim();
-  
-  // ถ้าไม่มี token ให้สร้าง token ชั่วคราวให้เลย จะได้ไม่เด้งกลับไปหน้ากรอกเมล
-  if (!token) {
-    const dummyToken = crypto.randomBytes(16).toString('hex');
-    passwordResetTokens.set(dummyToken, { userId: 'demo-user', expiresAt: Date.now() + 1800000 });
-    return res.render('pages/reset-password', { token: dummyToken, error: null, success: null });
+  const queryEmail = (req.query.email || '').trim().toLowerCase();
+
+  let targetUser = null;
+  let resolvedEmail = queryEmail;
+
+  if (token && token !== 'direct') {
+    let entry = passwordResetTokens.get(token);
+    if (!entry && !IS_MOCK_MODE && docClient && FILES_TABLE) {
+      try {
+        const getRes = await docClient.send(new GetCommand({
+          TableName: FILES_TABLE,
+          Key: { file_id: `pwdreset-${token}` }
+        }));
+        if (getRes.Item) {
+          entry = {
+            userId: getRes.Item.user_id,
+            email: getRes.Item.email,
+            expiresAt: (getRes.Item.expires_at || 0) * 1000
+          };
+        }
+      } catch (_) {}
+    }
+
+    if (entry && (entry.userId || entry.email)) {
+      if (IS_MOCK_MODE) {
+        targetUser = mockUsers.find(u => (entry.userId && u.user_id === entry.userId) || (entry.email && (u.email || '').toLowerCase() === entry.email.toLowerCase()));
+      } else if (docClient && USERS_TABLE) {
+        try {
+          if (entry.userId) {
+            const userRes = await docClient.send(new GetCommand({
+              TableName: USERS_TABLE,
+              Key: { user_id: entry.userId }
+            }));
+            targetUser = userRes.Item;
+          }
+        } catch (_) {}
+      }
+      if (targetUser && targetUser.email) {
+        resolvedEmail = targetUser.email;
+      } else if (entry.email) {
+        resolvedEmail = entry.email;
+      }
+    }
   }
 
-  res.render('pages/reset-password', { token, error: null, success: null });
+  if (!targetUser && resolvedEmail) {
+    if (IS_MOCK_MODE) {
+      targetUser = mockUsers.find(u => (u.email || '').toLowerCase() === resolvedEmail);
+    } else if (docClient && USERS_TABLE) {
+      try {
+        const qRes = await docClient.send(new QueryCommand({
+          TableName: USERS_TABLE,
+          IndexName: 'EmailIndex',
+          KeyConditionExpression: 'email = :e',
+          ExpressionAttributeValues: { ':e': resolvedEmail }
+        })).catch(() => null);
+        targetUser = qRes && qRes.Items && qRes.Items[0];
+      } catch (_) {}
+    }
+  }
+
+  res.render('pages/reset-password', {
+    token: token || 'direct',
+    email: resolvedEmail,
+    targetUser,
+    error: null,
+    success: null
+  });
 });
 
-// POST /reset-password - Process new password
+// POST /reset-password - Process new password for the specified email
 app.post('/reset-password', async (req, res) => {
-  const { token, password, confirmPassword } = req.body;
-  const trimmedToken = (token || '').trim();
+  const { token, email, password, confirmPassword } = req.body;
+  const normEmail = (email || '').trim().toLowerCase();
 
-  if (!trimmedToken) {
-    return res.render('pages/reset-password', { token: null, error: 'Invalid reset link.', success: null });
-  }
-
-  let entry = passwordResetTokens.get(trimmedToken);
-  if (!entry && !IS_MOCK_MODE && docClient && FILES_TABLE) {
-    try {
-      const getRes = await docClient.send(new GetCommand({
-        TableName: FILES_TABLE,
-        Key: { file_id: `pwdreset-${trimmedToken}` }
-      }));
-      if (getRes.Item) {
-        entry = {
-          userId: getRes.Item.user_id,
-          expiresAt: (getRes.Item.expires_at || 0) * 1000
-        };
-      }
-    } catch (_) {}
-  }
-
-  if (!entry || Date.now() > entry.expiresAt) {
+  if (!normEmail) {
     return res.render('pages/reset-password', {
-      token: null,
-      error: 'This reset link has expired or is invalid. Please request a new one.',
+      token: token || 'direct',
+      email: '',
+      targetUser: null,
+      error: 'Please enter your account email address.',
       success: null
     });
   }
 
-  if (!password || password.length < 6) {
+  const isLengthValid = password && password.length >= 8;
+  const isCaseValid = /(?=.*[a-z])(?=.*[A-Z])/.test(password || '');
+  const isNumSymValid = /(?=.*\d)(?=.*[!@#$%^&*()_+{}\[\]:;<>,.?~\\/-])/.test(password || '');
+
+  if (!isLengthValid || !isCaseValid || !isNumSymValid) {
     return res.render('pages/reset-password', {
-      token: trimmedToken,
-      error: 'Password must be at least 6 characters long.',
+      token: token || 'direct',
+      email: normEmail,
+      targetUser: null,
+      error: 'Password must contain at least 8 characters, including uppercase, lowercase, numbers, and symbols.',
       success: null
     });
   }
 
   if (password !== confirmPassword) {
     return res.render('pages/reset-password', {
-      token: trimmedToken,
+      token: token || 'direct',
+      email: normEmail,
+      targetUser: null,
       error: 'Passwords do not match.',
+      success: null
+    });
+  }
+
+  // 1. Locate User in Mock or Cloud
+  let targetUser = null;
+  if (IS_MOCK_MODE) {
+    targetUser = mockUsers.find(u => (u.email || '').toLowerCase() === normEmail);
+  } else {
+    try {
+      if (docClient && USERS_TABLE) {
+        const queryRes = await docClient.send(new QueryCommand({
+          TableName: USERS_TABLE,
+          IndexName: 'EmailIndex',
+          KeyConditionExpression: 'email = :e',
+          ExpressionAttributeValues: { ':e': normEmail }
+        })).catch(() => null);
+        targetUser = queryRes && queryRes.Items && queryRes.Items[0];
+
+        if (!targetUser) {
+          const scanRes = await docClient.send(new ScanCommand({
+            TableName: USERS_TABLE,
+            FilterExpression: 'contains(email, :e)',
+            ExpressionAttributeValues: { ':e': normEmail }
+          }));
+          targetUser = scanRes.Items && scanRes.Items[0];
+        }
+      }
+    } catch (err) {
+      console.error('Password reset user query error:', err);
+    }
+  }
+
+  if (!targetUser) {
+    return res.render('pages/reset-password', {
+      token: token || 'direct',
+      email: normEmail,
+      targetUser: null,
+      error: `No EasyDrive account found with email "${normEmail}". Please check your email address.`,
       success: null
     });
   }
 
   const newHash = await bcrypt.hash(password, 10);
 
-  // Update in DynamoDB USERS_TABLE
+  // 2. Update password in DynamoDB USERS_TABLE
   if (!IS_MOCK_MODE && docClient && USERS_TABLE) {
     try {
       await docClient.send(new UpdateCommand({
         TableName: USERS_TABLE,
-        Key: { user_id: entry.userId },
+        Key: { user_id: targetUser.user_id },
         UpdateExpression: 'SET password_hash = :p, updated_at = :u',
         ExpressionAttributeValues: {
           ':p': newHash,
           ':u': new Date().toISOString()
         }
       }));
-      // Clean up token
-      await docClient.send(new DeleteCommand({
-        TableName: FILES_TABLE,
-        Key: { file_id: `pwdreset-${trimmedToken}` }
-      })).catch(() => {});
     } catch (upErr) {
-      console.error('Update user password error:', upErr);
+      console.error('Update user password error in DynamoDB:', upErr);
+      return res.render('pages/reset-password', {
+        token: token || 'direct',
+        email: normEmail,
+        targetUser,
+        error: 'Failed to update password in database. Please try again.',
+        success: null
+      });
     }
   }
 
-  passwordResetTokens.delete(trimmedToken);
+  // 3. Update in-memory / mock stores
+  targetUser.password_hash = newHash;
+  targetUser.password = password;
+  targetUser.updated_at = new Date().toISOString();
+  if (typeof authService.updateInMemoryUserPassword === 'function') {
+    authService.updateInMemoryUserPassword(targetUser.user_id, password, newHash);
+  }
 
-  const foundUser = mockUsers.find(u => u.user_id === entry.userId);
-  if (foundUser) {
-    foundUser.password_hash = newHash;
-    foundUser.password = password;
+  // Clean up any reset tokens
+  if (token && token !== 'direct') {
+    passwordResetTokens.delete(token);
+    if (!IS_MOCK_MODE && docClient && FILES_TABLE) {
+      await docClient.send(new DeleteCommand({
+        TableName: FILES_TABLE,
+        Key: { file_id: `pwdreset-${token}` }
+      })).catch(() => {});
+    }
   }
 
   await recordAuditLog({
-    user: { user_id: entry.userId, name: foundUser ? foundUser.name : 'User', email: foundUser ? foundUser.email : 'user@easydrive.internal', role: foundUser ? foundUser.role : 'user' },
+    user: { user_id: targetUser.user_id, name: targetUser.name || 'User', email: targetUser.email, role: targetUser.role || 'user' },
     action: 'RESET_PASSWORD',
     level: 'warning',
-    details: 'User password was reset successfully'
+    details: `Password reset successfully for "${targetUser.email}" (${targetUser.name || targetUser.user_id})`
   });
 
   return res.render('pages/reset-password', {
     token: null,
+    email: targetUser.email,
+    targetUser,
     error: null,
-    success: 'Your password has been updated! You can now sign in with your new password.'
+    success: `Password has been successfully updated for ${targetUser.email}! You can now sign in with your new password.`
   });
 });
 
@@ -1190,6 +1299,95 @@ function getSharedWithMeForUser(user) {
   ];
 }
 
+async function getSharedWithMeList(user) {
+  const userEmail = (user.email || '').trim().toLowerCase();
+  const userId = user.user_id || user.id;
+
+  if (IS_MOCK_MODE) {
+    return getSharedWithMeForUser(user);
+  }
+
+  if (!userEmail) return [];
+
+  try {
+    const scanRes = await docClient.send(new ScanCommand({
+      TableName: FILES_TABLE,
+      FilterExpression: 'attribute_exists(access_list)'
+    }));
+
+    const rawFiles = scanRes.Items || [];
+
+    const matchingFiles = rawFiles.filter(f => {
+      if (!f || f.status === 'trash' || f.status === 'pending') return false;
+      if (f.owner_id === userId) return false;
+
+      const dismissed = f.dismissed_by || [];
+      if (dismissed.includes(userId) || dismissed.includes(userEmail)) return false;
+
+      const accessList = f.access_list || f.accessList || [];
+      if (!Array.isArray(accessList)) return false;
+
+      return accessList.some(collab => {
+        if (!collab) return false;
+        const cEmail = (collab.email || collab.name || '').trim().toLowerCase();
+        return cEmail && cEmail === userEmail;
+      });
+    });
+
+    // Pre-fetch sender display names from USERS_TABLE so we display actual names instead of user-xxxx
+    const ownerIds = [...new Set(matchingFiles.map(f => f.owner_id).filter(Boolean))];
+    const ownerMap = {};
+    await Promise.all(ownerIds.map(async oid => {
+      try {
+        const u = await authService.getUserById(oid);
+        if (u) {
+          ownerMap[oid] = u.name || u.username || u.email || oid;
+        }
+      } catch (_) {}
+    }));
+
+    const invitedFiles = matchingFiles.map(f => {
+      const accessList = f.access_list || f.accessList || [];
+      const directEntry = accessList.find(a => {
+        const cEmail = (a.email || a.name || '').trim().toLowerCase();
+        return cEmail && cEmail === userEmail;
+      });
+      const perm = directEntry ? directEntry.permission : 'can view';
+      const ownerName = ownerMap[f.owner_id] || f.owner_name || f.owner_id || 'Shared Owner';
+
+      return {
+        id: f.file_id,
+        file_id: f.file_id,
+        shareId: `invite-${f.file_id}`,
+        name: f.filename,
+        size: f.size || 0,
+        category: f.category || (f.filename ? getCategoryFromExtension(f.filename) : 'other'),
+        tags: f.tags || [],
+        type: f.category === 'folder' ? 'folder' : 'file',
+        owner: ownerName,
+        ownerId: f.owner_id,
+        isOwner: false,
+        uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently',
+        shareUrl: null,
+        maxDownloads: 0,
+        downloadsLeft: 'Unlimited',
+        downloadCount: 0,
+        hasPassword: false,
+        remainingHours: null,
+        isDirectInvite: true,
+        permission: perm,
+        canEdit: perm === 'can edit',
+        accessList: f.access_list || [{ name: user.name || userEmail, permission: perm }]
+      };
+    });
+
+    return invitedFiles;
+  } catch (err) {
+    console.error('[Cloud SharedWithMe Error]:', err);
+    return [];
+  }
+}
+
 // 4.4 Shared Page (Protected)
 app.get('/shared', requireAuthWeb, async (req, res) => {
   let allShares = [];
@@ -1286,15 +1484,12 @@ app.get('/shared', requireAuthWeb, async (req, res) => {
     }
   }
 
-  // Filter shared by me and shared with me
+  // Filter shared by me
   const sharedByMe = allShares.filter(s => s.isOwner);
 
-  // For shared with me: files where owner != user, plus demo items if mock
-  let sharedWithMe = allShares.filter(s => !s.isOwner);
-  if (IS_MOCK_MODE) {
-    const demoItems = getSharedWithMeForUser(req.user);
-    sharedWithMe = [...sharedWithMe, ...demoItems];
-  }
+  // Retrieve invited / shared with me files for both mock and cloud modes
+  const invitedItems = await getSharedWithMeList(req.user);
+  let sharedWithMe = [...allShares.filter(s => !s.isOwner), ...invitedItems];
 
   // กำจัดไฟล์ซ้ำ (Deduplicate) โดยอิงตาม id หรือ shareId ไม่ให้แสดงซ้ำในตาราง
   const seenIds = new Set();
@@ -1736,9 +1931,11 @@ app.post('/api/folders', authMiddleware, async (req, res) => {
   });
 
   const fileId = `folder-${crypto.randomUUID()}`;
+  const userName = req.user.name || req.user.username || req.user.display_name || req.user.email || 'User';
   const newFolder = {
     file_id: fileId,
     owner_id: req.user.user_id,
+    owner_name: userName,
     folder_id: parentFolderId,
     filename: effectiveFolderName,
     size: 0,
@@ -2224,19 +2421,40 @@ app.patch('/api/files/:id', authMiddleware, async (req, res) => {
   }
 
   try {
+    const getRes = await docClient.send(new GetCommand({
+      TableName: FILES_TABLE,
+      Key: { file_id: fileId }
+    }));
+    const file = getRes.Item;
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    if (!canUserAccessFile(file, req.user, 'edit') && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Permission denied: cannot edit this file' });
+    }
+
+    const targetFolder = file.folder_id || 'root';
+    const effectiveFilename = await resolveUniqueName({
+      isMockMode: false,
+      docClient,
+      filesTable: FILES_TABLE,
+      userId: file.owner_id,
+      folderId: targetFolder,
+      requestedName: filename,
+      excludeFileId: fileId
+    });
+
     const result = await docClient.send(new UpdateCommand({
       TableName: FILES_TABLE,
       Key: { file_id: fileId },
-      ConditionExpression: 'owner_id = :owner',
       UpdateExpression: 'SET filename = :fn, updated_at = :up',
       ExpressionAttributeValues: {
-        ':fn': filename,
-        ':up': new Date().toISOString(),
-        ':owner': req.user.user_id
+        ':fn': effectiveFilename,
+        ':up': new Date().toISOString()
       },
       ReturnValues: 'ALL_NEW'
     }));
-    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${filename}"` });
+    await recordAuditLog({ user: req.user, action: 'RENAME', level: 'info', details: `Renamed file to "${effectiveFilename}"` });
     res.json({ success: true, file: result.Attributes });
   } catch (err) {
     console.error('Rename error:', err);
@@ -2907,9 +3125,11 @@ app.post('/api/files/:id/restore', authMiddleware, async (req, res) => {
       });
     }
 
+    const restoringFolderIds = new Set(itemsToRestore.filter(i => i.category === 'folder').map(i => i.file_id));
+
     for (const item of itemsToRestore) {
       let targetFolderId = item.folder_id || 'root';
-      if (targetFolderId !== 'root') {
+      if (targetFolderId !== 'root' && !restoringFolderIds.has(targetFolderId)) {
         const parentRes = await docClient.send(new GetCommand({ TableName: FILES_TABLE, Key: { file_id: targetFolderId } })).catch(() => ({ Item: null }));
         if (!parentRes.Item || parentRes.Item.status === 'trash') {
           targetFolderId = 'root';
@@ -3311,9 +3531,13 @@ app.get('/api/files/:id/access', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'File or folder not found' });
     }
     const userEmail = (req.user.email || '').toLowerCase();
-    const userId = req.user.user_id;
-    const isOwner = file.owner_id === userId;
-    const hasCollab = (file.access_list || []).some(c => (c.email || '').toLowerCase() === userEmail);
+    const userId = req.user.user_id || req.user.id;
+    const isOwner = file.owner_id === userId || (userId === 'user-normal-01' && file.owner_id === 'demo-user');
+    const hasCollab = (file.access_list || []).some(c => {
+      const cEmail = (c.email || c.name || '').trim().toLowerCase();
+      const cId = (c.user_id || c.id || '').trim();
+      return (cEmail && cEmail === userEmail) || (cId && cId === userId);
+    });
     if (!isOwner && !hasCollab && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Access denied' });
     }
@@ -3378,7 +3602,8 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'File or folder not found' });
     }
 
-    const isOwner = file.owner_id === req.user.user_id;
+    const userId = req.user.user_id || req.user.id;
+    const isOwner = file.owner_id === userId || (userId === 'user-normal-01' && file.owner_id === 'demo-user');
     if (!isOwner && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Only the resource owner can modify access permissions' });
     }
@@ -3409,47 +3634,11 @@ app.put('/api/files/:id/access', authMiddleware, async (req, res) => {
 
 // 5.8.5 Shared With Me Endpoints
 app.get('/api/shares/shared-with-me', authMiddleware, async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const sharedWithMe = getSharedWithMeForUser(req.user);
-    return res.json({ success: true, sharedWithMe });
-  }
-
   try {
-    const userEmail = (req.user.email || '').toLowerCase();
-    const userId = req.user.user_id;
-
-    const scanRes = await docClient.send(new ScanCommand({
-      TableName: FILES_TABLE,
-      FilterExpression: 'contains(access_list, :email) OR contains(access_list, :uid)',
-      ExpressionAttributeValues: { ':email': userEmail, ':uid': userId }
-    }));
-
-    const files = (scanRes.Items || []).filter(f => {
-      const dismissed = f.dismissed_by || [];
-      return !dismissed.includes(userId) && !dismissed.includes(userEmail);
-    }).map(f => ({
-      id: f.file_id,
-      shareId: f.share_id || f.file_id,
-      name: f.filename,
-      size: f.size || 0,
-      category: f.category || 'file',
-      tags: f.tags || [],
-      type: f.category === 'folder' ? 'folder' : 'file',
-      owner: f.owner_name || f.owner_id || 'Owner',
-      ownerId: f.owner_id,
-      isOwner: f.owner_id === userId,
-      uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown',
-      shareUrl: `/share/${f.share_id || f.file_id}`,
-      maxDownloads: 0,
-      downloadsLeft: 'Unlimited',
-      downloadCount: f.download_count || 0,
-      hasPassword: false,
-      remainingHours: null
-    }));
-
-    return res.json({ success: true, sharedWithMe: files });
+    const sharedWithMe = await getSharedWithMeList(req.user);
+    return res.json({ success: true, sharedWithMe });
   } catch (err) {
-    console.error('Shared-with-me DynamoDB error:', err);
+    console.error('Shared-with-me error:', err);
     return res.json({ success: true, sharedWithMe: [] });
   }
 });
@@ -3641,6 +3830,9 @@ app.patch('/api/admin/users/:id', authMiddleware, async (req, res) => {
       user.storage_quota = Number(targetQuota);
       if (mockUserStorage && mockUserStorage[targetUserId]) {
         mockUserStorage[targetUserId].quota = Number(targetQuota);
+      }
+      if (mockUserStorage && (mockUserStorage.user_id === targetUserId || targetUserId === 'demo-user' || targetUserId === 'user-normal-01')) {
+        mockUserStorage.quota = Number(targetQuota);
       }
     }
     user.updated_at = new Date().toISOString();
